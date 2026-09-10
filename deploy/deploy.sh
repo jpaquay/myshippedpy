@@ -268,6 +268,50 @@ enable_apis() {
 }
 
 # -----------------------------------------------------------------------------
+# 1b. Firestore database
+# -----------------------------------------------------------------------------
+
+# A Firestore database's location is IMMUTABLE. There is no move, no edit, no
+# migration switch: getting it wrong means creating a second database (or a new
+# project) and copying the data across.
+#
+# Left implicit, Firestore lands in `nam5` -- the United States. This app stores
+# coordinates and listening history for EU residents, so that default is a data
+# residency incident that nobody notices until an audit.
+#
+# So: create it explicitly in ${REGION}, and if one already exists, verify the
+# location and refuse to continue when it is wrong. A loud failure here is far
+# cheaper than discovering it after the first real user.
+ensure_firestore_database() {
+  step "Firestore"
+
+  local existing
+  existing="$(gcloud firestore databases describe \
+    --database="(default)" --project "${PROJECT_ID}" \
+    --format="value(locationId)" 2>/dev/null || true)"
+
+  if [[ -n "${existing}" ]]; then
+    if [[ "${existing}" == "${REGION}" ]]; then
+      ok "database '(default)' exists in ${REGION}"
+      return 0
+    fi
+    die "Firestore '(default)' is in '${existing}', not '${REGION}'.
+    A Firestore location cannot be changed after creation. To fix this you must
+    create a new database (or a new project) in ${REGION} and migrate the data.
+    Refusing to deploy: writing EU listener data into '${existing}' is not
+    something this script will do quietly."
+  fi
+
+  info "creating Firestore '(default)' in ${REGION}"
+  run gcloud firestore databases create \
+    --database="(default)" \
+    --location="${REGION}" \
+    --type=firestore-native \
+    --project "${PROJECT_ID}"
+  ok "database created in ${REGION}"
+}
+
+# -----------------------------------------------------------------------------
 # 2. Artifact Registry
 # -----------------------------------------------------------------------------
 
@@ -590,6 +634,9 @@ main() {
 
   preflight
   enable_apis
+  # Before anything else that costs money: an immutable, wrongly-placed
+  # Firestore is the one mistake here that cannot be undone in-place.
+  ensure_firestore_database
   ensure_artifact_registry
   ensure_service_account
   ensure_secrets

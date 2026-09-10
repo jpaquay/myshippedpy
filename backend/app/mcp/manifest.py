@@ -279,11 +279,20 @@ class ForgePlaylistInput(_Strict):
         description="Genre corridor id from list_themes. 'any' leaves the corridor unconstrained.",
     )
     length: int = Field(default=18, ge=4, le=60, description="Number of tracks to select. Default 18.")
-    lastfm_user: str | None = Field(
-        default=None,
-        max_length=64,
-        description="Optional Last.fm username used to bias selection toward the listener's taste.",
-    )
+    # NO lastfm_user FIELD. DO NOT ADD ONE.
+    #
+    # Taste comes from the Last.fm account the authenticated principal paired
+    # in the app, looked up server-side from their profile.
+    #
+    # It was a tool argument once. Two problems with that. It made BAROGROOVE an
+    # open Last.fm scraping proxy: any caller could name any username and have
+    # us fetch that person's listening history under *our* API key, burning our
+    # quota and making us the visible party to bulk profile harvesting. And it
+    # let a caller borrow a stranger's taste graph to shape a playlist, which
+    # is a small privacy leak dressed up as a feature.
+    #
+    # A principal with no paired Last.fm account forges in theme-only mode.
+    # That degradation already exists and is surfaced in the rationale.
     label: str | None = Field(default=None, max_length=120, description="Optional display name for the location.")
     seed: int | None = Field(
         default=None,
@@ -357,7 +366,20 @@ class SavePlaylistInput(_Strict):
         max_length=32,
         description="Sink kind: 'auto' picks the highest-priority configured sink. Otherwise name one.",
     )
-    user_id: str | None = Field(default=None, max_length=128, description="Owner to attribute the save to.")
+    # NO user_id FIELD. DO NOT ADD ONE.
+    #
+    # This tool writes a playlist into a real person's Spotify account using a
+    # refresh token BAROGROOVE holds on their behalf. If the owner were a tool
+    # argument, any caller who reached this endpoint could name any listener
+    # and spend their credentials -- a confused deputy, where the authority is
+    # ours and the target is theirs.
+    #
+    # The owner is the authenticated principal, taken from the verified bearer
+    # token by `backend.app.mcp.guard` and read via `require_principal()`.
+    #
+    # `_Strict` sets extra="forbid", so a caller that still sends `user_id`
+    # gets a validation error rather than a silent substitution. That noise is
+    # the feature: it turns a privilege-escalation attempt into a 400.
 
 
 class SavePlaylistOutput(ToolResultBase):

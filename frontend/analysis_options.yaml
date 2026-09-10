@@ -10,6 +10,9 @@ analyzer:
     # deliberate about where dynamic values are allowed to cross the boundary.
     # Everything past the parse layer is statically typed.
     invalid_annotation_target: ignore
+  exclude:
+    - build/**
+    - web/**
 
 linter:
   rules:

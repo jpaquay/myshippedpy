@@ -1,0 +1,150 @@
+# CI -- runs on everything, trusts nothing.
+#
+# Deliberately holds NO cloud credentials. It runs on pull requests, including
+# from forks, and a workflow that can be triggered by a stranger's branch must
+# not be able to touch Google Cloud. Deployment lives in deploy.yml, which is
+# push-to-main only and separately gated.
+#
+# That split is the whole security design here. Do not "simplify" it by adding
+# a deploy step to this file.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+# A new push supersedes the old run. Saves minutes and stops a stale red X
+# from sitting on a commit that has already been fixed.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov ruff mypy
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format check
+        run: ruff format --check .
+
+      - name: Tests
+        # BG_WEATHER_OFFLINE keeps the suite hermetic: no Open-Meteo call, no
+        # flake when someone else's network is having a bad day.
+        env:
+          BG_ENVIRONMENT: local
+          BG_WEATHER_OFFLINE: "1"
+        run: pytest -q
+
+      - name: Demo smoke test
+        # The 60-second demo path is the thing a human looks at first. If it
+        # breaks, the repo is broken regardless of what the unit tests say.
+        env:
+          BG_ENVIRONMENT: local
+          BG_WEATHER_OFFLINE: "1"
+        run: python -m scripts.demo
+
+  security:
+    name: Security invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
+      # Its own job so it cannot be lost in the noise of a large run, and so a
+      # failure names itself in the checks list. These assert that MCP callers
+      # cannot choose whose data they act on.
+      - name: MCP principal derivation
+        env:
+          BG_ENVIRONMENT: local
+        run: pytest tests/test_mcp_security.py -q
+
+      - name: No caller-supplied identity has crept back in
+        # Cheap grep backstop for the case where someone deletes the tests and
+        # the schema guard in the same commit.
+        run: |
+          if grep -rn 'user_id: str' backend/app/mcp/manifest.py; then
+            echo "::error::A user_id field is back in the MCP manifest. The acting"
+            echo "::error::principal comes from the bearer token, never from a tool"
+            echo "::error::argument. See backend/app/mcp/principal.py."
+            exit 1
+          fi
+          if grep -rn 'lastfm_user: str' backend/app/mcp/manifest.py; then
+            echo "::error::lastfm_user is back in the MCP manifest. That makes the"
+            echo "::error::backend an open Last.fm scraping proxy under our API key."
+            exit 1
+          fi
+          echo "No caller-supplied identity fields in the MCP manifest."
+
+  frontend:
+    name: Flutter build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # PINNED, not `channel: stable`. A floating channel means a Flutter
+          # release can break this build with no commit of ours, and the
+          # breakage lands on whoever pushes next rather than on whoever
+          # changed something. 3.47.3 (Dart 3.13.3) is the version this tree is
+          # verified against -- notably, firebase_core_web 3.11.0 declares
+          # `sdk: ^3.6.0` but actually needs the `isA` js_interop extension
+          # that only exists in much newer Dart, so an older SDK fails to
+          # compile with a misleading error. Bump deliberately.
+          flutter-version: 3.47.3
+          channel: stable
+          cache: true
+
+      - name: Dependencies
+        working-directory: frontend
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: frontend
+        run: flutter analyze
+
+      - name: Test
+        working-directory: frontend
+        run: flutter test
+
+      - name: Build web
+        working-directory: frontend
+        run: flutter build web --release

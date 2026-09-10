@@ -141,7 +141,7 @@ class PairingService {
   /// Starts and completes a pairing flow.
   ///
   /// Returns when the provider reports connected, the window expires, or
-  /// something fails. Callers should show a "waiting for <provider>…" state
+  /// something fails. Callers should show a "waiting for `<provider>`…" state
   /// with a cancel affordance while this is pending; pass [cancelled] to let
   /// the user stop the poll.
   Future<PairingAttempt> connect(
@@ -242,7 +242,7 @@ class PairingService {
         }
       } else if (res.failureOrNull?.isAuth ?? false) {
         // Losing the session mid-pair is worth saying out loud.
-        return PairingAttempt(
+        return const PairingAttempt(
           PairingOutcome.failed,
           message: 'Your session expired during pairing. Sign in and retry.',
         );

@@ -35,6 +35,15 @@ enum BgDestination {
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
+  /// Nearest shell, so a descendant can navigate without a router.
+  ///
+  /// On the widget rather than the state, following `Scaffold.of` and
+  /// `Navigator.of`. The call sites already read `AppShell.of(context)`, which
+  /// is the idiom a Flutter reader expects; the lookup itself still resolves
+  /// the [AppShellState] that owns the current destination.
+  static AppShellState? of(BuildContext context) =>
+      context.findAncestorStateOfType<AppShellState>();
+
   @override
   ConsumerState<AppShell> createState() => AppShellState();
 }
@@ -48,10 +57,6 @@ class AppShellState extends ConsumerState<AppShell> {
     if (!mounted) return;
     setState(() => _current = destination);
   }
-
-  /// Nearest shell, so a descendant can navigate without a router.
-  static AppShellState? of(BuildContext context) =>
-      context.findAncestorStateOfType<AppShellState>();
 
   @override
   Widget build(BuildContext context) {

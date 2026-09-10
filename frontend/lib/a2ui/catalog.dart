@@ -343,33 +343,54 @@ class A2uiPlaceholder extends StatelessWidget {
       A2uiPlaceholderSeverity.warning => BgPalette.warn,
     };
 
+    // The accent bar is a clipped child, not a BorderSide.
+    //
+    // A BoxDecoration cannot combine a borderRadius with a Border whose sides
+    // differ in colour -- Flutter throws "a borderRadius can only be given on
+    // borders with uniform colors" at paint time. This widget is the
+    // placeholder every degradation path renders, so that exception turned any
+    // single unknown component into a crashed surface: the failure handler was
+    // the thing that failed.
+    //
+    // Uniform outline on the decoration, coloured edge drawn inside a
+    // ClipRRect, so the rounded corners and the accent both survive.
     return Semantics(
       liveRegion: true,
       child: Container(
         width: double.infinity,
         margin: const EdgeInsets.symmetric(vertical: BgSpace.sm),
-        padding: const EdgeInsets.all(BgSpace.md),
         decoration: BoxDecoration(
           color: colors.surfaceContainerLow,
           borderRadius: BgSpace.brSm,
-          border: Border(
-            left: BorderSide(color: tone, width: 3),
-            top: BorderSide(color: colors.outlineVariant),
-            right: BorderSide(color: colors.outlineVariant),
-            bottom: BorderSide(color: colors.outlineVariant),
-          ),
+          border: Border.all(color: colors.outlineVariant),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text(
-              title,
-              style: text.titleSmall?.copyWith(color: tone),
+        child: ClipRRect(
+          borderRadius: BgSpace.brSm,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                SizedBox(width: 3, child: ColoredBox(color: tone)),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(BgSpace.md),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          title,
+                          style: text.titleSmall?.copyWith(color: tone),
+                        ),
+                        const SizedBox(height: BgSpace.xs),
+                        Text(detail, style: text.bodySmall),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: BgSpace.xs),
-            Text(detail, style: text.bodySmall),
-          ],
+          ),
         ),
       ),
     );

@@ -65,6 +65,32 @@ class Settings(BaseSettings):
     #: When true we accept unverified bearer tokens as {"sub": token}. Local only.
     auth_allow_insecure_dev_tokens: bool = True
 
+    # --- mcp ---------------------------------------------------------------
+    #: Serve the MCP endpoint at all.
+    #:
+    #: OFF for now, by decision, not by accident. The agent surface is built
+    #: and tested but not yet exposed: /mcp is simply not mounted, so the
+    #: endpoint 404s rather than existing-and-refusing. Nothing else about the
+    #: app changes -- the REST API, the A2UI surfaces and the Flutter client
+    #: are unaffected, and `backend/app/mcp/` keeps its full test coverage.
+    #:
+    #: Flip to True (or set BG_MCP_ENABLED=1) to turn it back on. Before you
+    #: do, re-read backend/app/mcp/principal.py: the tools behind this endpoint
+    #: spend real listeners' credentials, and the guard is the only thing
+    #: standing between an anonymous caller and someone's Spotify account.
+    mcp_enabled: bool = False
+
+    #: Require a verified bearer token on /mcp, including the initialize and
+    #: tools/list handshake. Defaults on: the MCP tools can spend a listener's
+    #: third-party quota and write to their Spotify account, so an anonymous
+    #: caller has no business reaching them. Turning this off is honoured only
+    #: in the local environment (see `anonymous_mcp_allowed`), and even then no
+    #: principal is bound, so user-scoped tools keep refusing.
+    #:
+    #: Independent of `mcp_enabled`: this governs how the endpoint behaves when
+    #: it is served, not whether it is served.
+    mcp_require_auth: bool = True
+
     # --- open-meteo --------------------------------------------------------
     open_meteo_base: str = "https://api.open-meteo.com/v1/forecast"
     open_meteo_past_days: int = 7

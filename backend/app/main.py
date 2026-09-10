@@ -128,14 +128,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     _mount(app, "backend.app.routes.surfaces", label="surfaces")
 
     # --- MCP server, streamable HTTP, mounted on this same app ------------
-    try:
-        from .mcp.server import mount_mcp
+    #
+    # OFF for now. `mcp_enabled` defaults False, so /mcp is not mounted and the
+    # path 404s rather than existing-and-refusing. This is a deliberate hold on
+    # exposing the agent surface, not a bug and not a fallback: the code below
+    # is complete, guarded and fully tested, it is simply not wired up yet.
+    #
+    # Turn it on with BG_MCP_ENABLED=1. See backend/app/mcp/principal.py first.
+    if getattr(settings, "mcp_enabled", False):
+        try:
+            from .mcp.server import mount_mcp
 
-        mount_mcp(app)
-        log.info("MCP server mounted at /mcp")
-    except Exception as exc:  # pragma: no cover
-        log.warning("MCP server unavailable: %s", exc)
-        app.state.missing_routers.append(f"mcp: {exc}")
+            mount_mcp(app)
+            log.info("MCP server mounted at /mcp")
+        except Exception as exc:  # pragma: no cover
+            log.warning("MCP server unavailable: %s", exc)
+            app.state.missing_routers.append(f"mcp: {exc}")
+    else:
+        log.info("MCP endpoint disabled (mcp_enabled=False); /mcp is not mounted")
+        app.state.mcp_enabled = False
 
     @app.get("/api/health", tags=["ops"], summary="Liveness + capability report")
     async def health() -> dict[str, object]:

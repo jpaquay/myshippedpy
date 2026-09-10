@@ -1,6 +1,7 @@
 {
-  "$comment": "Barogroove hosting config for bg.netdev.be. JSON has no comments; every choice here is justified in README.md. Region is europe-west1 everywhere.",
+  "$comment": "Barogroove hosting config for bg.netdev.be. JSON has no comments; every choice here is justified in README.md. Region is europe-west1 everywhere. The /mcp rewrite is intentional while the MCP endpoint is disabled (mcp_enabled=False): routing it to Cloud Run yields an honest 404, whereas deleting the rewrite would let /mcp fall through to the SPA catch-all and answer 200 with an HTML page at an API path.",
   "hosting": {
+    "site": "barogroove",
     "public": "frontend/build/web",
     "ignore": [
       "firebase.json",

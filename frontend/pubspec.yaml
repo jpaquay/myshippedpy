@@ -91,5 +91,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/
+  # No `assets:` block. Nothing in lib/ loads a bundled asset -- the sky dial,
+  # theme chips and palettes are all drawn from code -- and declaring a
+  # directory that does not exist is a build warning for no benefit. Add it
+  # back alongside the first real asset.

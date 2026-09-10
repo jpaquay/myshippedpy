@@ -564,7 +564,13 @@ def test_transport_survives_repeated_lifespan_cycles() -> None:
                         "clientInfo": {"name": "t", "version": "1"},
                     },
                 },
-                headers={"Accept": "application/json, text/event-stream", "Content-Type": "application/json"},
+                headers={
+                    "Accept": "application/json, text/event-stream",
+                    "Content-Type": "application/json",
+                    # /mcp now authenticates. Local settings permit insecure dev
+                    # tokens, so the bearer is taken as the uid verbatim.
+                    "Authorization": "Bearer dev:test-listener",
+                },
             )
             assert response.status_code == 200, f"cycle {cycle}: {response.status_code} {response.text[:200]}"
             assert "error" not in _sse_payload(response), f"cycle {cycle} returned a JSON-RPC error"

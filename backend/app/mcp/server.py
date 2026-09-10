@@ -219,6 +219,47 @@ def _jsonable(value: Any) -> Any:
     return json.loads(json.dumps(value, default=str))
 
 
+async def _paired_lastfm_username(principal: Any) -> str | None:
+    """The Last.fm account this principal paired in the app, if any.
+
+    Server-side resolution of the listener's own username, replacing what used
+    to be a caller-supplied ``lastfm_user`` argument. That argument turned the
+    backend into an open Last.fm scraping proxy under our API key; see the note
+    on ``ForgePlaylistInput`` in ``manifest.py``.
+
+    Returns ``None`` for an unauthenticated caller, a principal who never
+    paired, or any lookup failure. ``None`` means theme-only forging, which is
+    a supported mode -- so a profile store that is down costs the caller some
+    personalisation, not their request.
+    """
+    if principal is None:
+        return None
+    uid = getattr(principal, "uid", None)
+    if not uid:
+        return None
+
+    try:
+        from ..container import get_container
+
+        profiles = getattr(get_container(), "profiles", None)
+        if not callable(profiles):
+            return None
+        store = profiles()
+        getter = getattr(store, "lastfm_username", None) or getattr(store, "get", None)
+        if not callable(getter):
+            return None
+        value = getter(str(uid))
+        if hasattr(value, "__await__"):
+            value = await value
+        # `get` may return a whole profile rather than the bare username.
+        if value is not None and not isinstance(value, str):
+            value = getattr(value, "lastfm_username", None)
+        return str(value) if value else None
+    except Exception:  # noqa: BLE001
+        logger.debug("could not resolve a paired Last.fm account for %s", uid, exc_info=True)
+        return None
+
+
 # ======================================================================================
 # Result packaging
 # ======================================================================================
@@ -425,15 +466,29 @@ async def _run_forge_playlist(args: ForgePlaylistInput) -> Any:
     async def body() -> Any:
         from ..container import get_container
         from ..contracts import Coordinates, ForgeRequest
+        from .principal import current_principal
 
         surfaces = _surfaces()
+
+        # Taste comes from the principal's paired Last.fm account, resolved
+        # server-side. It is deliberately not a tool argument -- see the note on
+        # ForgePlaylistInput in manifest.py.
+        #
+        # `current_principal` rather than `require_principal`: forging is
+        # useful without a listener attached. An unauthenticated caller (only
+        # possible in local mode, where the guard permits anonymity) gets a
+        # sky-and-theme playlist, which is a real product mode rather than a
+        # degraded one. What they cannot do is borrow someone else's taste.
+        principal = current_principal()
+        lastfm_user = await _paired_lastfm_username(principal)
+
         coordinates = Coordinates(latitude=args.lat, longitude=args.lon, label=args.label)
         request = ForgeRequest(
             coordinates=coordinates,
             theme_id=args.theme,
             genre_id=args.genre or "any",
             length=args.length,
-            lastfm_user=args.lastfm_user,
+            lastfm_user=lastfm_user,
             seed=args.seed,
         )
         result = await get_container().forge().forge(request)
@@ -544,6 +599,11 @@ async def _run_save_playlist(args: SavePlaylistInput) -> Any:
     async def body() -> Any:
         from ..container import get_container
         from ..sinks.registry import write_playlist
+        from .principal import require_principal
+
+        # The acting listener is the verified bearer of the request, never a
+        # tool argument. See backend/app/mcp/principal.py for why.
+        uid = require_principal().uid
 
         surfaces = _surfaces()
         container = get_container()
@@ -557,18 +617,38 @@ async def _run_save_playlist(args: SavePlaylistInput) -> Any:
                 candidate = await candidate
             playlist = candidate
         if playlist is None:
-            for entry in await almanac.history(args.user_id, 200):
+            for entry in await almanac.history(uid, 200):
                 if str(getattr(entry, "id", "")) == args.playlist_id:
                     playlist = entry
                     break
         if playlist is None:
             raise LookupError(f"No playlist with id '{args.playlist_id}' in the almanac.")
 
+        # IDOR guard. The history scan above is user-scoped, but the `getter`
+        # path is a bare lookup by id with no notion of ownership -- it will
+        # happily hand back somebody else's forge. Without this check a caller
+        # could name any playlist id and push a stranger's playlist into their
+        # own account.
+        #
+        # An owner mismatch is reported as absence, using the identical message
+        # and exception type as a genuine miss. Distinguishing "not yours" from
+        # "not there" would turn this tool into an oracle for enumerating which
+        # playlist ids exist.
+        owner = getattr(playlist, "user_id", None)
+        if owner is not None and str(owner) != uid:
+            logger.warning(
+                "save_playlist: principal %s asked for playlist %s owned by another user; "
+                "reporting as not found",
+                uid,
+                args.playlist_id,
+            )
+            raise LookupError(f"No playlist with id '{args.playlist_id}' in the almanac.")
+
         sink_result = await write_playlist(
             container.sinks(),
             playlist,
             kind=args.sink or "auto",
-            user_id=args.user_id,
+            user_id=uid,
         )
 
         # There is no dedicated "saved" builder in the frozen interface, and inventing
@@ -666,10 +746,11 @@ def _register_tools(server: Any) -> None:
         theme: str | None = None,
         genre: str = "any",
         length: int = 18,
-        lastfm_user: str | None = None,
         label: str | None = None,
         seed: int | None = None,
     ):
+        # No `lastfm_user` parameter: taste is resolved from the authenticated
+        # principal's paired account inside _run_forge_playlist.
         return await _run_forge_playlist(
             ForgePlaylistInput.model_validate(
                 {
@@ -678,7 +759,6 @@ def _register_tools(server: Any) -> None:
                     "theme": theme,
                     "genre": genre,
                     "length": length,
-                    "lastfm_user": lastfm_user,
                     "label": label,
                     "seed": seed,
                 }
@@ -696,10 +776,11 @@ def _register_tools(server: Any) -> None:
     async def save_playlist(
         playlist_id: str,
         sink: str = "auto",
-        user_id: str | None = None,
     ):
+        # No `user_id` parameter. The owner is the verified bearer of the
+        # request, resolved inside _run_save_playlist via require_principal().
         return await _run_save_playlist(
-            SavePlaylistInput.model_validate({"playlist_id": playlist_id, "sink": sink, "user_id": user_id})
+            SavePlaylistInput.model_validate({"playlist_id": playlist_id, "sink": sink})
         )
 
     pairs = (
@@ -743,16 +824,62 @@ def build_mcp_server() -> Any:
     Split out so tests can introspect tools without standing up an HTTP app.
     """
     server_cls = _load_server_class()
-    try:
-        server = server_cls(
-            name=SERVER_NAME,
-            title=SERVER_TITLE,
-            version=SERVER_VERSION,
-            instructions=SERVER_INSTRUCTIONS,
-        )
-    except TypeError:
+
+    # Transport settings belong HERE, on the constructor.
+    #
+    # SDK 1.x `streamable_http_app()` takes no keyword arguments at all, so
+    # passing them at the call site raises TypeError and the fallback path
+    # quietly built an app with none of them. That cost us three things, in
+    # rising order of severity: the mount path, the DNS-rebinding allow-list
+    # (every request to bg.netdev.be answered 421), and `stateless_http` --
+    # which would have made /mcp demand session affinity and fall apart the
+    # first time Cloud Run scaled to a second instance.
+    #
+    # A constructor cannot silently ignore an unknown keyword; it raises. So
+    # this placement is self-checking in a way the call site was not.
+    transport_kwargs: dict[str, Any] = {
+        "streamable_http_path": MCP_MOUNT_PATH,
+        "json_response": False,
+        "stateless_http": True,
+    }
+    security = _transport_security()
+    if security is not None:
+        transport_kwargs["transport_security"] = security
+
+    identity: dict[str, Any] = {
+        "name": SERVER_NAME,
+        "title": SERVER_TITLE,
+        "version": SERVER_VERSION,
+        "instructions": SERVER_INSTRUCTIONS,
+    }
+    # Widest first, then shed what a given SDK generation does not know.
+    attempts: tuple[dict[str, Any], ...] = (
+        {**identity, **transport_kwargs},
         # SDK 1.x FastMCP has no `title`/`version` keyword.
-        server = server_cls(name=SERVER_NAME, instructions=SERVER_INSTRUCTIONS)
+        {"name": SERVER_NAME, "instructions": SERVER_INSTRUCTIONS, **transport_kwargs},
+        {"name": SERVER_NAME, "instructions": SERVER_INSTRUCTIONS},
+    )
+
+    server = None
+    for index, kwargs in enumerate(attempts):
+        try:
+            server = server_cls(**kwargs)
+        except TypeError:
+            continue
+        if index == len(attempts) - 1 and transport_kwargs:
+            # Built, but without transport settings. Loud, because this is the
+            # exact silent failure described above: it looks healthy locally
+            # and 421s in production.
+            logger.error(
+                "MCP server accepted none of the transport settings (%s). /mcp will use SDK "
+                "defaults: expect 421 responses behind a proxy and broken horizontal scaling.",
+                ", ".join(sorted(transport_kwargs)),
+            )
+        break
+
+    if server is None:  # pragma: no cover - no known SDK rejects the minimal form
+        raise RuntimeError("could not construct an MCP server with any known keyword set")
+
     _register_tools(server)
     return server
 
@@ -816,7 +943,12 @@ def _build_http_app(server: Any) -> Any:
     try:
         return server.streamable_http_app(**kwargs)
     except TypeError:
-        # SDK 1.x takes these as constructor settings rather than call keywords.
+        # SDK 1.x takes no call keywords here. Not a problem: build_mcp_server
+        # already applied these on the constructor, which is the only place 1.x
+        # reads them. Debug rather than warning -- this branch is the norm on
+        # 1.x, and the genuinely dangerous case (nothing applied anywhere) is
+        # reported by build_mcp_server instead.
+        logger.debug("SDK rejects streamable_http_app kwargs; relying on constructor settings")
         return server.streamable_http_app()
 
 
@@ -845,6 +977,55 @@ def _extract_endpoint(http_app: Any) -> Any:
         if endpoint is not None:
             return endpoint
     raise RuntimeError(f"the SDK app exposes no route at {MCP_MOUNT_PATH}")
+
+
+def _guarded(endpoint: Any) -> Any:
+    """Wrap the SDK endpoint in bearer-token authentication.
+
+    Fails *closed* on its own import errors. If the guard cannot be constructed
+    we return an endpoint that refuses everything, rather than the bare SDK
+    endpoint -- the rest of this module is deliberately forgiving about missing
+    optional pieces, and that instinct is exactly wrong here. An MCP transport
+    that came up without authentication would be worse than one that did not
+    come up at all: the tools behind it spend real users' credentials.
+    """
+    try:
+        from ..config import get_settings
+        from .guard import MCPAuthGuard
+
+        return MCPAuthGuard(endpoint, get_settings)
+    except Exception:  # noqa: BLE001
+        logger.exception("MCP auth guard could not be built; %s will refuse all calls", MCP_MOUNT_PATH)
+
+        async def _sealed(scope: Any, receive: Any, send: Any) -> None:
+            if scope.get("type") != "http":
+                return
+            body = json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": None,
+                    "error": {
+                        "code": -32001,
+                        "message": (
+                            "BAROGROOVE's MCP endpoint is sealed: its authentication layer "
+                            "failed to initialise."
+                        ),
+                    },
+                }
+            ).encode()
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 503,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"content-length", str(len(body)).encode()),
+                    ],
+                }
+            )
+            await send({"type": "http.response.body", "body": body})
+
+        return _sealed
 
 
 class _MCPTransport:
@@ -961,9 +1142,22 @@ def _compose_lifespan(app: FastAPI, server: Any, transport: _MCPTransport) -> No
         async with host_lifespan(scoped_app) as state:
             async with contextlib.AsyncExitStack() as stack:
                 try:
-                    endpoint = _extract_endpoint(_build_http_app(server))
-                    await stack.enter_async_context(server.session_manager.run())
-                    transport.activate(endpoint)
+                    # A fresh SERVER per cycle, not just a fresh http app.
+                    #
+                    # `session_manager` is a property of the server object, and
+                    # StreamableHTTPSessionManager refuses a second run(). Rebuilding
+                    # only the http app around a captured server still handed back the
+                    # same manager, so cycle 2 raised and /mcp stayed dark for the rest
+                    # of the process. The `server` argument is now only the import-time
+                    # validation specimen; the serving instance is built here.
+                    cycle_server = build_mcp_server()
+                    endpoint = _extract_endpoint(_build_http_app(cycle_server))
+                    await stack.enter_async_context(cycle_server.session_manager.run())
+                    # Auth sits between the route and the SDK endpoint, so every
+                    # frame reaching a tool has already had a principal bound (or
+                    # been refused). Wrapping here rather than at the route means
+                    # a transport rebind cannot accidentally drop the guard.
+                    transport.activate(_guarded(endpoint))
                     # Registered after activate, so it runs before the session manager
                     # stops: the endpoint stops accepting first, then drains.
                     stack.callback(transport.deactivate)

@@ -373,7 +373,7 @@ class _TrendArcPainter extends CustomPainter {
     canvas.drawArc(arcRect, _start, _sweep, false, trackPaint);
 
     // Centre tick: the zero line. Without it a filled arc is ambiguous.
-    final double mid = _start + _sweep / 2;
+    const double mid = _start + _sweep / 2;
     final Paint tickPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
@@ -394,7 +394,7 @@ class _TrendArcPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..color = tone;
 
-    final double half = _sweep / 2;
+    const double half = _sweep / 2;
     final double magnitude = value.abs().clamp(0.0, 1.0) * half;
     if (value < 0) {
       canvas.drawArc(arcRect, mid - magnitude, magnitude, false, valuePaint);
@@ -540,7 +540,7 @@ class _MagnitudeMeter extends StatelessWidget {
               value: value.clamp(0.0, 1.0),
               minHeight: 5,
               backgroundColor: colors.surfaceContainer,
-              valueColor: AlwaysStoppedAnimation<Color>(BgPalette.slate500),
+              valueColor: const AlwaysStoppedAnimation<Color>(BgPalette.slate500),
             ),
           ),
         ],
