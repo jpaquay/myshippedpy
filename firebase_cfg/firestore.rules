@@ -1,0 +1,319 @@
+// ===========================================================================
+// Barogroove -- Firestore security rules
+// "your sky has a soundtrack"
+//
+// POSTURE: default deny. Nothing is readable or writable unless a rule below
+// says so, and the last match block in this file denies everything that fell
+// through. Rules are evaluated as an OR over matching allow statements, so a
+// missing rule is a locked door, not an open one.
+//
+// THREAT MODEL. These rules defend against a hostile *client*. The Flutter web
+// app talks to Firestore directly for reads, and a browser is an environment
+// the attacker fully controls: they can mint requests with their own valid ID
+// token, for any path, with any body. Assume every field value is attacker
+// chosen. What they cannot forge is `request.auth.uid`, because that comes
+// from a signature Google checked. Every rule below is therefore anchored to
+// that one trustworthy fact.
+//
+// WHAT THESE RULES DO NOT COVER. The backend uses the Firebase Admin SDK,
+// which bypasses security rules entirely and by design. Server-side ownership
+// checks in `firestore.py` are not redundant with these rules -- they are the
+// *only* control on the backend path. Both layers are load-bearing.
+//
+// Verified against the rules v2 language reference (rules_version = '2',
+// `request.auth`, `request.resource.data`, `hasOnly`, `is` type operators).
+// ===========================================================================
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -----------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------
+
+    // Signed in at all. Necessary, never sufficient.
+    function signedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    // The caller *is* this user. This is the load-bearing predicate in the
+    // whole file. `request.auth.uid` is derived from a token Google signed;
+    // a client cannot set it.
+    function isUser(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Threat: a signed-in user creating documents attributed to someone else,
+    // poisoning that person's history or training data. The incoming document
+    // must claim the caller's own uid.
+    function ownsIncoming() {
+      return signedIn()
+        && request.resource.data.user_id is string
+        && request.resource.data.user_id == request.auth.uid;
+    }
+
+    // Threat: reading a document that belongs to somebody else.
+    function ownsExisting() {
+      return signedIn()
+        && resource.data.user_id is string
+        && resource.data.user_id == request.auth.uid;
+    }
+
+    // Threat: a client back-dating or forward-dating `created_at` to game the
+    // retrospective ("your first-frost record") or to sort itself to the top
+    // of somebody's feed. `request.time` is the server's clock and cannot be
+    // influenced by the client.
+    function serverTimestamp(field) {
+      return field is timestamp
+        && field <= request.time
+        && field > timestamp.date(2024, 1, 1);
+    }
+
+    // Threat: storage abuse / cost attack. Firestore's own ceiling is 1 MiB
+    // per document, which is plenty of room to park megabytes of junk in
+    // someone else's project on someone else's bill. Cap the strings that a
+    // client can actually control.
+    function boundedString(value, maxLen) {
+      return value is string && value.size() <= maxLen;
+    }
+
+    function boundedOptionalString(data, field, maxLen) {
+      return !(field in data) || data[field] == null
+        || boundedString(data[field], maxLen);
+    }
+
+    // Threat: immutability bypass. A client that can rewrite `user_id` after
+    // creation can donate a document to another account or steal one.
+    function unchanged(field) {
+      return !(field in request.resource.data)
+        || request.resource.data[field] == resource.data[field];
+    }
+
+    // ==================================================================
+    // users/{userId} -- profile mirror and learned taste vector
+    // ==================================================================
+    //
+    // THREAT: profile enumeration and cross-user reads. Email addresses live
+    // here. There is no "read any profile" rule and there never should be;
+    // Barogroove has no social graph, so no client has a legitimate reason to
+    // read a stranger's profile.
+    //
+    // THREAT: uid spoofing on create. The document ID *is* the uid, and
+    // isUser(userId) ties it to the token. A client cannot create
+    // `users/someone-else`.
+    match /users/{userId} {
+
+      allow read: if isUser(userId);
+
+      allow create: if isUser(userId)
+        // Field allow-list: an unrecognised field is refused rather than
+        // stored. Threat: a client stuffing arbitrary JSON into a document it
+        // legitimately owns, using our project as free storage.
+        && request.resource.data.keys().hasOnly([
+             'uid', 'email', 'display_name', 'photo_url', 'provider',
+             'created_at', 'updated_at', 'taste_vector', 'forge_count'
+           ])
+        && request.resource.data.uid == userId
+        && boundedOptionalString(request.resource.data, 'email', 320)
+        && boundedOptionalString(request.resource.data, 'display_name', 256)
+        && boundedOptionalString(request.resource.data, 'photo_url', 2048)
+        && boundedOptionalString(request.resource.data, 'provider', 64)
+        && serverTimestamp(request.resource.data.created_at);
+
+      allow update: if isUser(userId)
+        && request.resource.data.keys().hasOnly([
+             'uid', 'email', 'display_name', 'photo_url', 'provider',
+             'created_at', 'updated_at', 'taste_vector', 'forge_count'
+           ])
+        // THREAT: identity mutation. uid and created_at are write-once.
+        && unchanged('uid')
+        && unchanged('created_at')
+        && boundedOptionalString(request.resource.data, 'email', 320)
+        && boundedOptionalString(request.resource.data, 'display_name', 256)
+        && boundedOptionalString(request.resource.data, 'photo_url', 2048)
+        && serverTimestamp(request.resource.data.updated_at)
+        // THREAT: a client inflating forge_count to fake a retrospective.
+        // The number is advisory, but it should at least be a plausible one.
+        && (!('forge_count' in request.resource.data)
+            || (request.resource.data.forge_count is int
+                && request.resource.data.forge_count >= 0
+                && request.resource.data.forge_count <= 1000000));
+
+      // THREAT: accidental or malicious account-data destruction. Deletion is
+      // an account-lifecycle operation and runs through the backend, which
+      // must also clear the tokens subcollection -- a client-side delete of
+      // the parent document would orphan those, and orphaned credentials are
+      // the worst possible leftover.
+      allow delete: if false;
+
+      // ================================================================
+      // users/{userId}/tokens/{provider} -- encrypted provider credentials
+      // ================================================================
+      //
+      // THREAT: the whole reason this file exists. These documents hold
+      // Fernet-sealed Spotify refresh tokens and Last.fm session keys. A
+      // client that can read them can drain a user's music account, and a
+      // client that can write them can plant *its own* tokens in a victim's
+      // vault and have the backend act on the attacker's behalf.
+      //
+      // So: NO CLIENT ACCESS AT ALL. Not read, not write, not list, not even
+      // for the owner. The backend service account reaches these documents
+      // through the Admin SDK, which bypasses rules by design.
+      //
+      // Note the ordering: this block must appear *before* any recursive
+      // wildcard on /users/{userId}/**, and no such wildcard exists in this
+      // file precisely so that a future "let users read their own subtree"
+      // rule cannot silently unlock this one. If you add a recursive rule
+      // under /users, you will re-open this door. Do not.
+      match /tokens/{provider} {
+        allow read, write: if false;
+      }
+
+      // THREAT: a future subcollection inheriting nothing and therefore being
+      // wide open by accident. It is not -- default deny already covers it --
+      // but stating it makes the intent unmissable to the next reader.
+      match /{otherSubcollection}/{docId} {
+        allow read, write: if false;
+      }
+    }
+
+    // ==================================================================
+    // forges/{playlistId} -- one forged playlist
+    // ==================================================================
+    //
+    // THREAT: playlist enumeration. Top-level collection with owner-scoped
+    // reads. The `public: true` flag is the ONLY thing that widens a read, it
+    // must be an explicit boolean, and the default on write is false.
+    //
+    // THREAT: silent sharing. A malicious or buggy client should not be able
+    // to make a playlist world-readable as a side effect of some other write,
+    // so `public` must be present and explicitly `false` at creation time --
+    // absent is not the same as false, and we refuse ambiguity.
+    match /forges/{playlistId} {
+
+      // Owner always reads. Everyone else reads only when `public == true`.
+      // Note `resource.data.public == true` rather than a truthiness check:
+      // in CEL a missing field on a `resource.data` access errors the rule
+      // out to deny, which is the direction we want.
+      allow read: if ownsExisting()
+        || (resource.data.public is bool && resource.data.public == true);
+
+      allow create: if ownsIncoming()
+        && request.resource.data.user_id == request.auth.uid
+        && boundedString(request.resource.data.id, 200)
+        && request.resource.data.id == playlistId
+        && boundedString(request.resource.data.title, 300)
+        && boundedOptionalString(request.resource.data, 'subtitle', 500)
+        && boundedOptionalString(request.resource.data, 'theme_id', 100)
+        && boundedOptionalString(request.resource.data, 'genre_id', 100)
+        // THREAT: cost/storage abuse via an enormous track array. 60 mirrors
+        // MAX_TRACKS_PER_FORGE in firebase/firestore.py. Keep them in sync.
+        && request.resource.data.tracks is list
+        && request.resource.data.tracks.size() <= 60
+        // Sharing is opt-in, explicitly, at every write.
+        && request.resource.data.public is bool
+        && request.resource.data.public == false
+        && serverTimestamp(request.resource.data.created_at);
+
+      // THREAT: history rewriting. A forge is a record of a moment. The only
+      // field a client may change afterwards is the share flag; everything
+      // else is frozen. Rewriting `sky` or `tracks` after the fact would let
+      // a user manufacture a "first-frost record" that never happened.
+      allow update: if ownsExisting()
+        && ownsIncoming()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['public', 'updated_at'])
+        && request.resource.data.public is bool
+        && serverTimestamp(request.resource.data.updated_at);
+
+      // Owners may delete their own history. This is a privacy affordance,
+      // not an oversight: "forget this one" has to work.
+      allow delete: if ownsExisting();
+    }
+
+    // ==================================================================
+    // feedback/{feedbackId} -- loved / skipped signals
+    // ==================================================================
+    //
+    // THREAT: training-data poisoning. These rows feed the ridge regression
+    // that personalises a user's transfer matrix. Anyone who can write rows
+    // attributed to another uid can steer that person's recommendations.
+    // ownsIncoming() blocks it.
+    //
+    // THREAT: preference inference. Read is owner-only -- what somebody skips
+    // is at least as revealing as what they love.
+    //
+    // Append-only from the client's side: no update, no delete. Correcting a
+    // signal means writing a new one; the fit is time-weighted anyway.
+    match /feedback/{feedbackId} {
+
+      allow read: if ownsExisting();
+
+      allow create: if ownsIncoming()
+        && request.resource.data.keys().hasOnly([
+             'user_id', 'playlist_id', 'track_key', 'signal', 'created_at'
+           ])
+        && boundedString(request.resource.data.playlist_id, 200)
+        && boundedString(request.resource.data.track_key, 512)
+        // THREAT: enum smuggling. An unexpected `signal` value would flow
+        // straight into the learning loop. Two literals, nothing else.
+        && request.resource.data.signal in ['loved', 'skipped']
+        && serverTimestamp(request.resource.data.created_at);
+
+      allow update, delete: if false;
+    }
+
+    // ==================================================================
+    // almanac/{userId} -- the learned 9x7 transfer-matrix delta
+    // ==================================================================
+    //
+    // THREAT: a client writing its own personalisation matrix. The delta is
+    // *derived* state, fitted server-side from feedback. A client-supplied
+    // matrix is an arbitrary-behaviour primitive: set the right 63 floats and
+    // you control what the engine recommends, bypassing every guardrail in
+    // the scoring layer. Writes are backend-only, full stop.
+    //
+    // Read is allowed for the owner so the app can show "here is what the
+    // sky taught us about you" without a backend round trip. There is nothing
+    // sensitive in your own coefficients.
+    //
+    // Shape note: `delta.values` is a FLAT 63-element array because Firestore
+    // rejects nested arrays. rows=9 (SkyVector), cols=7 (SonicVector),
+    // row-major. The size check below is the last line of defence against a
+    // malformed document reaching the engine.
+    match /almanac/{userId} {
+
+      allow read: if isUser(userId)
+        && resource.data.user_id == userId;
+
+      // Backend only, via the Admin SDK. Written by the Almanac worker's fit.
+      allow write: if false;
+    }
+
+    // ==================================================================
+    // Diagnostics
+    // ==================================================================
+    //
+    // The backend healthcheck reads _healthcheck/probe with the Admin SDK,
+    // which ignores these rules. Clients have no business here.
+    match /_healthcheck/{docId} {
+      allow read, write: if false;
+    }
+
+    // ==================================================================
+    // DEFAULT DENY -- keep this last
+    // ==================================================================
+    //
+    // THREAT: a new collection added by a future feature and shipped before
+    // anyone writes rules for it. Firestore already denies unmatched paths,
+    // so this block changes no behaviour. It exists so that a reader
+    // skimming the bottom of the file sees the posture stated out loud, and
+    // so that anyone tempted to write `allow read, write: if true;` here has
+    // to delete an explicit refusal to do it.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

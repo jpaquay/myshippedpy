@@ -1,0 +1,57 @@
+{
+  "name": "BAROGROOVE — your sky has a soundtrack",
+  "short_name": "BAROGROOVE",
+  "description": "A weather-driven playlist engine. Reads the derivative of your sky and forges a set that explains itself.",
+  "start_url": ".",
+  "scope": "./",
+  "id": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "orientation": "portrait-primary",
+  "background_color": "#F8FAFC",
+  "theme_color": "#F8FAFC",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["music", "utilities", "lifestyle"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "icons/Icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/Icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/Icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/Icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Forge a set",
+      "short_name": "Forge",
+      "description": "Read the current sky and build a playlist from it.",
+      "url": "./?screen=forge"
+    },
+    {
+      "name": "Almanac",
+      "short_name": "Almanac",
+      "description": "Every set you have forged, and the sky that made it.",
+      "url": "./?screen=almanac"
+    }
+  ]
+}

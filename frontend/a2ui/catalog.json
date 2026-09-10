@@ -1,0 +1,1859 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bg.netdev.be/a2ui/catalogs/barogroove/v1",
+  "title": "BAROGROOVE Component Catalog",
+  "description": "BAROGROOVE - your sky has a soundtrack. A weather-driven playlist engine. One UI definition, two surfaces: the Flutter app is an A2UI renderer pointed at this catalog, and the MCP server emits the identical JSON.",
+  "components": {
+    "Stack": {
+      "type": "object",
+      "title": "Stack",
+      "description": "The single layout primitive. A vertical (or horizontal) run of children with house spacing. BAROGROOVE declares its own container rather than depending on the basic catalog, so the Flutter renderer can load this catalog alone and still draw every surface.",
+      "properties": {
+        "component": {
+          "const": "Stack",
+          "description": "Discriminator: always 'Stack'."
+        },
+        "children": {
+          "$ref": "common_types.json#/$defs/ChildList",
+          "description": "Child components, array form or list template."
+        },
+        "direction": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "'vertical' (default) or 'horizontal'."
+        },
+        "gap": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Spacing token: xs|sm|md|lg|xl|xxl|section."
+        },
+        "padding": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Spacing token applied on all sides."
+        },
+        "tone": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "'canvas' | 'surface' | 'sunken'."
+        },
+        "maxWidth": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "Max content width in logical pixels."
+        },
+        "heading": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Optional section heading."
+        },
+        "subheading": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Optional section subheading."
+        },
+        "align": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "'start' | 'center' | 'stretch'."
+        }
+      },
+      "required": [
+        "component",
+        "children"
+      ],
+      "additionalProperties": false,
+      "allowedParents": [
+        "Surface",
+        "Stack"
+      ],
+      "metadata": {
+        "extensions": {
+          "barogroove": {
+            "purpose": "The single layout primitive. A vertical (or horizontal) run of children with house spacing. BAROGROOVE declares its own container rather than depending on the basic catalog, so the Flutter renderer can load this catalog alone and still draw every surface.",
+            "bindable": [
+              "heading",
+              "subheading"
+            ],
+            "functions": [],
+            "design": "Executive layout: one column, generous section gaps, capped width."
+          }
+        }
+      },
+      "allowedChildren": [
+        "SkyDial",
+        "ThemeChips",
+        "GenreCorridor",
+        "TrackList",
+        "RationaleCard",
+        "AlmanacTimeline",
+        "Notice",
+        "Stack",
+        "ThemeChip",
+        "GenreOption"
+      ]
+    },
+    "Notice": {
+      "type": "object",
+      "title": "Notice",
+      "description": "Degradation and failure, stated plainly. BAROGROOVE never shows a spinner-turned-blank: if the sky read failed or a provider is down, the user is told what is missing and what still worked.",
+      "properties": {
+        "component": {
+          "const": "Notice",
+          "description": "Discriminator: always 'Notice'."
+        },
+        "tone": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "'info' | 'warning' | 'critical'."
+        },
+        "title": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "One-line summary of what happened."
+        },
+        "message": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Plain-language explanation."
+        },
+        "detail": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Optional technical detail, collapsed by default."
+        },
+        "degraded": {
+          "$ref": "common_types.json#/$defs/DynamicStringList",
+          "description": "Named capabilities that are unavailable right now."
+        },
+        "onRetry": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Retry the failed intent. Dispatches `barogroove.retry`.",
+          "x-a2ui-function": "barogroove.retry"
+        }
+      },
+      "required": [
+        "component",
+        "tone",
+        "title"
+      ],
+      "additionalProperties": false,
+      "allowedParents": [
+        "Surface",
+        "Stack"
+      ],
+      "metadata": {
+        "extensions": {
+          "barogroove": {
+            "purpose": "Degradation and failure, stated plainly. BAROGROOVE never shows a spinner-turned-blank: if the sky read failed or a provider is down, the user is told what is missing and what still worked.",
+            "bindable": [
+              "title",
+              "message",
+              "detail",
+              "degraded"
+            ],
+            "functions": [
+              "barogroove.retry"
+            ],
+            "design": "Critical uses criticalSoft fill with criticalInk text; never red-on-red."
+          }
+        }
+      }
+    },
+    "SkyDial": {
+      "type": "object",
+      "title": "SkyDial",
+      "description": "Radial reading of the nine SkyVector dimensions -- WEIGHTED, not equal. pressure_trend_6h is the hero: it owns the needle, the display-size readout and the caption. The remaining derivative dimensions form the inner ring at full stroke; the absolute state dimensions (sun elevation, cloud depth, precipitation) sit dimmed on a thin outer ring. Weather is felt as CHANGE, so the derivatives get the ink.",
+      "properties": {
+        "component": {
+          "const": "SkyDial",
+          "description": "Discriminator: always 'SkyDial'."
+        },
+        "heroDimension": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Dimension id driving the needle."
+        },
+        "heroLabel": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Human label for the hero dimension."
+        },
+        "heroDisplay": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Formatted hero readout, e.g. '-9.2 hPa/6h'."
+        },
+        "heroValue": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "Hero value normalised to -1..1 for the needle."
+        },
+        "heroCaption": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Plain-language gloss: 'falling fast'."
+        },
+        "heroTone": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "'rising' | 'steady' | 'falling'."
+        },
+        "spokes": {
+          "$ref": "common_types.json#/$defs/ChildList",
+          "description": "Template ChildList over the sky dimension array. One SkyDialSpoke per dimension; the template form keeps N out of the component tree."
+        },
+        "observedAt": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "ISO-8601 observation timestamp."
+        },
+        "coordinates": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Formatted lat/lon of the reading."
+        },
+        "stale": {
+          "$ref": "common_types.json#/$defs/DynamicBoolean",
+          "description": "True when the reading is older than the TTL."
+        },
+        "notes": {
+          "$ref": "common_types.json#/$defs/DynamicStringList",
+          "description": "Provider notes attached to the reading."
+        },
+        "onDimensionTap": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Ask the agent to explain one dimension's contribution. Dispatches `barogroove.explainDimension`.",
+          "x-a2ui-function": "barogroove.explainDimension"
+        },
+        "onRefresh": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Re-read the sky. Dispatches `barogroove.refreshSky`.",
+          "x-a2ui-function": "barogroove.refreshSky"
+        }
+      },
+      "required": [
+        "component",
+        "spokes"
+      ],
+      "additionalProperties": false,
+      "allowedParents": [
+        "Surface",
+        "Stack"
+      ],
+      "metadata": {
+        "extensions": {
+          "barogroove": {
+            "purpose": "Radial reading of the nine SkyVector dimensions -- WEIGHTED, not equal. pressure_trend_6h is the hero: it owns the needle, the display-size readout and the caption. The remaining derivative dimensions form the inner ring at full stroke; the absolute state dimensions (sun elevation, cloud depth, precipitation) sit dimmed on a thin outer ring. Weather is felt as CHANGE, so the derivatives get the ink.",
+            "bindable": [
+              "heroDimension",
+              "heroLabel",
+              "heroDisplay",
+              "heroValue",
+              "heroCaption",
+              "heroTone",
+              "observedAt",
+              "coordinates",
+              "stale",
+              "notes"
+            ],
+            "functions": [
+              "barogroove.explainDimension",
+              "barogroove.refreshSky"
+            ],
+            "design": "Needle in accent; hero readout in display type with tabular numerals; outer state ring at 45% opacity in inkSubtle. Stale readings get a gold hairline, not a red one -- stale is not an error."
+          }
+        }
+      }
+    },
+    "SkyDialSpoke": {
+      "type": "object",
+      "title": "SkyDialSpoke",
+      "description": "One dimension of the dial. Rendered at a radius and stroke derived from `weight`, and dropped entirely on narrow screens when `tier` == 'state'.",
+      "properties": {
+        "component": {
+          "const": "SkyDialSpoke",
+          "description": "Discriminator: always 'SkyDialSpoke'."
+        },
+        "dimensionId": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "One of the nine SKY_DIMS ids."
+        },
+        "label": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Short human label."
+        },
+        "display": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Formatted value with unit."
+        },
+        "value": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "Normalised 0..1 magnitude for the arc length."
+        },
+        "signed": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "Signed -1..1 value where direction matters."
+        },
+        "unit": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Unit suffix."
+        },
+        "tier": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "'hero' | 'derivative' | 'state'."
+        },
+        "weight": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "0..1 visual prominence; drives radius and stroke."
+        },
+        "polarity": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "'up' | 'down' | 'flat'."
+        },
+        "onTap": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Explain this dimension. Dispatches `barogroove.explainDimension`.",
+          "x-a2ui-function": "barogroove.explainDimension"
+        }
+      },
+      "required": [
+        "component",
+        "dimensionId"
+      ],
+      "additionalProperties": false,
+      "allowedParents": [
+        "SkyDial"
+      ],
+      "metadata": {
+        "extensions": {
+          "barogroove": {
+            "purpose": "One dimension of the dial. Rendered at a radius and stroke derived from `weight`, and dropped entirely on narrow screens when `tier` == 'state'.",
+            "bindable": [
+              "dimensionId",
+              "label",
+              "display",
+              "value",
+              "signed",
+              "unit",
+              "tier",
+              "weight",
+              "polarity"
+            ],
+            "functions": [
+              "barogroove.explainDimension"
+            ],
+            "design": ""
+          }
+        }
+      }
+    },
+    "ThemeChips": {
+      "type": "object",
+      "title": "ThemeChips",
+      "description": "AXIS 1 OF 2. Selectable chips for the eight weather themes, each carrying its own palette so the chip previews the register it will put the whole surface into. Selection fires callAgentFunction, so the chips genuinely talk back to the agent rather than mutating local state the agent never hears about.",
+      "properties": {
+        "component": {
+          "const": "ThemeChips",
+          "description": "Discriminator: always 'ThemeChips'."
+        },
+        "chips": {
+          "$ref": "common_types.json#/$defs/ChildList",
+          "description": "Template ChildList over the theme array."
+        },
+        "label": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Axis label, e.g. 'Theme'."
+        },
+        "axisNote": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "'Axis 1 of 2 - the weather register'."
+        },
+        "helpText": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "One line on what the axis does."
+        },
+        "selectedThemeId": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Currently selected theme id."
+        }
+      },
+      "required": [
+        "component",
+        "chips"
+      ],
+      "additionalProperties": false,
+      "allowedParents": [
+        "Surface",
+        "Stack"
+      ],
+      "metadata": {
+        "extensions": {
+          "barogroove": {
+            "purpose": "AXIS 1 OF 2. Selectable chips for the eight weather themes, each carrying its own palette so the chip previews the register it will put the whole surface into. Selection fires callAgentFunction, so the chips genuinely talk back to the agent rather than mutating local state the agent never hears about.",
+            "bindable": [
+              "label",
+              "axisNote",
+              "helpText",
+              "selectedThemeId"
+            ],
+            "functions": [
+              "barogroove.selectTheme"
+            ],
+            "design": "Chips are pill-shaped, bordered, and tint with their own accentSoft."
+          }
+        }
+      }
+    },
+    "ThemeChip": {
+      "type": "object",
+      "title": "ThemeChip",
+      "description": "One theme chip, carrying that theme's palette swatch and tagline.",
+      "properties": {
+        "component": {
+          "const": "ThemeChip",
+          "description": "Discriminator: always 'ThemeChip'."
+        },
+        "themeId": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Theme id."
+        },
+        "name": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Display name."
+        },
+        "tagline": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Six-word promise."
+        },
+        "swatchAccent": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "#RRGGBB accent for the swatch."
+        },
+        "swatchSoft": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "#RRGGBB soft fill when selected."
+        },
+        "swatchInk": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "#RRGGBB text colour on the soft fill."
+        },
+        "selected": {
+          "$ref": "common_types.json#/$defs/DynamicBoolean",
+          "description": "True when this chip is the active theme."
+        },
+        "onSelect": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Select this theme. Dispatches `barogroove.selectTheme`.",
+          "x-a2ui-function": "barogroove.selectTheme"
+        }
+      },
+      "required": [
+        "component",
+        "themeId",
+        "onSelect"
+      ],
+      "additionalProperties": false,
+      "allowedParents": [
+        "ThemeChips"
+      ],
+      "metadata": {
+        "extensions": {
+          "barogroove": {
+            "purpose": "One theme chip, carrying that theme's palette swatch and tagline.",
+            "bindable": [
+              "themeId",
+              "name",
+              "tagline",
+              "swatchAccent",
+              "swatchSoft",
+              "swatchInk",
+              "selected"
+            ],
+            "functions": [
+              "barogroove.selectTheme"
+            ],
+            "design": ""
+          }
+        }
+      }
+    },
+    "GenreCorridor": {
+      "type": "object",
+      "title": "GenreCorridor",
+      "description": "AXIS 2 OF 2, and visibly separate from the theme chips. The whole point of BAROGROOVE is that 'Petrichor x krautrock' is a CROSSING of two independent knobs: the sky picks the mood, you pick the vocabulary. Rendered as its own bordered panel with its own axis label and an explicit crossing readout ('Petrichor x krautrock'), so nobody mistakes genre for a sub-option of theme. Corridor width is a second-order control: how far the sky is allowed to drag the selection away from the corridor's anchor.",
+      "properties": {
+        "component": {
+          "const": "GenreCorridor",
+          "description": "Discriminator: always 'GenreCorridor'."
+        },
+        "options": {
+          "$ref": "common_types.json#/$defs/ChildList",
+          "description": "Template ChildList over the genre corridor array."
+        },
+        "label": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Axis label, e.g. 'Genre corridor'."
+        },
+        "axisNote": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "'Axis 2 of 2 - independent of theme'."
+        },
+        "helpText": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "One line on orthogonality."
+        },
+        "selectedGenreId": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Currently selected corridor id."
+        },
+        "crossingLabel": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Live crossing readout: 'Petrichor x krautrock'."
+        },
+        "width": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "0..1 corridor width."
+        },
+        "widthLabel": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "'tight' | 'balanced' | 'loose'."
+        },
+        "onWidthChange": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Change the corridor width. Dispatches `barogroove.setCorridorWidth`.",
+          "x-a2ui-function": "barogroove.setCorridorWidth"
+        },
+        "onForge": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Commit the crossing and forge. Dispatches `barogroove.forge`.",
+          "x-a2ui-function": "barogroove.forge"
+        }
+      },
+      "required": [
+        "component",
+        "options"
+      ],
+      "additionalProperties": false,
+      "allowedParents": [
+        "Surface",
+        "Stack"
+      ],
+      "metadata": {
+        "extensions": {
+          "barogroove": {
+            "purpose": "AXIS 2 OF 2, and visibly separate from the theme chips. The whole point of BAROGROOVE is that 'Petrichor x krautrock' is a CROSSING of two independent knobs: the sky picks the mood, you pick the vocabulary. Rendered as its own bordered panel with its own axis label and an explicit crossing readout ('Petrichor x krautrock'), so nobody mistakes genre for a sub-option of theme. Corridor width is a second-order control: how far the sky is allowed to drag the selection away from the corridor's anchor.",
+            "bindable": [
+              "label",
+              "axisNote",
+              "helpText",
+              "selectedGenreId",
+              "crossingLabel",
+              "width",
+              "widthLabel"
+            ],
+            "functions": [
+              "barogroove.selectGenre",
+              "barogroove.setCorridorWidth",
+              "barogroove.forge"
+            ],
+            "design": "Panel with borderStrong hairline and its own heading; never inline with chips."
+          }
+        }
+      }
+    },
+    "GenreOption": {
+      "type": "object",
+      "title": "GenreOption",
+      "description": "One genre corridor: a name, its tag vocabulary, and its anchor.",
+      "properties": {
+        "component": {
+          "const": "GenreOption",
+          "description": "Discriminator: always 'GenreOption'."
+        },
+        "genreId": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Corridor id."
+        },
+        "name": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Display name."
+        },
+        "description": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "What this corridor sounds like."
+        },
+        "tags": {
+          "$ref": "common_types.json#/$defs/DynamicStringList",
+          "description": "The corridor's tag vocabulary."
+        },
+        "selected": {
+          "$ref": "common_types.json#/$defs/DynamicBoolean",
+          "description": "True when active."
+        },
+        "onSelect": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Select this corridor. Dispatches `barogroove.selectGenre`.",
+          "x-a2ui-function": "barogroove.selectGenre"
+        }
+      },
+      "required": [
+        "component",
+        "genreId",
+        "onSelect"
+      ],
+      "additionalProperties": false,
+      "allowedParents": [
+        "GenreCorridor"
+      ],
+      "metadata": {
+        "extensions": {
+          "barogroove": {
+            "purpose": "One genre corridor: a name, its tag vocabulary, and its anchor.",
+            "bindable": [
+              "genreId",
+              "name",
+              "description",
+              "tags",
+              "selected"
+            ],
+            "functions": [
+              "barogroove.selectGenre"
+            ],
+            "design": ""
+          }
+        }
+      }
+    },
+    "TrackList": {
+      "type": "object",
+      "title": "TrackList",
+      "description": "The ordered playlist as an ARC, not a bag. Every row carries its arc role badge (opener / build / peak / descent / closer) and its own `why`, because a track's position is a claim the engine is making and the user is entitled to see the claim. Rows come from a template ChildList over the bound track array -- the component tree stays a fixed handful of nodes no matter how long the playlist is.",
+      "properties": {
+        "component": {
+          "const": "TrackList",
+          "description": "Discriminator: always 'TrackList'."
+        },
+        "rows": {
+          "$ref": "common_types.json#/$defs/ChildList",
+          "description": "Template ChildList over the track array."
+        },
+        "title": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Playlist title."
+        },
+        "subtitle": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Playlist subtitle."
+        },
+        "trackCount": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "Number of tracks."
+        },
+        "durationDisplay": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Total running time, e.g. '58 min'."
+        },
+        "arcLegend": {
+          "$ref": "common_types.json#/$defs/DynamicStringList",
+          "description": "Ordered arc role legend."
+        },
+        "showWhy": {
+          "$ref": "common_types.json#/$defs/DynamicBoolean",
+          "description": "Show the per-track rationale line (default true)."
+        }
+      },
+      "required": [
+        "component",
+        "rows"
+      ],
+      "additionalProperties": false,
+      "allowedParents": [
+        "Surface",
+        "Stack"
+      ],
+      "metadata": {
+        "extensions": {
+          "barogroove": {
+            "purpose": "The ordered playlist as an ARC, not a bag. Every row carries its arc role badge (opener / build / peak / descent / closer) and its own `why`, because a track's position is a claim the engine is making and the user is entitled to see the claim. Rows come from a template ChildList over the bound track array -- the component tree stays a fixed handful of nodes no matter how long the playlist is.",
+            "bindable": [
+              "title",
+              "subtitle",
+              "trackCount",
+              "durationDisplay",
+              "arcLegend",
+              "showWhy"
+            ],
+            "functions": [
+              "barogroove.trackFeedback",
+              "barogroove.openTrack"
+            ],
+            "design": "Peak row gets the gold hairline. Everything else is slate on white."
+          }
+        }
+      }
+    },
+    "TrackRow": {
+      "type": "object",
+      "title": "TrackRow",
+      "description": "One track: position, artist/title, arc role badge, and the one-line `why`. Loved / skipped are per-row actions that feed taste affinity without reordering the playlist under the user's finger.",
+      "properties": {
+        "component": {
+          "const": "TrackRow",
+          "description": "Discriminator: always 'TrackRow'."
+        },
+        "trackKey": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Stable track key (artist|title)."
+        },
+        "position": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "1-based position in the arc."
+        },
+        "title": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Track title."
+        },
+        "artist": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Artist name."
+        },
+        "display": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "'Artist - Title'."
+        },
+        "role": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Arc role id."
+        },
+        "roleLabel": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Arc role display label."
+        },
+        "why": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Why this track sits at this position."
+        },
+        "durationDisplay": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Formatted duration."
+        },
+        "score": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "0..1 overall score."
+        },
+        "sonicDistance": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "Distance from the sonic target."
+        },
+        "loved": {
+          "$ref": "common_types.json#/$defs/DynamicBoolean",
+          "description": "User marked this track loved."
+        },
+        "skipped": {
+          "$ref": "common_types.json#/$defs/DynamicBoolean",
+          "description": "User marked this track skipped."
+        },
+        "spotifyUri": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Sink URI when resolved."
+        },
+        "onLove": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Mark loved. Dispatches `barogroove.trackFeedback`.",
+          "x-a2ui-function": "barogroove.trackFeedback"
+        },
+        "onSkip": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Mark skipped. Dispatches `barogroove.trackFeedback`.",
+          "x-a2ui-function": "barogroove.trackFeedback"
+        },
+        "onOpen": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Open in the sink. Dispatches `barogroove.openTrack`.",
+          "x-a2ui-function": "barogroove.openTrack"
+        }
+      },
+      "required": [
+        "component",
+        "trackKey"
+      ],
+      "additionalProperties": false,
+      "allowedParents": [
+        "TrackList"
+      ],
+      "metadata": {
+        "extensions": {
+          "barogroove": {
+            "purpose": "One track: position, artist/title, arc role badge, and the one-line `why`. Loved / skipped are per-row actions that feed taste affinity without reordering the playlist under the user's finger.",
+            "bindable": [
+              "trackKey",
+              "position",
+              "title",
+              "artist",
+              "display",
+              "role",
+              "roleLabel",
+              "why",
+              "durationDisplay",
+              "score",
+              "sonicDistance",
+              "loved",
+              "skipped",
+              "spotifyUri"
+            ],
+            "functions": [
+              "barogroove.trackFeedback",
+              "barogroove.openTrack"
+            ],
+            "design": ""
+          }
+        }
+      }
+    },
+    "RationaleCard": {
+      "type": "object",
+      "title": "RationaleCard",
+      "description": "THE HERO CARD. In BAROGROOVE the explanation is the product, not a footnote: a playlist you cannot interrogate is just a shuffle with better marketing. So the rationale is rendered FIRST, at display type, above the track list, with the sky reading and the sonic moves spelled out as separate evidence lists and the confidence stated as a number. Degradation is shown here too, in the same card -- if the engine had to guess, it says so where you are already looking.",
+      "properties": {
+        "component": {
+          "const": "RationaleCard",
+          "description": "Discriminator: always 'RationaleCard'."
+        },
+        "headline": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "One sentence: what the sky did to the music."
+        },
+        "body": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "The paragraph. Concrete, never mystical."
+        },
+        "skyReading": {
+          "$ref": "common_types.json#/$defs/DynamicStringList",
+          "description": "Evidence bullets drawn from the sky vector."
+        },
+        "sonicMoves": {
+          "$ref": "common_types.json#/$defs/DynamicStringList",
+          "description": "What the engine did to the sonic target."
+        },
+        "tasteNote": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "How the user's history bent the result."
+        },
+        "confidence": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "0..1 confidence in the reading."
+        },
+        "confidenceLabel": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "'high' | 'fair' | 'thin'."
+        },
+        "degraded": {
+          "$ref": "common_types.json#/$defs/DynamicStringList",
+          "description": "Capabilities that were unavailable."
+        },
+        "emphasis": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "'hero' (default) | 'inline' when re-shown lower down."
+        },
+        "themeName": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Active theme name."
+        },
+        "genreName": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Active corridor name."
+        },
+        "onExplainDimension": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Drill into one sky dimension from the evidence list. Dispatches `barogroove.explainDimension`.",
+          "x-a2ui-function": "barogroove.explainDimension"
+        }
+      },
+      "required": [
+        "component",
+        "headline"
+      ],
+      "additionalProperties": false,
+      "allowedParents": [
+        "Surface",
+        "Stack"
+      ],
+      "metadata": {
+        "extensions": {
+          "barogroove": {
+            "purpose": "THE HERO CARD. In BAROGROOVE the explanation is the product, not a footnote: a playlist you cannot interrogate is just a shuffle with better marketing. So the rationale is rendered FIRST, at display type, above the track list, with the sky reading and the sonic moves spelled out as separate evidence lists and the confidence stated as a number. Degradation is shown here too, in the same card -- if the engine had to guess, it says so where you are already looking.",
+            "bindable": [
+              "headline",
+              "body",
+              "skyReading",
+              "sonicMoves",
+              "tasteNote",
+              "confidence",
+              "confidenceLabel",
+              "degraded",
+              "themeName",
+              "genreName"
+            ],
+            "functions": [
+              "barogroove.explainDimension"
+            ],
+            "design": "Gold hairline rule above the headline -- the only gold on the surface. Display type headline, body at 15/23, evidence lists at caption size in inkMuted. Confidence as a numeral, never a vague adjective alone."
+          }
+        }
+      }
+    },
+    "AlmanacTimeline": {
+      "type": "object",
+      "title": "AlmanacTimeline",
+      "description": "The retrospective: 'your rain sound', 'your first-frost record'. BAROGROOVE gets better the longer you use it, and the almanac is where that becomes visible -- past forges grouped by season, each keeping the theme tint it was born under.",
+      "properties": {
+        "component": {
+          "const": "AlmanacTimeline",
+          "description": "Discriminator: always 'AlmanacTimeline'."
+        },
+        "entries": {
+          "$ref": "common_types.json#/$defs/ChildList",
+          "description": "Template ChildList over the almanac entry array."
+        },
+        "title": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Section title."
+        },
+        "subtitle": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Section subtitle."
+        },
+        "groupBy": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "'season' (default) | 'year' | 'theme'."
+        },
+        "emptyMessage": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Shown when there are no past forges yet."
+        },
+        "entryCount": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "Number of entries."
+        }
+      },
+      "required": [
+        "component",
+        "entries"
+      ],
+      "additionalProperties": false,
+      "allowedParents": [
+        "Surface",
+        "Stack"
+      ],
+      "metadata": {
+        "extensions": {
+          "barogroove": {
+            "purpose": "The retrospective: 'your rain sound', 'your first-frost record'. BAROGROOVE gets better the longer you use it, and the almanac is where that becomes visible -- past forges grouped by season, each keeping the theme tint it was born under.",
+            "bindable": [
+              "title",
+              "subtitle",
+              "groupBy",
+              "emptyMessage",
+              "entryCount"
+            ],
+            "functions": [
+              "barogroove.openAlmanacEntry"
+            ],
+            "design": ""
+          }
+        }
+      }
+    },
+    "AlmanacEntry": {
+      "type": "object",
+      "title": "AlmanacEntry",
+      "description": "One past forge on the timeline, tinted with the theme it was born under.",
+      "properties": {
+        "component": {
+          "const": "AlmanacEntry",
+          "description": "Discriminator: always 'AlmanacEntry'."
+        },
+        "playlistId": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Playlist id."
+        },
+        "title": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Playlist title."
+        },
+        "subtitle": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Playlist subtitle."
+        },
+        "badge": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Almanac badge, e.g. 'your rain sound'."
+        },
+        "createdAt": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "ISO-8601 creation timestamp."
+        },
+        "createdLabel": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Human date, e.g. '14 Nov 2025'."
+        },
+        "themeId": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Theme id."
+        },
+        "themeName": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Theme display name."
+        },
+        "genreName": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Corridor display name."
+        },
+        "accent": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "#RRGGBB tint from that theme's palette."
+        },
+        "headline": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "The rationale headline from that forge."
+        },
+        "trackCount": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "Track count."
+        },
+        "onOpen": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Re-open this forge. Dispatches `barogroove.openAlmanacEntry`.",
+          "x-a2ui-function": "barogroove.openAlmanacEntry"
+        }
+      },
+      "required": [
+        "component",
+        "playlistId",
+        "onOpen"
+      ],
+      "additionalProperties": false,
+      "allowedParents": [
+        "AlmanacTimeline"
+      ],
+      "metadata": {
+        "extensions": {
+          "barogroove": {
+            "purpose": "One past forge on the timeline, tinted with the theme it was born under.",
+            "bindable": [
+              "playlistId",
+              "title",
+              "subtitle",
+              "badge",
+              "createdAt",
+              "createdLabel",
+              "themeId",
+              "themeName",
+              "genreName",
+              "accent",
+              "headline",
+              "trackCount"
+            ],
+            "functions": [
+              "barogroove.openAlmanacEntry"
+            ],
+            "design": ""
+          }
+        }
+      }
+    }
+  },
+  "functions": {
+    "barogroove.selectTheme": {
+      "description": "The user picked a weather theme chip. Re-target the sonic vector toward that theme's bias and re-render the theme/genre surface.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "themeId": {
+            "type": "string",
+            "enum": [
+              "petrichor",
+              "first_frost",
+              "high_pressure_blue",
+              "gale_warning",
+              "golden_hour",
+              "blanket_grey",
+              "heat_shimmer",
+              "long_dusk"
+            ]
+          },
+          "surfaceId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "themeId"
+        ]
+      },
+      "returns": {
+        "type": "object",
+        "description": "Follow-up A2UI messages."
+      },
+      "allowedCallers": "rendererOnly",
+      "requiresUserActivation": true
+    },
+    "barogroove.selectGenre": {
+      "description": "The user moved the genre corridor. This axis is ORTHOGONAL to theme: changing it must not reset the selected theme.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "genreId": {
+            "type": "string"
+          },
+          "surfaceId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "genreId"
+        ]
+      },
+      "returns": {
+        "type": "object"
+      },
+      "allowedCallers": "rendererOnly",
+      "requiresUserActivation": true
+    },
+    "barogroove.setCorridorWidth": {
+      "description": "Widen or narrow the genre corridor: 0 hugs the anchor, 1 lets the sky pull the selection anywhere inside the corridor's tags.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "genreId": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "genreId",
+          "width"
+        ]
+      },
+      "allowedCallers": "rendererOnly",
+      "requiresUserActivation": true
+    },
+    "barogroove.trackFeedback": {
+      "description": "Loved / skipped feedback on one track. Feeds taste affinity for the next forge; never mutates the playlist currently on screen.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "trackKey": {
+            "type": "string"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "loved",
+              "skipped",
+              "cleared"
+            ]
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "playlistId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "trackKey",
+          "verdict"
+        ]
+      },
+      "returns": {
+        "type": "object"
+      },
+      "allowedCallers": "rendererOnly",
+      "requiresUserActivation": true
+    },
+    "barogroove.openTrack": {
+      "description": "Open a track in the configured sink (Spotify / Last.fm).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "trackKey": {
+            "type": "string"
+          },
+          "spotifyUri": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "trackKey"
+        ]
+      },
+      "allowedCallers": "rendererOnly",
+      "requiresUserActivation": true
+    },
+    "barogroove.forge": {
+      "description": "Commit the current theme x genre crossing and forge a playlist from the live sky vector.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "themeId": {
+            "type": "string"
+          },
+          "genreId": {
+            "type": "string"
+          },
+          "length": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
+      "returns": {
+        "type": "object"
+      },
+      "allowedCallers": "rendererOnly",
+      "requiresUserActivation": true
+    },
+    "barogroove.explainDimension": {
+      "description": "The user tapped a spoke on the SkyDial. Return the sentence that explains how that dimension moved the sonic target. The explanation is a first-class feature, so every dimension is interrogable.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "dimension": {
+            "type": "string",
+            "enum": [
+              "pressure_trend_6h",
+              "pressure_norm_deviation",
+              "temp_norm_deviation",
+              "sun_elevation",
+              "golden_hour_proximity",
+              "gust_variance",
+              "cloud_depth",
+              "precip_intensity",
+              "daylight_delta"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "dimension"
+        ]
+      },
+      "returns": {
+        "type": "object"
+      },
+      "allowedCallers": "rendererOnly",
+      "requiresUserActivation": true
+    },
+    "barogroove.openAlmanacEntry": {
+      "description": "Re-open a past forge from the almanac timeline.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "playlistId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "playlistId"
+        ]
+      },
+      "returns": {
+        "type": "object"
+      },
+      "allowedCallers": "rendererOnly",
+      "requiresUserActivation": true
+    },
+    "barogroove.refreshSky": {
+      "description": "Re-read the sky for a coordinate pair and update the dial.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "lat",
+          "lon"
+        ]
+      },
+      "returns": {
+        "type": "object"
+      },
+      "allowedCallers": "rendererOrAgent",
+      "requiresUserActivation": false
+    },
+    "barogroove.retry": {
+      "description": "Retry whatever failed on an error surface.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "intent": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "allowedCallers": "rendererOnly",
+      "requiresUserActivation": true
+    },
+    "barogroove.scrollToTrack": {
+      "description": "Agent -> renderer: bring a track into view (used when the agent answers 'why is #7 there?' and wants the row highlighted).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "position": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "flash": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "position"
+        ]
+      },
+      "returns": {
+        "type": "object",
+        "properties": {
+          "scrolled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "allowedCallers": "agentOnly",
+      "requiresUserActivation": false
+    },
+    "barogroove.formatSigned": {
+      "description": "Client-side formatter for derivative readouts: renders a signed value with a unit and a fixed number of digits, e.g. '-9.2 hPa/6h'. Used as a Dynamic* FunctionCall so the sign convention lives in the catalog rather than in every builder.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "digits": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "value"
+        ]
+      },
+      "returns": {
+        "type": "string"
+      },
+      "allowedCallers": "rendererOrAgent",
+      "requiresUserActivation": false
+    }
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "a2uiVersion": "1.0",
+    "mixinCatalogIds": [
+      "https://a2ui.org/catalogs/basic/v1.0/catalog.json"
+    ],
+    "surfaceProperties": {
+      "colorScheme": "light",
+      "contrast": "high",
+      "density": "comfortable",
+      "palette": {
+        "canvas": "#F5F7FA",
+        "surface": "#FFFFFF",
+        "surfaceSunken": "#EDF1F6",
+        "surfaceRaised": "#FFFFFF",
+        "border": "#CBD5E1",
+        "borderStrong": "#94A3B8",
+        "ink": "#0F172A",
+        "inkMuted": "#475569",
+        "inkSubtle": "#64748B",
+        "inkInverse": "#FFFFFF",
+        "accent": "#0369A1",
+        "accentStrong": "#075985",
+        "accentSoft": "#E0F2FE",
+        "accentInk": "#0C4A6E",
+        "onAccent": "#FFFFFF",
+        "gold": "#A16207",
+        "goldSoft": "#FEF3C7",
+        "goldInk": "#713F12",
+        "positive": "#15803D",
+        "warning": "#B45309",
+        "critical": "#B91C1C",
+        "criticalSoft": "#FEE2E2",
+        "criticalInk": "#7F1D1D",
+        "dataCold": "#1D4ED8",
+        "dataCool": "#0369A1",
+        "dataNeutral": "#64748B",
+        "dataWarm": "#A16207",
+        "dataHot": "#B45309"
+      },
+      "typography": {
+        "fontFamily": "Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+        "fontFamilyMono": "'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+        "scale": {
+          "display": {
+            "size": 34,
+            "lineHeight": 40,
+            "weight": 650,
+            "tracking": -0.6
+          },
+          "title": {
+            "size": 24,
+            "lineHeight": 30,
+            "weight": 620,
+            "tracking": -0.3
+          },
+          "heading": {
+            "size": 18,
+            "lineHeight": 24,
+            "weight": 600,
+            "tracking": -0.1
+          },
+          "body": {
+            "size": 15,
+            "lineHeight": 23,
+            "weight": 400,
+            "tracking": 0.0
+          },
+          "bodyStrong": {
+            "size": 15,
+            "lineHeight": 23,
+            "weight": 600,
+            "tracking": 0.0
+          },
+          "caption": {
+            "size": 13,
+            "lineHeight": 18,
+            "weight": 500,
+            "tracking": 0.1
+          },
+          "label": {
+            "size": 11,
+            "lineHeight": 14,
+            "weight": 650,
+            "tracking": 0.8
+          },
+          "numeric": {
+            "size": 15,
+            "lineHeight": 20,
+            "weight": 550,
+            "tracking": 0.0
+          }
+        },
+        "tabularNumerals": true
+      },
+      "spacing": {
+        "xs": 4,
+        "sm": 8,
+        "md": 12,
+        "lg": 16,
+        "xl": 24,
+        "xxl": 32,
+        "section": 40
+      },
+      "radius": {
+        "sm": 4,
+        "md": 8,
+        "lg": 12,
+        "pill": 999
+      },
+      "elevation": {
+        "flat": "none",
+        "card": "0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)",
+        "hero": "0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)",
+        "overlay": "0 12px 32px rgba(15, 23, 42, 0.16)"
+      },
+      "motion": {
+        "durationFast": 120,
+        "durationBase": 200,
+        "durationSlow": 320,
+        "easing": "cubic-bezier(0.2, 0, 0, 1)",
+        "respectsReducedMotion": true
+      }
+    },
+    "extensions": {
+      "barogroove": {
+        "tagline": "your sky has a soundtrack",
+        "designIntent": "Professional, executive-level, high-contrast, clean; EHDS portal register - Slate structure, Sky Blue action, subtle Gold accent. Light mode default. Explicitly not neon.",
+        "featureComponents": [
+          "SkyDial",
+          "ThemeChips",
+          "GenreCorridor",
+          "TrackList",
+          "RationaleCard",
+          "AlmanacTimeline"
+        ],
+        "templateComponents": [
+          "SkyDialSpoke",
+          "ThemeChip",
+          "GenreOption",
+          "TrackRow",
+          "AlmanacEntry"
+        ],
+        "chromeComponents": [
+          "Stack",
+          "Notice"
+        ],
+        "skyDimensions": [
+          "pressure_trend_6h",
+          "pressure_norm_deviation",
+          "temp_norm_deviation",
+          "sun_elevation",
+          "golden_hour_proximity",
+          "gust_variance",
+          "cloud_depth",
+          "precip_intensity",
+          "daylight_delta"
+        ],
+        "sonicDimensions": [
+          "valence",
+          "energy",
+          "tempo",
+          "acousticness",
+          "density",
+          "grit",
+          "spatiality"
+        ],
+        "heroSkyDimension": "pressure_trend_6h",
+        "skyDimensionTiers": {
+          "pressure_trend_6h": "hero",
+          "pressure_norm_deviation": "derivative",
+          "temp_norm_deviation": "derivative",
+          "gust_variance": "derivative",
+          "daylight_delta": "derivative",
+          "golden_hour_proximity": "derivative",
+          "sun_elevation": "state",
+          "cloud_depth": "state",
+          "precip_intensity": "state"
+        },
+        "skyDimensionWeights": {
+          "pressure_trend_6h": 1.0,
+          "pressure_norm_deviation": 0.8,
+          "temp_norm_deviation": 0.75,
+          "gust_variance": 0.7,
+          "daylight_delta": 0.65,
+          "golden_hour_proximity": 0.6,
+          "sun_elevation": 0.35,
+          "cloud_depth": 0.3,
+          "precip_intensity": 0.3
+        },
+        "skyDimensionLabels": {
+          "pressure_trend_6h": "Pressure trend",
+          "pressure_norm_deviation": "Pressure vs norm",
+          "temp_norm_deviation": "Temp vs norm",
+          "gust_variance": "Gust variance",
+          "daylight_delta": "Daylight delta",
+          "golden_hour_proximity": "Golden hour",
+          "sun_elevation": "Sun elevation",
+          "cloud_depth": "Cloud depth",
+          "precip_intensity": "Precipitation"
+        },
+        "skyDimensionUnits": {
+          "pressure_trend_6h": "hPa/6h",
+          "pressure_norm_deviation": "hPa",
+          "temp_norm_deviation": "K",
+          "gust_variance": "m/s",
+          "daylight_delta": "min/d",
+          "golden_hour_proximity": "",
+          "sun_elevation": "deg",
+          "cloud_depth": "",
+          "precip_intensity": "mm/h"
+        },
+        "arcRoles": [
+          "opener",
+          "build",
+          "peak",
+          "descent",
+          "closer",
+          "body"
+        ],
+        "themeIds": [
+          "petrichor",
+          "first_frost",
+          "high_pressure_blue",
+          "gale_warning",
+          "golden_hour",
+          "blanket_grey",
+          "heat_shimmer",
+          "long_dusk"
+        ],
+        "themePalettes": {
+          "petrichor": {
+            "canvas": "#F1F5F4",
+            "surface": "#FFFFFF",
+            "surfaceSunken": "#E4EDEA",
+            "surfaceRaised": "#FFFFFF",
+            "border": "#C2D4CE",
+            "borderStrong": "#94A3B8",
+            "ink": "#0F172A",
+            "inkMuted": "#475569",
+            "inkSubtle": "#64748B",
+            "inkInverse": "#FFFFFF",
+            "accent": "#0F6656",
+            "accentStrong": "#0B4A3E",
+            "accentSoft": "#DCF0EA",
+            "accentInk": "#0A3F35",
+            "onAccent": "#FFFFFF",
+            "gold": "#8A6A12",
+            "goldSoft": "#F7EDD3",
+            "goldInk": "#5C4409",
+            "positive": "#15803D",
+            "warning": "#B45309",
+            "critical": "#B91C1C",
+            "criticalSoft": "#FEE2E2",
+            "criticalInk": "#7F1D1D",
+            "dataCold": "#1D4ED8",
+            "dataCool": "#0369A1",
+            "dataNeutral": "#64748B",
+            "dataWarm": "#A16207",
+            "dataHot": "#B45309"
+          },
+          "first_frost": {
+            "canvas": "#F2F6FB",
+            "surface": "#FFFFFF",
+            "surfaceSunken": "#E6EDF7",
+            "surfaceRaised": "#FFFFFF",
+            "border": "#C4D3E6",
+            "borderStrong": "#94A3B8",
+            "ink": "#0F172A",
+            "inkMuted": "#475569",
+            "inkSubtle": "#64748B",
+            "inkInverse": "#FFFFFF",
+            "accent": "#1D4ED8",
+            "accentStrong": "#1E3A8A",
+            "accentSoft": "#DDE7FE",
+            "accentInk": "#1E3A8A",
+            "onAccent": "#FFFFFF",
+            "gold": "#94660B",
+            "goldSoft": "#FBEED0",
+            "goldInk": "#653F05",
+            "positive": "#15803D",
+            "warning": "#B45309",
+            "critical": "#B91C1C",
+            "criticalSoft": "#FEE2E2",
+            "criticalInk": "#7F1D1D",
+            "dataCold": "#1D4ED8",
+            "dataCool": "#0369A1",
+            "dataNeutral": "#64748B",
+            "dataWarm": "#A16207",
+            "dataHot": "#B45309"
+          },
+          "high_pressure_blue": {
+            "canvas": "#F5F7FA",
+            "surface": "#FFFFFF",
+            "surfaceSunken": "#EDF1F6",
+            "surfaceRaised": "#FFFFFF",
+            "border": "#CBD5E1",
+            "borderStrong": "#94A3B8",
+            "ink": "#0F172A",
+            "inkMuted": "#475569",
+            "inkSubtle": "#64748B",
+            "inkInverse": "#FFFFFF",
+            "accent": "#0369A1",
+            "accentStrong": "#075985",
+            "accentSoft": "#E0F2FE",
+            "accentInk": "#0C4A6E",
+            "onAccent": "#FFFFFF",
+            "gold": "#A16207",
+            "goldSoft": "#FEF3C7",
+            "goldInk": "#713F12",
+            "positive": "#15803D",
+            "warning": "#B45309",
+            "critical": "#B91C1C",
+            "criticalSoft": "#FEE2E2",
+            "criticalInk": "#7F1D1D",
+            "dataCold": "#1D4ED8",
+            "dataCool": "#0369A1",
+            "dataNeutral": "#64748B",
+            "dataWarm": "#A16207",
+            "dataHot": "#B45309"
+          },
+          "gale_warning": {
+            "canvas": "#F4F4F8",
+            "surface": "#FFFFFF",
+            "surfaceSunken": "#E9E9F2",
+            "surfaceRaised": "#FFFFFF",
+            "border": "#CACAD9",
+            "borderStrong": "#94A3B8",
+            "ink": "#0F172A",
+            "inkMuted": "#475569",
+            "inkSubtle": "#64748B",
+            "inkInverse": "#FFFFFF",
+            "accent": "#4338CA",
+            "accentStrong": "#312E81",
+            "accentSoft": "#E4E1FB",
+            "accentInk": "#312E81",
+            "onAccent": "#FFFFFF",
+            "gold": "#9A5B08",
+            "goldSoft": "#FBE9CF",
+            "goldInk": "#6B3D04",
+            "positive": "#15803D",
+            "warning": "#B45309",
+            "critical": "#B91C1C",
+            "criticalSoft": "#FEE2E2",
+            "criticalInk": "#7F1D1D",
+            "dataCold": "#1D4ED8",
+            "dataCool": "#0369A1",
+            "dataNeutral": "#64748B",
+            "dataWarm": "#A16207",
+            "dataHot": "#B45309"
+          },
+          "golden_hour": {
+            "canvas": "#FAF7F1",
+            "surface": "#FFFFFF",
+            "surfaceSunken": "#F3ECE0",
+            "surfaceRaised": "#FFFFFF",
+            "border": "#DDD0BA",
+            "borderStrong": "#94A3B8",
+            "ink": "#0F172A",
+            "inkMuted": "#475569",
+            "inkSubtle": "#64748B",
+            "inkInverse": "#FFFFFF",
+            "accent": "#9A5B08",
+            "accentStrong": "#6B3D04",
+            "accentSoft": "#FAEBD3",
+            "accentInk": "#6B3D04",
+            "onAccent": "#FFFFFF",
+            "gold": "#8A6A12",
+            "goldSoft": "#F7EDD3",
+            "goldInk": "#5C4409",
+            "positive": "#15803D",
+            "warning": "#B45309",
+            "critical": "#B91C1C",
+            "criticalSoft": "#FEE2E2",
+            "criticalInk": "#7F1D1D",
+            "dataCold": "#1D4ED8",
+            "dataCool": "#0369A1",
+            "dataNeutral": "#64748B",
+            "dataWarm": "#A16207",
+            "dataHot": "#B45309"
+          },
+          "blanket_grey": {
+            "canvas": "#F4F5F6",
+            "surface": "#FFFFFF",
+            "surfaceSunken": "#EAECEE",
+            "surfaceRaised": "#FFFFFF",
+            "border": "#CDD2D7",
+            "borderStrong": "#94A3B8",
+            "ink": "#0F172A",
+            "inkMuted": "#475569",
+            "inkSubtle": "#64748B",
+            "inkInverse": "#FFFFFF",
+            "accent": "#3F5566",
+            "accentStrong": "#2B3B47",
+            "accentSoft": "#E5EAEE",
+            "accentInk": "#2B3B47",
+            "onAccent": "#FFFFFF",
+            "gold": "#8A6A12",
+            "goldSoft": "#F5EEDC",
+            "goldInk": "#5C4409",
+            "positive": "#15803D",
+            "warning": "#B45309",
+            "critical": "#B91C1C",
+            "criticalSoft": "#FEE2E2",
+            "criticalInk": "#7F1D1D",
+            "dataCold": "#1D4ED8",
+            "dataCool": "#0369A1",
+            "dataNeutral": "#64748B",
+            "dataWarm": "#A16207",
+            "dataHot": "#B45309"
+          },
+          "heat_shimmer": {
+            "canvas": "#FBF6F3",
+            "surface": "#FFFFFF",
+            "surfaceSunken": "#F4E9E3",
+            "surfaceRaised": "#FFFFFF",
+            "border": "#E0CBC0",
+            "borderStrong": "#94A3B8",
+            "ink": "#0F172A",
+            "inkMuted": "#475569",
+            "inkSubtle": "#64748B",
+            "inkInverse": "#FFFFFF",
+            "accent": "#A03A1E",
+            "accentStrong": "#7A2A14",
+            "accentSoft": "#FBE5DC",
+            "accentInk": "#7A2A14",
+            "onAccent": "#FFFFFF",
+            "gold": "#8A6A12",
+            "goldSoft": "#F8EED6",
+            "goldInk": "#5C4409",
+            "positive": "#15803D",
+            "warning": "#B45309",
+            "critical": "#B91C1C",
+            "criticalSoft": "#FEE2E2",
+            "criticalInk": "#7F1D1D",
+            "dataCold": "#1D4ED8",
+            "dataCool": "#0369A1",
+            "dataNeutral": "#64748B",
+            "dataWarm": "#A16207",
+            "dataHot": "#B45309"
+          },
+          "long_dusk": {
+            "canvas": "#F7F5FA",
+            "surface": "#FFFFFF",
+            "surfaceSunken": "#EEEAF4",
+            "surfaceRaised": "#FFFFFF",
+            "border": "#D4CCE2",
+            "borderStrong": "#94A3B8",
+            "ink": "#0F172A",
+            "inkMuted": "#475569",
+            "inkSubtle": "#64748B",
+            "inkInverse": "#FFFFFF",
+            "accent": "#6D28A8",
+            "accentStrong": "#4C1D80",
+            "accentSoft": "#EFE3FA",
+            "accentInk": "#4C1D80",
+            "onAccent": "#FFFFFF",
+            "gold": "#8A6A12",
+            "goldSoft": "#F6EDD6",
+            "goldInk": "#5C4409",
+            "positive": "#15803D",
+            "warning": "#B45309",
+            "critical": "#B91C1C",
+            "criticalSoft": "#FEE2E2",
+            "criticalInk": "#7F1D1D",
+            "dataCold": "#1D4ED8",
+            "dataCool": "#0369A1",
+            "dataNeutral": "#64748B",
+            "dataWarm": "#A16207",
+            "dataHot": "#B45309"
+          }
+        },
+        "themeIntent": {
+          "petrichor": "Pressure is falling and rain is close. Wet slate-green, held low.",
+          "first_frost": "Clear, cold and bright. The coldest blue in the system.",
+          "high_pressure_blue": "A settled high. The unmodified house palette.",
+          "gale_warning": "Gusts spiking, pressure collapsing. Urgent, not alarming.",
+          "golden_hour": "Sun low, light long. The one theme where gold leads.",
+          "blanket_grey": "Deep cloud, flat pressure. Lowest chroma; typography carries it.",
+          "heat_shimmer": "Far above the norm, air standing still. Dry heat, not tropics.",
+          "long_dusk": "Daylight shrinking fast. Muted violet-slate, reflective."
+        },
+        "agentFunctions": [
+          "barogroove.explainDimension",
+          "barogroove.forge",
+          "barogroove.openAlmanacEntry",
+          "barogroove.openTrack",
+          "barogroove.refreshSky",
+          "barogroove.retry",
+          "barogroove.selectGenre",
+          "barogroove.selectTheme",
+          "barogroove.setCorridorWidth",
+          "barogroove.trackFeedback"
+        ],
+        "rendererFunctions": [
+          "barogroove.formatSigned",
+          "barogroove.scrollToTrack"
+        ]
+      }
+    }
+  }
+}
