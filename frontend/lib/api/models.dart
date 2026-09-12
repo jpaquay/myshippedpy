@@ -955,3 +955,129 @@ extension _FirstOrNull<E> on Iterable<E> {
     return it.moveNext() ? it.current : null;
   }
 }
+
+// ============================================================================
+// Gemini Live Forge Advisor & Executor
+// ============================================================================
+
+class AdvisorActionBadge {
+  const AdvisorActionBadge({
+    required this.tool,
+    required this.label,
+    required this.detail,
+  });
+
+  final String tool;
+  final String label;
+  final String detail;
+
+  factory AdvisorActionBadge.fromJson(JsonMap json) => AdvisorActionBadge(
+        tool: asStringOrNull(json['tool']) ?? '',
+        label: asStringOrNull(json['label']) ?? '',
+        detail: asStringOrNull(json['detail']) ?? '',
+      );
+}
+
+class AdvisorSuggestionItem {
+  const AdvisorSuggestionItem({
+    required this.id,
+    required this.title,
+    required this.prompt,
+    required this.geocacheId,
+    required this.badge,
+  });
+
+  final String id;
+  final String title;
+  final String prompt;
+  final String geocacheId;
+  final String badge;
+
+  factory AdvisorSuggestionItem.fromJson(JsonMap json) => AdvisorSuggestionItem(
+        id: asStringOrNull(json['id']) ?? '',
+        title: asStringOrNull(json['title']) ?? '',
+        prompt: asStringOrNull(json['prompt']) ?? '',
+        geocacheId: asStringOrNull(json['geocache_id']) ?? '',
+        badge: asStringOrNull(json['badge']) ?? '',
+      );
+}
+
+class AdvisorLiveRequest {
+  const AdvisorLiveRequest({
+    this.prompt,
+    this.audioBase64,
+    this.audioMimeType = 'audio/webm',
+    this.currentGeocacheId,
+    this.currentThemeId,
+    this.currentGenreId,
+    this.autoForge = true,
+  });
+
+  final String? prompt;
+  final String? audioBase64;
+  final String audioMimeType;
+  final String? currentGeocacheId;
+  final String? currentThemeId;
+  final String? currentGenreId;
+  final bool autoForge;
+
+  JsonMap toJson() => <String, Object?>{
+        if (prompt != null) 'prompt': prompt,
+        if (audioBase64 != null) 'audio_base64': audioBase64,
+        'audio_mime_type': audioMimeType,
+        if (currentGeocacheId != null) 'current_geocache_id': currentGeocacheId,
+        if (currentThemeId != null) 'current_theme_id': currentThemeId,
+        if (currentGenreId != null) 'current_genre_id': currentGenreId,
+        'auto_forge': autoForge,
+      };
+}
+
+class AdvisorLiveResponse {
+  const AdvisorLiveResponse({
+    required this.replyText,
+    required this.spokenSummary,
+    required this.transcript,
+    required this.actionsExecuted,
+    required this.selectedGeocache,
+    required this.selectedThemeId,
+    required this.selectedGenreId,
+    required this.seededScrobbles,
+    required this.forgeResult,
+    required this.modelUsed,
+  });
+
+  final String replyText;
+  final String spokenSummary;
+  final String transcript;
+  final List<AdvisorActionBadge> actionsExecuted;
+  final StreetArtGeoCache? selectedGeocache;
+  final String? selectedThemeId;
+  final String? selectedGenreId;
+  final List<ScrobbleEntry> seededScrobbles;
+  final ForgeResult? forgeResult;
+  final String modelUsed;
+
+  factory AdvisorLiveResponse.fromJson(JsonMap json) => AdvisorLiveResponse(
+        replyText: asStringOrNull(json['reply_text']) ?? '',
+        spokenSummary: asStringOrNull(json['spoken_summary']) ?? '',
+        transcript: asStringOrNull(json['transcript']) ?? '',
+        actionsExecuted: <AdvisorActionBadge>[
+          for (final Object? item in asJsonList(json['actions_executed']) ?? const <Object?>[])
+            if (asJsonMap(item) case final JsonMap m) AdvisorActionBadge.fromJson(m),
+        ],
+        selectedGeocache: asJsonMap(json['selected_geocache']) != null
+            ? StreetArtGeoCache.fromJson(asJsonMap(json['selected_geocache'])!)
+            : null,
+        selectedThemeId: asStringOrNull(json['selected_theme_id']),
+        selectedGenreId: asStringOrNull(json['selected_genre_id']),
+        seededScrobbles: <ScrobbleEntry>[
+          for (final Object? item in asJsonList(json['seeded_scrobbles']) ?? const <Object?>[])
+            if (asJsonMap(item) case final JsonMap m) ScrobbleEntry.fromJson(m),
+        ],
+        forgeResult: asJsonMap(json['forge_result']) != null
+            ? ForgeResult.fromJson(asJsonMap(json['forge_result'])!)
+            : null,
+        modelUsed: asStringOrNull(json['model_used']) ?? 'gemini-2.5-flash',
+      );
+}
+

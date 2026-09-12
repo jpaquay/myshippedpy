@@ -284,6 +284,20 @@ _SLOWCORE = _corridor(
 )
 
 
+_TRIP_HOP = _corridor(
+    "trip-hop",
+    "Trip-hop",
+    tags=["trip-hop", "bristol", "downtempo", "electronic", "chillout", "turntablism"],
+    width=0.32,
+    description=(
+        "Slowed-down breakbeats, sub-bass pressure, and nocturnal paranoia. "
+        "The sound of rain on wet asphalt in Bristol or late-night Tokyo."
+    ),
+    valence=0.34, energy=0.44, tempo=0.30,  # ~85-95 BPM
+    acousticness=0.32, density=0.48, grit=0.58, spatiality=0.78,
+)
+
+
 CORRIDORS: dict[str, GenreCorridor] = {
     corridor.id: corridor
     for corridor in (
@@ -303,6 +317,7 @@ CORRIDORS: dict[str, GenreCorridor] = {
         _SLOWCORE,
         _SOUL,
         _SPIRITUAL_JAZZ,
+        _TRIP_HOP,
     )
 }
 
@@ -314,6 +329,9 @@ _ALIASES: dict[str, str] = {
     "": "any",
     "none": "any",
     "all": "any",
+    "trip hop": "trip-hop",
+    "trip_hop": "trip-hop",
+    "triphop": "trip-hop",
     "postpunk": "post-punk",
     "post punk": "post-punk",
     "post_punk": "post-punk",

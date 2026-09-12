@@ -27,6 +27,7 @@ import '../api/models.dart';
 import '../app_theme.dart';
 import '../providers.dart';
 import 'shell.dart';
+import 'widgets/gemini_live_advisor.dart';
 import 'widgets/section.dart';
 import 'widgets/status_notes.dart';
 
@@ -177,6 +178,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           vertical: BgSpace.lg,
         ),
         children: <Widget>[
+          GeminiLiveAdvisorBanner(
+            onSurfaceRefreshNeeded: _loadSurfaces,
+          ),
+          const SizedBox(height: BgSpace.lg),
           _ForgeHeader(
             selection: selection,
             geocaches: geocaches,

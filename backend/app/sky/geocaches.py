@@ -58,6 +58,23 @@ class StreetArtGeoCache(BaseModel):
             return "evening"
         return "late night"
 
+    def to_dict(self, utc_now: datetime | None = None) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "city": self.city,
+            "country": self.country,
+            "label": self.label,
+            "lat": self.lat,
+            "lon": self.lon,
+            "tz_offset_hours": self.tz_offset_hours,
+            "local_time": self.local_time_label(utc_now),
+            "day_period": self.day_period(utc_now),
+            "artist_highlight": self.artist_highlight,
+            "description": self.description,
+            "vibe_tags": list(self.vibe_tags),
+        }
+
 
 STREET_ART_GEOCACHES: tuple[StreetArtGeoCache, ...] = (
     StreetArtGeoCache(

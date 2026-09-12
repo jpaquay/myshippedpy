@@ -993,3 +993,35 @@ def test_learning_tunables_are_sane():
     assert learning.DEFAULT_LAMBDA > 0.0
     assert 0.0 < learning.MAX_COEFFICIENT <= 0.1
     assert learning.COLUMN_L1_BUDGET <= 9 * learning.MAX_COEFFICIENT
+
+
+def test_scrobbles_search_full_15_year_catalog():
+    from backend.app.almanac.scrobbles import search_scrobbles
+
+    res = search_scrobbles(query="", weather_theme="warm_front_haze", limit=10)
+    assert res.analytics.total_scrobbles >= 160000
+    assert res.analytics.unique_tracks >= 44000
+    assert res.analytics.avg_bpm > 90.0
+    assert res.analytics.avg_energy > 0.4
+    assert any(w["theme_id"] == "warm_front_haze" for w in res.analytics.weather_affinity)
+    assert len(res.scrobbles) == 10
+    for item in res.scrobbles:
+        assert item.weather_theme == "warm_front_haze"
+        assert item.play_count > 0
+
+
+def test_almanac_scrobbles_and_analytics_routes(client):
+    resp = client.get("/api/almanac/scrobbles?weather_theme=warm_front_haze&limit=5")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["analytics"]["total_scrobbles"] >= 160000
+    assert len(data["scrobbles"]) == 5
+
+    # Test BigQuery OLAP analytics route (uses local fallback if offline or BQ REST when online)
+    resp_bq = client.get("/api/almanac/scrobbles/analytics?year_start=2020&weather_theme=warm_front_haze")
+    assert resp_bq.status_code == 200
+    bq_data = resp_bq.json()
+    assert "matching_scrobbles" in bq_data
+    assert "top_artists" in bq_data
+    assert "weather_breakdown" in bq_data
+

@@ -359,6 +359,23 @@ class BarogrooveApi {
     );
   }
 
+  // =========================================================================
+  // Gemini Live Forge Advisor & Executor
+  // =========================================================================
+
+  Future<ApiResult<List<AdvisorSuggestionItem>>> advisorSuggestions() =>
+      _getJsonList('/api/advisor/suggestions', AdvisorSuggestionItem.fromJson);
+
+  Future<ApiResult<AdvisorLiveResponse>> advisorLiveTurn(
+    AdvisorLiveRequest request,
+  ) =>
+      _postJson(
+        '/api/advisor/live',
+        request.toJson(),
+        AdvisorLiveResponse.fromJson,
+        timeout: const Duration(seconds: 45),
+      );
+
   Future<ApiResult<void>> sendFeedback(FeedbackSignal signal) async {
     final ApiResult<http.Response> res = await _post(
       '/api/almanac/feedback',

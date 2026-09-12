@@ -27,7 +27,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ..almanac.scrobbles import (
+    ComplexAnalyticsResponse,
     ScrobbleSearchResponse,
+    query_complex_analytics,
     search_scrobbles,
     sync_scrobbles_from_lastfm,
 )
@@ -132,7 +134,7 @@ def _store() -> Any:
 # --------------------------------------------------------------------------
 
 
-@router.get("/scrobbles", response_model=ScrobbleSearchResponse, summary="Search & analyse scrobbles in Firestore")
+@router.get("/scrobbles", response_model=ScrobbleSearchResponse, summary="Search & analyse scrobbles in BigQuery + Firestore")
 async def get_scrobbles(
     query: str | None = Query(default=None, description="Search artist, title, album, or tag"),
     tag: str | None = Query(default=None, description="Filter by micro-genre tag"),
@@ -140,8 +142,36 @@ async def get_scrobbles(
     limit: int = Query(default=50, ge=1, le=200),
     user: AuthUser = Depends(_resolve_user),
 ) -> ScrobbleSearchResponse:
-    """Search and analyse user scrobbles from Firestore `scrobbles` collection."""
+    """Search and analyse user scrobbles from BigQuery OLAP & Firestore."""
     return search_scrobbles(user.uid, query=query, tag=tag, theme=theme, limit=limit)
+
+
+@router.get(
+    "/scrobbles/analytics",
+    response_model=ComplexAnalyticsResponse,
+    summary="Multi-dimensional OLAP analytics over 160,717 scrobbles via BigQuery",
+)
+async def get_scrobbles_complex_analytics(
+    year_start: int = Query(default=2012, ge=2012, le=2026),
+    year_end: int = Query(default=2026, ge=2012, le=2026),
+    weather_theme: str | None = Query(default=None, description="Filter by BaroGroove weather theme"),
+    hour_start: int | None = Query(default=None, ge=0, le=23, description="UTC start hour"),
+    hour_end: int | None = Query(default=None, ge=0, le=23, description="UTC end hour"),
+    weekday: int | None = Query(default=None, ge=0, le=6, description="Weekday (0=Mon .. 6=Sun)"),
+    artist_query: str | None = Query(default=None, description="Filter by artist substring"),
+    limit: int = Query(default=15, ge=1, le=50),
+) -> ComplexAnalyticsResponse:
+    """Execute sub-200ms multi-dimensional analytical slicing on 160,717 scrobbles in BigQuery."""
+    return query_complex_analytics(
+        year_start=year_start,
+        year_end=year_end,
+        weather_theme=weather_theme,
+        hour_start=hour_start,
+        hour_end=hour_end,
+        weekday=weekday,
+        artist_query=artist_query,
+        limit=limit,
+    )
 
 
 @router.post("/scrobbles/sync", response_model=ScrobbleSearchResponse, summary="Sync Last.fm scrobbles into Firestore")

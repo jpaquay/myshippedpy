@@ -126,6 +126,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     _mount(app, "backend.app.routes.pairing", label="pairing")
     _mount(app, "backend.app.routes.almanac", label="almanac")
     _mount(app, "backend.app.routes.surfaces", label="surfaces")
+    _mount(app, "backend.app.routes.advisor", label="advisor")
 
     @app.get("/callback", include_in_schema=False)
     async def _root_oauth_callback(request: Request):  # type: ignore[no-untyped-def]

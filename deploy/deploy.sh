@@ -63,6 +63,7 @@ readonly -a REQUIRED_APIS=(
   "iam.googleapis.com"
   "cloudresourcemanager.googleapis.com"
   "weather.googleapis.com"
+  "aiplatform.googleapis.com"
 )
 
 # Roles the runtime service account needs. Rationale for each is in
@@ -76,6 +77,7 @@ readonly -a SA_ROLES=(
   "roles/monitoring.metricWriter"         # custom metrics
   "roles/cloudtrace.agent"                # traces
   "roles/serviceusage.serviceUsageConsumer" # query Google Cloud Weather API via ADC
+  "roles/aiplatform.user"                 # invoke Vertex AI Gemini 2.5 Flash for Live Advisor & Executor
 )
 
 # -----------------------------------------------------------------------------
