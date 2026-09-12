@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../advisor/voice_io.dart';
@@ -47,13 +48,26 @@ class _GeminiLiveAdvisorBannerState
   List<AdvisorSuggestionItem> _suggestions = const <AdvisorSuggestionItem>[];
   AdvisorLiveResponse? _lastResponse;
 
+  void _syncPulseAnimation() {
+    if (_isListening || _isSpeaking || _isExecuting) {
+      if (!_pulseController.isAnimating) {
+        _pulseController.repeat(reverse: true);
+      }
+    } else {
+      if (_pulseController.isAnimating) {
+        _pulseController.animateTo(0.35, duration: const Duration(milliseconds: 240));
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
-    )..repeat(reverse: true);
+      value: 0.35,
+    );
 
     _voice = VoiceIo(
       onTranscript: (String text, bool isFinal) {
@@ -69,10 +83,12 @@ class _GeminiLiveAdvisorBannerState
       onListeningChanged: (bool listening) {
         if (!mounted) return;
         setState(() => _isListening = listening);
+        _syncPulseAnimation();
       },
       onSpeakingChanged: (bool speaking) {
         if (!mounted) return;
         setState(() => _isSpeaking = speaking);
+        _syncPulseAnimation();
       },
       onError: (String err) {
         if (!mounted) return;
@@ -106,6 +122,7 @@ class _GeminiLiveAdvisorBannerState
 
   Future<void> _executeTurn(String prompt) async {
     if (prompt.trim().isEmpty || _isExecuting) return;
+    HapticFeedback.lightImpact();
     _voice.stopListening();
 
     setState(() {
@@ -113,6 +130,7 @@ class _GeminiLiveAdvisorBannerState
       _error = null;
       _liveTranscript = prompt;
     });
+    _syncPulseAnimation();
 
     final BarogrooveApi api = ref.read(apiProvider);
     final ForgeSelection currentSel = ref.read(forgeSelectionProvider);
@@ -131,10 +149,12 @@ class _GeminiLiveAdvisorBannerState
 
     res.when(
       ok: (AdvisorLiveResponse r) {
+        HapticFeedback.mediumImpact();
         setState(() {
           _lastResponse = r;
           _isExecuting = false;
         });
+        _syncPulseAnimation();
 
         // Apply autonomous tool changes to app state
         final StreetArtGeoCache? gc = r.selectedGeocache;
@@ -172,6 +192,7 @@ class _GeminiLiveAdvisorBannerState
           _error = f.message;
           _isExecuting = false;
         });
+        _syncPulseAnimation();
       },
     );
   }
@@ -250,22 +271,28 @@ class _GeminiLiveAdvisorBannerState
                   children: <Widget>[
                     Row(
                       children: <Widget>[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colors.primary.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            'GEMINI LIVE 2.5 • VOICE ADVISOR & EXECUTOR',
-                            style: text.labelSmall?.copyWith(
-                              color: colors.primary,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.8,
-                              fontSize: 10,
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colors.primary.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              isMobile
+                                  ? 'GEMINI LIVE 2.5 • ADVISOR'
+                                  : 'GEMINI LIVE 2.5 • VOICE ADVISOR & EXECUTOR',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: text.labelSmall?.copyWith(
+                                color: colors.primary,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.8,
+                                fontSize: 10,
+                              ),
                             ),
                           ),
                         ),
@@ -507,49 +534,51 @@ class _AnimatedLiveOrb extends StatelessWidget {
             ? colors.primary
             : colors.primary.withValues(alpha: 0.8);
 
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedBuilder(
-        animation: pulseController,
-        builder: (BuildContext context, Widget? child) {
-          final double scale = (isListening || isSpeaking || isExecuting)
-              ? 1.0 + (pulseController.value * 0.14)
-              : 1.0;
-          return Transform.scale(
-            scale: scale,
-            child: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: <Color>[
-                    activeColor.withValues(alpha: 0.9),
-                    activeColor.withValues(alpha: 0.25),
+    return RepaintBoundary(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedBuilder(
+          animation: pulseController,
+          builder: (BuildContext context, Widget? child) {
+            final double scale = (isListening || isSpeaking || isExecuting)
+                ? 1.0 + (pulseController.value * 0.14)
+                : 1.0;
+            return Transform.scale(
+              scale: scale,
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: <Color>[
+                      activeColor.withValues(alpha: 0.9),
+                      activeColor.withValues(alpha: 0.25),
+                    ],
+                  ),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: activeColor.withValues(alpha: 0.45),
+                      blurRadius: isListening || isSpeaking ? 16 : 8,
+                      spreadRadius: isListening || isSpeaking ? 3 : 1,
+                    ),
                   ],
                 ),
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: activeColor.withValues(alpha: 0.45),
-                    blurRadius: isListening || isSpeaking ? 16 : 8,
-                    spreadRadius: isListening || isSpeaking ? 3 : 1,
-                  ),
-                ],
+                child: Icon(
+                  isListening
+                      ? Icons.mic_rounded
+                      : isExecuting
+                          ? Icons.sync_rounded
+                          : isSpeaking
+                              ? Icons.graphic_eq_rounded
+                              : Icons.mic_none_rounded,
+                  color: Colors.white,
+                  size: 24,
+                ),
               ),
-              child: Icon(
-                isListening
-                    ? Icons.mic_rounded
-                    : isExecuting
-                        ? Icons.sync_rounded
-                        : isSpeaking
-                            ? Icons.graphic_eq_rounded
-                            : Icons.mic_none_rounded,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -585,26 +614,28 @@ class _SpeakingWaveIndicatorState extends State<_SpeakingWaveIndicator>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (BuildContext context, Widget? _) {
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: List<Widget>.generate(4, (int i) {
-            final double phase = (i * 0.25 + _ctrl.value) % 1.0;
-            final double h = 6 + math.sin(phase * math.pi) * 10;
-            return Container(
-              width: 3,
-              height: h,
-              margin: const EdgeInsets.symmetric(horizontal: 1.2),
-              decoration: BoxDecoration(
-                color: widget.color,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            );
-          }),
-        );
-      },
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (BuildContext context, Widget? _) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: List<Widget>.generate(4, (int i) {
+              final double phase = (i * 0.25 + _ctrl.value) % 1.0;
+              final double h = 6 + math.sin(phase * math.pi) * 10;
+              return Container(
+                width: 3,
+                height: h,
+                margin: const EdgeInsets.symmetric(horizontal: 1.2),
+                decoration: BoxDecoration(
+                  color: widget.color,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              );
+            }),
+          );
+        },
+      ),
     );
   }
 }

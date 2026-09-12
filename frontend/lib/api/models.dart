@@ -600,6 +600,8 @@ class Playlist {
 
 /// `POST /api/forge` -> ForgeResult. The playlist plus whatever went wrong
 /// on the way.
+typedef ForgeResponse = ForgeResult;
+
 class ForgeResult {
   const ForgeResult({required this.playlist, required this.degraded});
 
@@ -736,6 +738,8 @@ class AlmanacEntry {
   final String? locationLabel;
   final List<String> tracksPreview;
 
+  String get themeName => themeId.isNotEmpty ? themeId : 'Unknown Theme';
+
   factory AlmanacEntry.fromJson(JsonMap json) => AlmanacEntry(
         id: asStringOrNull(json['id']) ?? '',
         title: asStringOrNull(json['title']) ?? 'Untitled set',
@@ -808,6 +812,7 @@ class ScrobbleAnalytics {
     required this.topArtists,
     required this.topGenres,
     required this.weatherAffinity,
+    this.yearlyCounts = const <String, int>{},
   });
 
   final int totalScrobbles;
@@ -817,6 +822,7 @@ class ScrobbleAnalytics {
   final List<JsonMap> topArtists;
   final List<JsonMap> topGenres;
   final List<JsonMap> weatherAffinity;
+  final Map<String, int> yearlyCounts;
 
   static const ScrobbleAnalytics empty = ScrobbleAnalytics(
     totalScrobbles: 0,
@@ -826,26 +832,37 @@ class ScrobbleAnalytics {
     topArtists: <JsonMap>[],
     topGenres: <JsonMap>[],
     weatherAffinity: <JsonMap>[],
+    yearlyCounts: <String, int>{},
   );
 
-  factory ScrobbleAnalytics.fromJson(JsonMap json) => ScrobbleAnalytics(
-        totalScrobbles: (asDoubleOrNull(json['total_scrobbles']) ?? 0).round(),
-        uniqueTracks: (asDoubleOrNull(json['unique_tracks']) ?? 0).round(),
-        avgBpm: asDoubleOrNull(json['avg_bpm']) ?? 112.0,
-        avgEnergy: asDoubleOrNull(json['avg_energy']) ?? 0.60,
-        topArtists: <JsonMap>[
-          for (final Object? item in asJsonList(json['top_artists']) ?? const <Object?>[])
-            if (asJsonMap(item) case final JsonMap m) m,
-        ],
-        topGenres: <JsonMap>[
-          for (final Object? item in asJsonList(json['top_genres']) ?? const <Object?>[])
-            if (asJsonMap(item) case final JsonMap m) m,
-        ],
-        weatherAffinity: <JsonMap>[
-          for (final Object? item in asJsonList(json['weather_affinity']) ?? const <Object?>[])
-            if (asJsonMap(item) case final JsonMap m) m,
-        ],
-      );
+  factory ScrobbleAnalytics.fromJson(JsonMap json) {
+    final JsonMap? rawYr = asJsonMap(json['yearly_counts']);
+    final Map<String, int> yrMap = <String, int>{};
+    if (rawYr != null) {
+      for (final MapEntry<String, Object?> entry in rawYr.entries) {
+        yrMap[entry.key] = (asDoubleOrNull(entry.value) ?? 0).round();
+      }
+    }
+    return ScrobbleAnalytics(
+      totalScrobbles: (asDoubleOrNull(json['total_scrobbles']) ?? 0).round(),
+      uniqueTracks: (asDoubleOrNull(json['unique_tracks']) ?? 0).round(),
+      avgBpm: asDoubleOrNull(json['avg_bpm']) ?? 112.0,
+      avgEnergy: asDoubleOrNull(json['avg_energy']) ?? 0.60,
+      topArtists: <JsonMap>[
+        for (final Object? item in asJsonList(json['top_artists']) ?? const <Object?>[])
+          if (asJsonMap(item) case final JsonMap m) m,
+      ],
+      topGenres: <JsonMap>[
+        for (final Object? item in asJsonList(json['top_genres']) ?? const <Object?>[])
+          if (asJsonMap(item) case final JsonMap m) m,
+      ],
+      weatherAffinity: <JsonMap>[
+        for (final Object? item in asJsonList(json['weather_affinity']) ?? const <Object?>[])
+          if (asJsonMap(item) case final JsonMap m) m,
+      ],
+      yearlyCounts: yrMap,
+    );
+  }
 }
 
 class ScrobbleSearchResponse {
@@ -854,12 +871,22 @@ class ScrobbleSearchResponse {
     required this.scrobbles,
     required this.analytics,
     required this.syncedFromFirestore,
+    this.queryEngine = 'BigQuery OLAP + Firestore Dual-Store Cache',
+    this.cacheStatus = 'MEMORY_HIT',
+    this.bytesBilled = 0,
+    this.estimatedCostUsd = 0.0,
+    this.executionMs = 0.0,
   });
 
   final int count;
   final List<ScrobbleEntry> scrobbles;
   final ScrobbleAnalytics analytics;
   final bool syncedFromFirestore;
+  final String queryEngine;
+  final String cacheStatus;
+  final int bytesBilled;
+  final double estimatedCostUsd;
+  final double executionMs;
 
   static const ScrobbleSearchResponse empty = ScrobbleSearchResponse(
     count: 0,
@@ -878,7 +905,191 @@ class ScrobbleSearchResponse {
           asJsonMap(json['analytics']) ?? const <String, Object?>{},
         ),
         syncedFromFirestore: json['synced_from_firestore'] == true,
+        queryEngine: asStringOrNull(json['query_engine']) ?? 'BigQuery OLAP + Firestore',
+        cacheStatus: asStringOrNull(json['cache_status']) ?? 'MEMORY_HIT',
+        bytesBilled: (asDoubleOrNull(json['bytes_billed']) ?? 0).round(),
+        estimatedCostUsd: asDoubleOrNull(json['estimated_cost_usd']) ?? 0.0,
+        executionMs: asDoubleOrNull(json['execution_ms']) ?? 0.0,
       );
+}
+
+class CohortPieSlice {
+  const CohortPieSlice({
+    required this.category,
+    required this.label,
+    required this.count,
+    required this.percentage,
+    required this.colorHex,
+  });
+
+  final String category;
+  final String label;
+  final int count;
+  final double percentage;
+  final String colorHex;
+
+  factory CohortPieSlice.fromJson(JsonMap json) => CohortPieSlice(
+        category: asStringOrNull(json['category']) ?? '',
+        label: asStringOrNull(json['label']) ?? '',
+        count: (asDoubleOrNull(json['count']) ?? 0).round(),
+        percentage: asDoubleOrNull(json['percentage']) ?? 0.0,
+        colorHex: asStringOrNull(json['color_hex']) ?? '#10B981',
+      );
+}
+
+class PlaylistTrackMatch {
+  const PlaylistTrackMatch({
+    required this.position,
+    required this.artist,
+    required this.title,
+    this.album,
+    required this.status,
+    required this.scrobbleCount,
+    required this.artistTotalScrobbles,
+    this.firstPlayedYear,
+    this.lastPlayedYear,
+    this.peakYear,
+    required this.weatherTheme,
+    required this.bpmEstimate,
+    required this.energyEstimate,
+    required this.trackKey,
+  });
+
+  final int position;
+  final String artist;
+  final String title;
+  final String? album;
+  final String status; // IN_COHORT_EXACT | ARTIST_FAMILIAR_NEW_TRACK | NEW_DISCOVERY
+  final int scrobbleCount;
+  final int artistTotalScrobbles;
+  final int? firstPlayedYear;
+  final int? lastPlayedYear;
+  final int? peakYear;
+  final String weatherTheme;
+  final int bpmEstimate;
+  final double energyEstimate;
+  final String trackKey;
+
+  factory PlaylistTrackMatch.fromJson(JsonMap json) => PlaylistTrackMatch(
+        position: (asDoubleOrNull(json['position']) ?? 0).round(),
+        artist: asStringOrNull(json['artist']) ?? '',
+        title: asStringOrNull(json['title']) ?? '',
+        album: asStringOrNull(json['album']),
+        status: asStringOrNull(json['status']) ?? 'NEW_DISCOVERY',
+        scrobbleCount: (asDoubleOrNull(json['scrobble_count']) ?? 0).round(),
+        artistTotalScrobbles:
+            (asDoubleOrNull(json['artist_total_scrobbles']) ?? 0).round(),
+        firstPlayedYear: asDoubleOrNull(json['first_played_year'])?.round(),
+        lastPlayedYear: asDoubleOrNull(json['last_played_year'])?.round(),
+        peakYear: asDoubleOrNull(json['peak_year'])?.round(),
+        weatherTheme: asStringOrNull(json['weather_theme']) ?? 'warm_front_haze',
+        bpmEstimate: (asDoubleOrNull(json['bpm_estimate']) ?? 102).round(),
+        energyEstimate: asDoubleOrNull(json['energy_estimate']) ?? 0.54,
+        trackKey: asStringOrNull(json['track_key']) ?? '',
+      );
+}
+
+class PlaylistCohortResponse {
+  const PlaylistCohortResponse({
+    required this.playlistTitle,
+    required this.sourceType,
+    required this.totalTracks,
+    required this.exactMatchesCount,
+    required this.familiarArtistCount,
+    required this.newDiscoveryCount,
+    required this.cohortOverlapPct,
+    required this.totalHistoricalPlays,
+    required this.totalArtistCohortPlays,
+    required this.peakNostalgiaYear,
+    required this.dominantWeatherTheme,
+    required this.avgBpm,
+    required this.avgEnergy,
+    required this.cohortPieSlices,
+    required this.weatherPieSlices,
+    required this.yearlyCohortGraph,
+    required this.hourlyCohortGraph,
+    required this.trackMatches,
+    this.queryEngine = 'BigQuery OLAP Cohort Engine',
+    this.cacheStatus = 'MEMORY_HIT',
+    this.bytesBilled = 0,
+    this.estimatedCostUsd = 0.0,
+    this.executionMs = 0.0,
+  });
+
+  final String playlistTitle;
+  final String sourceType;
+  final int totalTracks;
+  final int exactMatchesCount;
+  final int familiarArtistCount;
+  final int newDiscoveryCount;
+  final double cohortOverlapPct;
+  final int totalHistoricalPlays;
+  final int totalArtistCohortPlays;
+  final String peakNostalgiaYear;
+  final String dominantWeatherTheme;
+  final double avgBpm;
+  final double avgEnergy;
+  final List<CohortPieSlice> cohortPieSlices;
+  final List<CohortPieSlice> weatherPieSlices;
+  final Map<String, int> yearlyCohortGraph;
+  final Map<String, int> hourlyCohortGraph;
+  final List<PlaylistTrackMatch> trackMatches;
+  final String queryEngine;
+  final String cacheStatus;
+  final int bytesBilled;
+  final double estimatedCostUsd;
+  final double executionMs;
+
+  factory PlaylistCohortResponse.fromJson(JsonMap json) {
+    final JsonMap? rawYr = asJsonMap(json['yearly_cohort_graph']);
+    final Map<String, int> yrMap = <String, int>{};
+    if (rawYr != null) {
+      for (final MapEntry<String, Object?> entry in rawYr.entries) {
+        yrMap[entry.key] = (asDoubleOrNull(entry.value) ?? 0).round();
+      }
+    }
+    final JsonMap? rawHr = asJsonMap(json['hourly_cohort_graph']);
+    final Map<String, int> hrMap = <String, int>{};
+    if (rawHr != null) {
+      for (final MapEntry<String, Object?> entry in rawHr.entries) {
+        hrMap[entry.key] = (asDoubleOrNull(entry.value) ?? 0).round();
+      }
+    }
+    return PlaylistCohortResponse(
+      playlistTitle: asStringOrNull(json['playlist_title']) ?? 'Cohort Analysis',
+      sourceType: asStringOrNull(json['source_type']) ?? 'Playlist Link',
+      totalTracks: (asDoubleOrNull(json['total_tracks']) ?? 0).round(),
+      exactMatchesCount: (asDoubleOrNull(json['exact_matches_count']) ?? 0).round(),
+      familiarArtistCount: (asDoubleOrNull(json['familiar_artist_count']) ?? 0).round(),
+      newDiscoveryCount: (asDoubleOrNull(json['new_discovery_count']) ?? 0).round(),
+      cohortOverlapPct: asDoubleOrNull(json['cohort_overlap_pct']) ?? 0.0,
+      totalHistoricalPlays: (asDoubleOrNull(json['total_historical_plays']) ?? 0).round(),
+      totalArtistCohortPlays: (asDoubleOrNull(json['total_artist_cohort_plays']) ?? 0).round(),
+      peakNostalgiaYear: asStringOrNull(json['peak_nostalgia_year']) ?? '2015',
+      dominantWeatherTheme: asStringOrNull(json['dominant_weather_theme']) ?? 'warm_front_haze',
+      avgBpm: asDoubleOrNull(json['avg_bpm']) ?? 102.0,
+      avgEnergy: asDoubleOrNull(json['avg_energy']) ?? 0.54,
+      cohortPieSlices: <CohortPieSlice>[
+        for (final Object? item in asJsonList(json['cohort_pie_slices']) ?? const <Object?>[])
+          if (asJsonMap(item) case final JsonMap m) CohortPieSlice.fromJson(m),
+      ],
+      weatherPieSlices: <CohortPieSlice>[
+        for (final Object? item in asJsonList(json['weather_pie_slices']) ?? const <Object?>[])
+          if (asJsonMap(item) case final JsonMap m) CohortPieSlice.fromJson(m),
+      ],
+      yearlyCohortGraph: yrMap,
+      hourlyCohortGraph: hrMap,
+      trackMatches: <PlaylistTrackMatch>[
+        for (final Object? item in asJsonList(json['track_matches']) ?? const <Object?>[])
+          if (asJsonMap(item) case final JsonMap m) PlaylistTrackMatch.fromJson(m),
+      ],
+      queryEngine: asStringOrNull(json['query_engine']) ?? 'BigQuery OLAP Cohort Engine',
+      cacheStatus: asStringOrNull(json['cache_status']) ?? 'MEMORY_HIT',
+      bytesBilled: (asDoubleOrNull(json['bytes_billed']) ?? 0).round(),
+      estimatedCostUsd: asDoubleOrNull(json['estimated_cost_usd']) ?? 0.0,
+      executionMs: asDoubleOrNull(json['execution_ms']) ?? 0.0,
+    );
+  }
 }
 
 /// `GET /api/almanac/retrospective` — the "your rain sound" lines.

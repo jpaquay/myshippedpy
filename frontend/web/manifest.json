@@ -1,18 +1,18 @@
 {
-  "name": "BAROGROOVE — your sky has a soundtrack",
+  "name": "BAROGROOVE — Atmospheric Soundtracking",
   "short_name": "BAROGROOVE",
-  "description": "A weather-driven playlist engine. Reads the derivative of your sky and forges a set that explains itself.",
-  "start_url": ".",
-  "scope": "./",
+  "description": "Atmospheric soundtracking engine with Gemini Live 2.5 Voice Advisor, World Street-Art Geo-Caches, and Weather-Inspired Daylists.",
+  "start_url": "/",
+  "scope": "/",
   "id": "/",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone", "browser"],
-  "orientation": "portrait-primary",
-  "background_color": "#F8FAFC",
-  "theme_color": "#F8FAFC",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0F172A",
+  "theme_color": "#0F172A",
   "lang": "en",
   "dir": "ltr",
-  "categories": ["music", "utilities", "lifestyle"],
+  "categories": ["music", "weather", "entertainment"],
   "prefer_related_applications": false,
   "icons": [
     {
@@ -40,18 +40,36 @@
       "purpose": "maskable"
     }
   ],
-  "shortcuts": [
+  "screenshots": [
     {
-      "name": "Forge a set",
-      "short_name": "Forge",
-      "description": "Read the current sky and build a playlist from it.",
-      "url": "./?screen=forge"
+      "src": "icons/screenshot-wide.png",
+      "sizes": "640x360",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "BAROGROOVE Desktop Studio with Gemini Live Voice Advisor & Weathercaster"
     },
     {
-      "name": "Almanac",
+      "src": "icons/screenshot-narrow.png",
+      "sizes": "360x640",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "BAROGROOVE Mobile Studio with 1-Tap Voice Forge & Player Deck"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Forge a Daylist",
+      "short_name": "Forge",
+      "description": "Read the current sky or speak to Gemini Live to forge an 18-track Daylist.",
+      "url": "/?screen=forge",
+      "icons": [{ "src": "icons/Icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Sonic Almanac",
       "short_name": "Almanac",
-      "description": "Every set you have forged, and the sky that made it.",
-      "url": "./?screen=almanac"
+      "description": "Explore your scrobble history and forged sets.",
+      "url": "/?screen=almanac",
+      "icons": [{ "src": "icons/Icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

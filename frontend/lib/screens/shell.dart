@@ -7,12 +7,15 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../api/models.dart';
 import '../app_theme.dart';
 import '../auth/auth_service.dart';
 import '../auth/sign_in_screen.dart';
 import '../providers.dart';
+import '../pwa/pwa_install.dart';
 import 'almanac_screen.dart';
 import 'home_screen.dart';
 import 'playlist_screen.dart';
@@ -36,11 +39,6 @@ class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
   /// Nearest shell, so a descendant can navigate without a router.
-  ///
-  /// On the widget rather than the state, following `Scaffold.of` and
-  /// `Navigator.of`. The call sites already read `AppShell.of(context)`, which
-  /// is the idiom a Flutter reader expects; the lookup itself still resolves
-  /// the [AppShellState] that owns the current destination.
   static AppShellState? of(BuildContext context) =>
       context.findAncestorStateOfType<AppShellState>();
 
@@ -50,29 +48,45 @@ class AppShell extends ConsumerStatefulWidget {
 
 class AppShellState extends ConsumerState<AppShell> {
   BgDestination _current = BgDestination.forge;
+  late final PwaInstallBridge _pwaBridge;
+
+  @override
+  void initState() {
+    super.initState();
+    _pwaBridge = PwaInstallBridge(
+      onStateChanged: () {
+        if (mounted) setState(() {});
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _pwaBridge.dispose();
+    super.dispose();
+  }
 
   /// Lets a screen push the user to another destination — the forge screen
   /// jumps to the set after a successful forge.
   void go(BgDestination destination) {
     if (!mounted) return;
+    HapticFeedback.selectionClick();
     setState(() => _current = destination);
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool wide = MediaQuery.sizeOf(context).width >= 900;
-
-    final Widget body = switch (_current) {
-      BgDestination.forge => const HomeScreen(),
-      BgDestination.playlist => const PlaylistScreen(),
-      BgDestination.almanac => const AlmanacScreen(),
-      BgDestination.settings => const SettingsScreen(),
-    };
+    final Size screenSize = MediaQuery.sizeOf(context);
+    final bool wide = screenSize.width >= 900;
+    final bool isMobile = screenSize.width < 600;
+    final ForgeResult? lastForge = ref.watch(lastForgeProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const BarogrooveWordmark(compact: true),
         actions: <Widget>[
+          _PwaInstallButton(bridge: _pwaBridge, compact: isMobile),
+          const SizedBox(width: BgSpace.xs),
           const _HealthPip(),
           const SizedBox(width: BgSpace.sm),
           const _AccountMenu(),
@@ -85,7 +99,7 @@ class AppShellState extends ConsumerState<AppShell> {
             NavigationRail(
               selectedIndex: _current.index,
               onDestinationSelected: (int i) =>
-                  setState(() => _current = BgDestination.values[i]),
+                  go(BgDestination.values[i]),
               labelType: NavigationRailLabelType.all,
               destinations: <NavigationRailDestination>[
                 for (final BgDestination d in BgDestination.values)
@@ -103,14 +117,35 @@ class AppShellState extends ConsumerState<AppShell> {
           ],
           Expanded(
             child: SafeArea(
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  // A capped measure. Full-bleed long-form copy at 2560px is
-                  // unreadable and this app is mostly long-form copy.
-                  constraints: const BoxConstraints(maxWidth: 1080),
-                  child: body,
-                ),
+              bottom: false,
+              child: Column(
+                children: <Widget>[
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1080),
+                        // IndexedStack keeps all 4 screens mounted in memory so tab
+                        // transitions take 0ms, preserve scroll position on mobile,
+                        // and keep active audio playback uninterrupted.
+                        child: IndexedStack(
+                          index: _current.index,
+                          children: const <Widget>[
+                            HomeScreen(),
+                            PlaylistScreen(),
+                            AlmanacScreen(),
+                            SettingsScreen(),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (lastForge != null && _current != BgDestination.playlist)
+                    _FloatingMiniPlayerBar(
+                      forge: lastForge,
+                      onOpenSet: () => go(BgDestination.playlist),
+                    ),
+                ],
               ),
             ),
           ),
@@ -121,7 +156,7 @@ class AppShellState extends ConsumerState<AppShell> {
           : NavigationBar(
               selectedIndex: _current.index,
               onDestinationSelected: (int i) =>
-                  setState(() => _current = BgDestination.values[i]),
+                  go(BgDestination.values[i]),
               destinations: <NavigationDestination>[
                 for (final BgDestination d in BgDestination.values)
                   NavigationDestination(
@@ -131,6 +166,249 @@ class AppShellState extends ConsumerState<AppShell> {
                   ),
               ],
             ),
+    );
+  }
+}
+
+class _PwaInstallButton extends StatelessWidget {
+  const _PwaInstallButton({required this.bridge, required this.compact});
+
+  final PwaInstallBridge bridge;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    if (bridge.isStandalone) {
+      return const SizedBox.shrink();
+    }
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final bool ready = bridge.isInstallable;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: OutlinedButton.icon(
+        onPressed: () async {
+          HapticFeedback.lightImpact();
+          if (ready) {
+            await bridge.triggerInstall();
+          } else {
+            _showInstallInstructions(context);
+          }
+        },
+        icon: Icon(
+          ready ? Icons.install_desktop_rounded : Icons.download_rounded,
+          size: 15,
+          color: colors.primary,
+        ),
+        label: Text(
+          compact ? 'APP' : 'INSTALL APP',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.6,
+            color: colors.primary,
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12),
+          side: BorderSide(
+            color: colors.primary.withValues(alpha: ready ? 0.75 : 0.35),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showInstallInstructions(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: colors.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(BgSpace.xl),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Icon(Icons.install_desktop_rounded, color: colors.primary),
+                    const SizedBox(width: BgSpace.sm),
+                    Expanded(
+                      child: Text(
+                        'Install BAROGROOVE Chrome App',
+                        style: text.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: BgSpace.md),
+                Text(
+                  'BAROGROOVE is a full Progressive Web App (PWA) engineered for standalone desktop and mobile performance:',
+                  style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+                ),
+                const SizedBox(height: BgSpace.md),
+                _installStep(
+                  context,
+                  Icons.computer_rounded,
+                  'Desktop Chrome / Edge',
+                  'Click the "Install BAROGROOVE" icon in the right side of the address bar (omnibox), or open Chrome menu (⋮) → "Save and share" → "Install page as app...".',
+                ),
+                const SizedBox(height: BgSpace.sm),
+                _installStep(
+                  context,
+                  Icons.phone_android_rounded,
+                  'Android Chrome',
+                  'Tap the Chrome menu (⋮) → "Add to Home screen" / "Install app".',
+                ),
+                const SizedBox(height: BgSpace.sm),
+                _installStep(
+                  context,
+                  Icons.phone_iphone_rounded,
+                  'iOS Safari',
+                  'Tap the Share button (↑) at the bottom of Safari → "Add to Home Screen".',
+                ),
+                const SizedBox(height: BgSpace.lg),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('GOT IT'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _installStep(
+    BuildContext context,
+    IconData icon,
+    String title,
+    String body,
+  ) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Icon(icon, size: 18, color: colors.primary),
+        const SizedBox(width: BgSpace.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                title,
+                style: text.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              Text(
+                body,
+                style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FloatingMiniPlayerBar extends StatelessWidget {
+  const _FloatingMiniPlayerBar({
+    required this.forge,
+    required this.onOpenSet,
+  });
+
+  final ForgeResult forge;
+  final VoidCallback onOpenSet;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+    final int trackCount = forge.playlist.tracks.length;
+
+    return Material(
+      color: colors.surfaceContainerHighest.withValues(alpha: 0.96),
+      elevation: 8,
+      child: InkWell(
+        onTap: onOpenSet,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: BgSpace.lg,
+            vertical: BgSpace.sm,
+          ),
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(color: colors.primary.withValues(alpha: 0.35)),
+            ),
+          ),
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: colors.primary.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.graphic_eq_rounded,
+                  color: colors.primary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: BgSpace.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text(
+                      forge.playlist.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      '$trackCount-Track Daylist • Active in Player Deck',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: BgSpace.sm),
+              FilledButton.tonalIcon(
+                onPressed: onOpenSet,
+                icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                label: const Text('OPEN DECK'),
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

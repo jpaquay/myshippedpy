@@ -140,6 +140,15 @@
         ]
       },
       {
+        "source": "/sw.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
         "source": "/boot.js",
         "headers": [
           {
@@ -192,7 +201,7 @@
           },
           {
             "key": "Permissions-Policy",
-            "value": "geolocation=(self), microphone=(), camera=(), payment=(), usb=(), interest-cohort=()"
+            "value": "geolocation=(self), microphone=(self), camera=(), payment=(), usb=(), interest-cohort=()"
           },
           {
             "key": "Strict-Transport-Security",

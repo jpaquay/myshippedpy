@@ -237,50 +237,56 @@ class _PressureTrendHero extends StatelessWidget {
     final TextTheme text = Theme.of(context).textTheme;
     final Color tone = _toneFor(value, colors);
 
+    final bool narrow = MediaQuery.sizeOf(context).width < 460;
+    final double dialSize = narrow ? 108 : 132;
+
     return Semantics(
       label: 'Six hour pressure trend, ${_reading(value)}, '
           '${value.toStringAsFixed(2)} normalised',
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
-          SizedBox(
-            width: 132,
-            height: 132,
-            child: CustomPaint(
-              painter: _TrendArcPainter(
-                value: value,
-                track: colors.outlineVariant,
-                tone: tone,
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Icon(
-                      value.abs() < 0.05
-                          ? Icons.remove
-                          : value < 0
-                              ? Icons.south_east
-                              : Icons.north_east,
-                      size: 20,
-                      color: tone,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _signed(value),
-                      style: text.headlineMedium?.copyWith(
+          RepaintBoundary(
+            child: SizedBox(
+              width: dialSize,
+              height: dialSize,
+              child: CustomPaint(
+                painter: _TrendArcPainter(
+                  value: value,
+                  track: colors.outlineVariant,
+                  tone: tone,
+                ),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Icon(
+                        value.abs() < 0.05
+                            ? Icons.remove
+                            : value < 0
+                                ? Icons.south_east
+                                : Icons.north_east,
+                        size: narrow ? 18 : 20,
                         color: tone,
-                        fontFeatures: const <FontFeature>[
-                          FontFeature.tabularFigures(),
-                        ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 2),
+                      Text(
+                        _signed(value),
+                        style: (narrow ? text.titleLarge : text.headlineMedium)
+                            ?.copyWith(
+                          color: tone,
+                          fontFeatures: const <FontFeature>[
+                            FontFeature.tabularFigures(),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: BgSpace.xl),
+          SizedBox(width: narrow ? BgSpace.md : BgSpace.xl),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

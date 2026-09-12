@@ -23,3 +23,4 @@ frontend/.dart_tool/
 frontend/build/
 .venv/
 __pycache__/
+data/

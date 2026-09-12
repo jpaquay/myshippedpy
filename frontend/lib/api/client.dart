@@ -314,6 +314,19 @@ class BarogrooveApi {
         ScrobbleSearchResponse.fromJson,
       );
 
+  Future<ApiResult<PlaylistCohortResponse>> playlistCohortCheck({
+    required String inputText,
+    String? playlistTitle,
+  }) =>
+      _postJson(
+        '/api/almanac/playlist-cohort-check',
+        <String, Object?>{
+          'input_text': inputText,
+          if (playlistTitle != null) 'playlist_title': playlistTitle,
+        },
+        PlaylistCohortResponse.fromJson,
+      );
+
   Future<ApiResult<Playlist>> getForgedPlaylist(String playlistId) async {
     final ApiResult<http.Response> res =
         await _get('/api/almanac/forges/$playlistId');

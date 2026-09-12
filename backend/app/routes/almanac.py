@@ -28,7 +28,12 @@ from pydantic import BaseModel, Field
 
 from ..almanac.scrobbles import (
     ComplexAnalyticsResponse,
+    PlaylistCohortRequest,
+    PlaylistCohortResponse,
     ScrobbleSearchResponse,
+    analyze_playlist_cohort,
+    clear_bq_cache,
+    get_bq_cache_stats,
     query_complex_analytics,
     search_scrobbles,
     sync_scrobbles_from_lastfm,
@@ -172,6 +177,37 @@ async def get_scrobbles_complex_analytics(
         artist_query=artist_query,
         limit=limit,
     )
+
+
+@router.post(
+    "/playlist-cohort-check",
+    response_model=PlaylistCohortResponse,
+    summary="Cross-check any pasted playlist/song link or ID against the 160,717-scrobble cohort",
+)
+async def post_playlist_cohort_check(
+    req: PlaylistCohortRequest,
+    user: AuthUser = Depends(_resolve_user),
+) -> PlaylistCohortResponse:
+    """Cross-checks any pasted Spotify/Last.fm/Forged playlist or song against the 15-year scrobble cohort."""
+    return analyze_playlist_cohort(req)
+
+
+@router.get(
+    "/scrobbles/cache/stats",
+    summary="Live telemetry for Two-Tier BigQuery Cache & Cost Guardrails",
+)
+async def get_cache_stats() -> dict[str, Any]:
+    """Returns BigQuery OLAP memory/disk cache hit rates and $0.00 cost savings telemetry."""
+    return get_bq_cache_stats()
+
+
+@router.post(
+    "/scrobbles/cache/clear",
+    summary="Clear Two-Tier BigQuery OLAP query cache",
+)
+async def post_clear_cache() -> dict[str, Any]:
+    """Clears in-memory and persistent disk BigQuery query caches."""
+    return clear_bq_cache()
 
 
 @router.post("/scrobbles/sync", response_model=ScrobbleSearchResponse, summary="Sync Last.fm scrobbles into Firestore")

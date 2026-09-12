@@ -88,6 +88,9 @@ PROJECT_ID="${BG_GCP_PROJECT:-netdev-firebase}"
 DRY_RUN="false"
 SKIP_BUILD="false"
 SKIP_HOSTING="false"
+BUILD_WEB="false"
+FAST_DEPLOY="false"
+FLUTTER_BUILD_PID=""
 
 usage() {
   cat <<'EOF'
@@ -99,6 +102,10 @@ Usage:
 Options:
   --project ID     Target GCP project. Defaults to $BG_GCP_PROJECT, then to the
                    active gcloud config value.
+  --build-web      Compile Flutter Web (--release --no-wasm-dry-run) in parallel
+                   with Cloud Build so both complete simultaneously.
+  --fast           Fast path: skip API/IAM/Secret Manager reconciliation when
+                   infrastructure is already provisioned.
   --dry-run        Print every mutating command instead of running it. Read-only
                    probes still run, so the plan reflects real cluster state.
   --skip-build     Skip Cloud Build and the Cloud Run deploy. For a hosting-only
@@ -115,6 +122,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --project)      PROJECT_ID="${2:-}"; shift 2 ;;
     --project=*)    PROJECT_ID="${1#*=}"; shift ;;
+    --build-web)    BUILD_WEB="true"; shift ;;
+    --fast)         FAST_DEPLOY="true"; shift ;;
     --dry-run)      DRY_RUN="true"; shift ;;
     --skip-build)   SKIP_BUILD="true"; shift ;;
     --skip-hosting) SKIP_HOSTING="true"; shift ;;
@@ -641,7 +650,7 @@ replacements = {
     "REPLACE_ME_PROJECT_ID.appspot.com": cfg.get("storageBucket", ""),
     "REPLACE_ME_PROJECT_ID": cfg.get("projectId", ""),
 }
-for rel in ("frontend/build/web/main.dart.js", "frontend/build/web/index.html", "frontend/web/index.html", "frontend/lib/firebase_options.dart"):
+for rel in ("frontend/build/web/main.dart.js", "frontend/build/web/index.html"):
     p = pathlib.Path(rel)
     if p.is_file():
         text = p.read_text(encoding="utf-8")
@@ -724,14 +733,37 @@ main() {
   printf '%s\n' "${C_BOLD}Barogroove deploy -- your sky has a soundtrack${C_RESET}"
 
   preflight
-  enable_apis
-  # Before anything else that costs money: an immutable, wrongly-placed
-  # Firestore is the one mistake here that cannot be undone in-place.
-  ensure_firestore_database
-  ensure_artifact_registry
-  ensure_service_account
-  ensure_secrets
+
+  if [[ "${BUILD_WEB}" == "true" ]]; then
+    step "Parallel Flutter Web Build (background)"
+    info "spawning 'flutter build web --release --no-wasm-dry-run' in background..."
+    (cd "${REPO_ROOT}/frontend" && /usr/local/google/home/jpaquay/flutter/bin/flutter build web --release --no-wasm-dry-run >/tmp/barogroove_flutter_build.log 2>&1) &
+    FLUTTER_BUILD_PID="$!"
+    info "Flutter build running concurrently (PID ${FLUTTER_BUILD_PID})"
+  fi
+
+  if [[ "${FAST_DEPLOY}" == "true" ]]; then
+    step "Fast deploy enabled (--fast): skipping API, Firestore, IAM & Secret checks"
+  else
+    enable_apis
+    ensure_firestore_database
+    ensure_artifact_registry
+    ensure_service_account
+    ensure_secrets
+  fi
+
   build_and_deploy
+
+  if [[ -n "${FLUTTER_BUILD_PID}" ]]; then
+    step "Waiting for parallel Flutter Web build to complete..."
+    if wait "${FLUTTER_BUILD_PID}"; then
+      ok "parallel Flutter Web build succeeded"
+    else
+      cat /tmp/barogroove_flutter_build.log >&2 || true
+      die "parallel Flutter Web build failed"
+    fi
+  fi
+
   deploy_hosting
   verify
 

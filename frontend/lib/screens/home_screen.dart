@@ -170,11 +170,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final String? selectedGenreId =
         themes.dataModel.resolveEntry('/genres/selectedGenreId').value as String?;
 
+    final bool isMobile = MediaQuery.sizeOf(context).width < 600;
+
     return RefreshIndicator(
       onRefresh: _loadSurfaces,
       child: ListView(
-        padding: const EdgeInsets.symmetric(
-          horizontal: BgSpace.xl,
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? BgSpace.md : BgSpace.xl,
           vertical: BgSpace.lg,
         ),
         children: <Widget>[

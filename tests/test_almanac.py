@@ -1024,4 +1024,54 @@ def test_almanac_scrobbles_and_analytics_routes(client):
     assert "matching_scrobbles" in bq_data
     assert "top_artists" in bq_data
     assert "weather_breakdown" in bq_data
+    assert "cache_status" in bq_data
+    assert "estimated_cost_usd" in bq_data
+
+
+def test_playlist_cohort_cross_check_presets_and_custom_inputs(client):
+    # 1. Test preset:chanson
+    r1 = client.post(
+        "/api/almanac/playlist-cohort-check",
+        json={"input_text": "preset:chanson"},
+    )
+    assert r1.status_code == 200
+    d1 = r1.json()
+    assert d1["total_tracks"] == 14
+    assert d1["exact_matches_count"] >= 8
+    assert d1["total_historical_plays"] > 500
+    assert len(d1["cohort_pie_slices"]) == 3
+    assert len(d1["weather_pie_slices"]) >= 1
+    assert "2013" in d1["yearly_cohort_graph"]
+    assert "12" in d1["hourly_cohort_graph"]
+
+    # 2. Test custom tracklist / song cross-check
+    r2 = client.post(
+        "/api/almanac/playlist-cohort-check",
+        json={
+            "input_text": "Stromae - Formidable\nGeorges Brassens - La mauvaise réputation\nBrand New Artist XYZ - Unheard Song 2099",
+            "playlist_title": "Test Custom Cohort Mix",
+        },
+    )
+    assert r2.status_code == 200
+    d2 = r2.json()
+    assert d2["playlist_title"] == "Test Custom Cohort Mix"
+    assert d2["total_tracks"] == 3
+    assert d2["exact_matches_count"] == 2
+    assert d2["new_discovery_count"] == 1
+    assert d2["track_matches"][0]["status"] == "IN_COHORT_EXACT"
+    assert d2["track_matches"][0]["scrobble_count"] >= 100
+
+
+def test_bigquery_cache_stats_and_cost_telemetry(client):
+    r_stats = client.get("/api/almanac/scrobbles/cache/stats")
+    assert r_stats.status_code == 200
+    st = r_stats.json()
+    assert "memory_hits" in st
+    assert "disk_hits" in st
+    assert "estimated_cost_saved_usd" in st
+
+    r_clear = client.post("/api/almanac/scrobbles/cache/clear")
+    assert r_clear.status_code == 200
+    assert r_clear.json()["cleared_memory"] is True
+
 
