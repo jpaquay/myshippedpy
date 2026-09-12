@@ -33,6 +33,8 @@ from typing import Any, Sequence
 
 from ..contracts import (
     SONIC_DIMS,
+    TEMPO_MAX_BPM,
+    TEMPO_MIN_BPM,
     Coordinates,
     ForgeRequest,
     ForgeResult,
@@ -46,6 +48,7 @@ from ..contracts import (
     TasteVector,
     Theme,
     clamp,
+    normalise,
 )
 from ..errors import DegradationLedger, ThemeNotFound
 from ..sinks.registry import write_playlist
@@ -258,6 +261,51 @@ class PlaylistForge:
         if sky.stale:
             ledger.note("weather", "observation is stale")
         return sky
+
+    def _apply_atmospheric_overrides(
+        self, sky: SkyVector, request: ForgeRequest
+    ) -> tuple[SkyVector, list[str]]:
+        updates: dict[str, Any] = {}
+        notes: list[str] = []
+
+        if request.custom_temp_c is not None:
+            t_c = float(clamp(request.custom_temp_c, -20.0, 48.0))
+            updates["temp_norm_deviation"] = float(clamp((t_c - 15.0) / 20.0, -1.0, 1.0))
+            notes.append(f"Atmospheric Console Temp Cursor: {t_c:+.1f} °C")
+
+        if request.custom_light_pct is not None:
+            light = float(clamp(request.custom_light_pct, 0.0, 100.0))
+            updates["sun_elevation"] = float(clamp((light / 50.0) - 1.0, -1.0, 1.0))
+            phase = "Midnight Thermal" if light < 20 else "Solar Zenith" if light > 80 else "Horizon / Golden Glow"
+            notes.append(f"Atmospheric Console Solar Light Cursor: {light:.0f}% ({phase})")
+
+        if request.custom_color_kelvin is not None:
+            kelvin = float(clamp(request.custom_color_kelvin, 2000.0, 10000.0))
+            # 2000K = Warm Amber (high golden hour warmth 1.0) -> 10000K = Deep Cyan (crisp blue twilight 0.0)
+            updates["golden_hour_proximity"] = float(clamp(1.0 - ((kelvin - 2000.0) / 8000.0), 0.0, 1.0))
+            tone = "Warm Amber Sunset" if kelvin < 4200 else "Deep Cyan Stratosphere" if kelvin > 7200 else "Balanced Daylight"
+            notes.append(f"Atmospheric Console Color Spectrum: {kelvin:.0f}K ({tone})")
+
+        if request.custom_pressure_hpa is not None:
+            hpa = float(clamp(request.custom_pressure_hpa, 965.0, 1045.0))
+            updates["pressure_norm_deviation"] = float(clamp((hpa - 1013.25) / 25.0, -1.0, 1.0))
+            notes.append(f"Atmospheric Console Barometer: {hpa:.1f} hPa")
+
+        if request.custom_trend_hpa is not None:
+            trend = float(clamp(request.custom_trend_hpa, -10.0, 10.0))
+            updates["pressure_trend_6h"] = float(clamp(trend / 6.0, -1.0, 1.0))
+            notes.append(f"Atmospheric Console 6h Derivative: {trend:+.1f} hPa/6h")
+
+        if not updates:
+            return sky, []
+
+        merged_notes = [*list(getattr(sky, "notes", []) or []), *notes]
+        updates["notes"] = merged_notes
+        try:
+            sky = sky.model_copy(update=updates)
+        except Exception:  # noqa: BLE001
+            pass
+        return sky, notes
 
     def _resolve_theme(
         self, request: ForgeRequest, sky: SkyVector, ledger: DegradationLedger
@@ -599,12 +647,23 @@ class PlaylistForge:
         at = _now(request)
 
         sky = await self._read_sky(request, at, ledger)
+        sky, cursor_notes = self._apply_atmospheric_overrides(sky, request)
         theme = self._resolve_theme(request, sky, ledger)
         corridor = self._resolve_corridor(request, ledger)
         taste = await self._load_taste(request, ledger)
         nudge = await self._load_nudge(request, ledger)
 
         target, moves = self._build_target(sky, theme, corridor, taste, nudge, ledger)
+        if cursor_notes:
+            moves = [*cursor_notes, *moves]
+        if request.custom_target_bpm is not None:
+            bpm_val = float(clamp(request.custom_target_bpm, 50.0, 195.0))
+            try:
+                norm_tempo = normalise(bpm_val, TEMPO_MIN_BPM, TEMPO_MAX_BPM)
+                target = target.model_copy(update={"tempo": norm_tempo})
+            except Exception:  # noqa: BLE001
+                pass
+            moves.insert(0, f"Atmospheric Console Expert Lock: Target Tempo set to {bpm_val:.0f} BPM.")
 
         pool = await self._gather(theme, corridor, taste, request, ledger)
         chosen = self._select(

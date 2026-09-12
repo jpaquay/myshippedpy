@@ -586,7 +586,7 @@ build_and_deploy() {
       --role="roles/run.invoker" \
       --quiet >/dev/null
   fi
-  for iam_user in "jpaquay@gmail.com" "jerome@netdev.be" "jpaquay@gcp.altostrat.com" "jpaquay@google.com"; do
+  for iam_user in "jpaquay@gmail.com" "jerome@netdev.be" "jpaquay@gcp.altostrat.com" "jpaquay@google.com" "elena.ruizroman@gmail.com" "arthurpaquay@gmail.com"; do
     if ! printf '%s' "${run_policy}" | grep -q "user:${iam_user}"; then
       info "granting roles/run.invoker to user:${iam_user}"
       run gcloud run services add-iam-policy-binding "${SERVICE}" \
@@ -597,7 +597,7 @@ build_and_deploy() {
         --quiet >/dev/null
     fi
   done
-  ok "invoker bindings set (4 IAM users + Firebase Hosting proxy)"
+  ok "invoker bindings set (6 IAM users + Firebase Hosting proxy)"
 }
 
 # -----------------------------------------------------------------------------

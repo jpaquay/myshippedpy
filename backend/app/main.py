@@ -58,6 +58,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log.info("BAROGROOVE stopped.")
 
 
+_OPTIONAL_ROUTERS: list[str] = [
+    "backend.app.routes.sky",
+    "backend.app.routes.themes",
+    "backend.app.routes.forge",
+    "backend.app.routes.pairing",
+    "backend.app.routes.almanac",
+    "backend.app.routes.surfaces",
+    "backend.app.routes.advisor",
+    "backend.app.routes.dataviz",
+]
+
+
 def _mount(app: FastAPI, module_path: str, attr: str = "router", *, label: str) -> bool:
     """Import and include a router, tolerating an absent/broken subsystem."""
     try:
@@ -127,6 +139,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     _mount(app, "backend.app.routes.almanac", label="almanac")
     _mount(app, "backend.app.routes.surfaces", label="surfaces")
     _mount(app, "backend.app.routes.advisor", label="advisor")
+    _mount(app, "backend.app.routes.dataviz", label="dataviz")
 
     @app.get("/callback", include_in_schema=False)
     async def _root_oauth_callback(request: Request):  # type: ignore[no-untyped-def]

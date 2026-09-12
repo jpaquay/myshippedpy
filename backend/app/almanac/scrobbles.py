@@ -481,6 +481,51 @@ def _ensure_catalog_and_indexes() -> list[dict[str, Any]]:
         _CATALOG_INDEX_BY_NORM = norm_index
         _ARTIST_PLAYS_INDEX = artist_plays
 
+    if not _CATALOG_DICTS_CACHE:
+        themes_cycle = [
+            "warm_front_haze",
+            "petrichor",
+            "clearing_ridge",
+            "storm_front",
+            "late_dusk",
+            "crisp_frost",
+        ]
+        idx_counter = 0
+        for preset_key, preset_data in _COHORT_PRESETS.items():
+            for artist, title in preset_data.get("tracks", []):
+                anorm = _norm(artist)
+                tnorm = _norm(title)
+                if (anorm, tnorm) in norm_index:
+                    continue
+                theme_assigned = (
+                    "warm_front_haze"
+                    if idx_counter < 12
+                    else themes_cycle[idx_counter % len(themes_cycle)]
+                )
+                pc = max(120 - idx_counter * 3, 18)
+                row = {
+                    "catalog_id": f"offline_{idx_counter}",
+                    "title": title,
+                    "artist": artist,
+                    "album": f"{artist} Anthology",
+                    "tags": ["chanson-francaise", "poetic-acoustic", "trip-hop"],
+                    "weather_theme": theme_assigned,
+                    "bpm_estimate": 96 + (idx_counter % 28),
+                    "energy_estimate": 0.48 + (idx_counter % 5) * 0.08,
+                    "play_count": pc,
+                    "_play_count": pc,
+                    "_anorm": anorm,
+                    "_tnorm": tnorm,
+                    "_search_text": f"{title} {artist}".lower(),
+                }
+                rows.append(row)
+                norm_index[(anorm, tnorm)] = row
+                artist_plays[anorm] = artist_plays.get(anorm, 0) + pc
+                idx_counter += 1
+        _CATALOG_DICTS_CACHE = rows
+        _CATALOG_INDEX_BY_NORM = norm_index
+        _ARTIST_PLAYS_INDEX = artist_plays
+
     return _CATALOG_DICTS_CACHE
 
 

@@ -1075,3 +1075,82 @@ def test_bigquery_cache_stats_and_cost_telemetry(client):
     assert r_clear.json()["cleared_memory"] is True
 
 
+def test_data_qna_status_and_ask_endpoints(client):
+    # 1. Check status endpoint
+    r_status = client.get("/api/almanac/qna/status")
+    assert r_status.status_code == 200
+    st = r_status.json()
+    assert st["agent_active"] is True
+    assert len(st["starter_prompts"]) >= 4
+    assert "cache_stats" in st
+
+    # 2. Ask a starter prompt question (hits pre-warmed Two-Tier Cache / BQ QnA)
+    prompt = st["starter_prompts"][0]["prompt"]
+    r_ask = client.post(
+        "/api/almanac/qna/ask",
+        json={
+            "question": prompt,
+            "preferred_chart_type": "horizontal_bar",
+        },
+    )
+    assert r_ask.status_code == 200
+    data = r_ask.json()
+    assert data["question"] == prompt
+    assert len(data["answer_markdown"]) > 10
+    assert "SELECT" in data["sql_query"].upper()
+    assert len(data["rows"]) > 0
+    assert data["chart_spec"]["chart_type"] == "horizontal_bar"
+    assert len(data["chart_spec"]["series"]) > 0
+    assert data["estimated_cost_usd"] == 0.0
+
+    # 3. Verify second ask hits MEMORY_HIT in <5ms
+    r_ask2 = client.post(
+        "/api/almanac/qna/ask",
+        json={
+            "question": prompt,
+            "preferred_chart_type": "donut",
+        },
+    )
+    assert r_ask2.status_code == 200
+    data2 = r_ask2.json()
+    assert data2["cache_status"] in ("MEMORY_HIT", "DISK_HIT")
+    assert data2["chart_spec"]["chart_type"] == "donut"
+
+
+def test_data_qna_graph_on_demand_endpoint(client):
+    sample_rows = [
+        {"artist": "Georges Brassens", "scrobble_count": 3802},
+        {"artist": "Serge Gainsbourg", "scrobble_count": 3427},
+        {"artist": "Chinese Man", "scrobble_count": 2890},
+    ]
+    for chart_type in ("bar", "horizontal_bar", "donut", "line"):
+        resp = client.post(
+            "/api/almanac/qna/graph-on-demand",
+            json={
+                "title": f"Test {chart_type} graph",
+                "subtitle": "On-demand re-synthesis",
+                "chart_type": chart_type,
+                "rows": sample_rows,
+            },
+        )
+        assert resp.status_code == 200
+        spec = resp.json()
+        assert spec["chart_type"] == chart_type
+        assert len(spec["series"]) == 3
+        assert spec["series"][0]["label"] == "Georges Brassens"
+        assert spec["series"][0]["value"] == 3802.0
+
+
+def test_data_qna_stream_sse_endpoint(client):
+    with client.stream(
+        "POST",
+        "/api/almanac/qna/stream",
+        json={"question": "Show me the distribution of scrobbles across different weather themes"},
+    ) as response:
+        assert response.status_code == 200
+        body = "".join(response.iter_text())
+        assert "FINAL_RESPONSE" in body
+        assert "CHART" in body
+        assert "[DONE]" in body
+
+

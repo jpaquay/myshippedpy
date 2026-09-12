@@ -27,7 +27,9 @@ import '../api/models.dart';
 import '../app_theme.dart';
 import '../providers.dart';
 import 'shell.dart';
+import 'widgets/atmospheric_cursors_console.dart';
 import 'widgets/gemini_live_advisor.dart';
+import 'widgets/netdev_footer.dart';
 import 'widgets/section.dart';
 import 'widgets/status_notes.dart';
 
@@ -242,6 +244,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
           ),
 
+          const SizedBox(height: BgSpace.xl),
+
+          // --- DESKTOP & MOBILE ATMOSPHERIC SYNTHESIS CONSOLE --------------
+          AtmosphericCursorsConsole(
+            onTriggerForge: _forging ? null : _forge,
+          ),
+
           const SizedBox(height: BgSpace.xxl),
 
           // --- SERVER-DESCRIBED: themes and corridors ----------------------
@@ -275,7 +284,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             selectedGenreId: selectedGenreId,
             onForge: _forging ? null : _forge,
           ),
-          const SizedBox(height: BgSpace.xxl),
+          const SizedBox(height: BgSpace.lg),
+          const NetdevFooter(),
+          const SizedBox(height: BgSpace.xl),
         ],
       ),
     );

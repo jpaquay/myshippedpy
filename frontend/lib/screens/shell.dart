@@ -17,15 +17,17 @@ import '../auth/sign_in_screen.dart';
 import '../providers.dart';
 import '../pwa/pwa_install.dart';
 import 'almanac_screen.dart';
+import 'dataviz_screen.dart';
 import 'home_screen.dart';
 import 'playlist_screen.dart';
 import 'settings_screen.dart';
 
-/// The four destinations.
+/// The five destinations.
 enum BgDestination {
   forge('Forge', Icons.explore_outlined, Icons.explore),
   playlist('Set', Icons.queue_music_outlined, Icons.queue_music),
   almanac('Almanac', Icons.auto_stories_outlined, Icons.auto_stories),
+  dataViz('Data Viz', Icons.insights_outlined, Icons.insights),
   settings('Settings', Icons.tune_outlined, Icons.tune);
 
   const BgDestination(this.label, this.icon, this.selectedIcon);
@@ -90,6 +92,8 @@ class AppShellState extends ConsumerState<AppShell> {
           const _HealthPip(),
           const SizedBox(width: BgSpace.sm),
           const _AccountMenu(),
+          const SizedBox(width: BgSpace.xs),
+          const _ThemeModeSwitchButton(),
           const SizedBox(width: BgSpace.sm),
         ],
       ),
@@ -125,7 +129,7 @@ class AppShellState extends ConsumerState<AppShell> {
                       alignment: Alignment.topCenter,
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 1080),
-                        // IndexedStack keeps all 4 screens mounted in memory so tab
+                        // IndexedStack keeps all 5 screens mounted in memory so tab
                         // transitions take 0ms, preserve scroll position on mobile,
                         // and keep active audio playback uninterrupted.
                         child: IndexedStack(
@@ -134,6 +138,7 @@ class AppShellState extends ConsumerState<AppShell> {
                             HomeScreen(),
                             PlaylistScreen(),
                             AlmanacScreen(),
+                            DataVizScreen(),
                             SettingsScreen(),
                           ],
                         ),
@@ -561,3 +566,32 @@ class _AccountMenu extends ConsumerWidget {
     );
   }
 }
+
+/// Top-right AppBar switch between Dark and Light mode.
+class _ThemeModeSwitchButton extends ConsumerWidget {
+  const _ThemeModeSwitchButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ThemeMode mode = ref.watch(themeModeProvider);
+    final bool isDark = mode == ThemeMode.dark ||
+        (mode == ThemeMode.system &&
+            Theme.of(context).brightness == Brightness.dark);
+
+    return Tooltip(
+      message: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+      child: IconButton(
+        onPressed: () {
+          HapticFeedback.selectionClick();
+          ref.read(themeModeProvider.notifier).state =
+              isDark ? ThemeMode.light : ThemeMode.dark;
+        },
+        icon: Icon(
+          isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+          size: 20,
+        ),
+      ),
+    );
+  }
+}
+

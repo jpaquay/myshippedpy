@@ -1385,6 +1385,8 @@ class TestFlutterA2uiTransformAndLivePairing:
             "jerome@netdev.be",
             "jpaquay@gcp.altostrat.com",
             "jpaquay@google.com",
+            "elena.ruizroman@gmail.com",
+            "arthurpaquay@gmail.com",
         }
 
         prod_settings = SimpleNamespace(

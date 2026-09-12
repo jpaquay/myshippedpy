@@ -6,6 +6,7 @@
 /// the backend can currently do, which providers are paired.
 library;
 
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'a2ui/actions.dart';
@@ -16,6 +17,10 @@ import 'api/client.dart';
 import 'api/models.dart';
 import 'auth/auth_service.dart';
 import 'auth/pairing_service.dart';
+
+/// User-controlled Dark/Light ThemeMode (top-right switch in AppBar).
+final StateProvider<ThemeMode> themeModeProvider =
+    StateProvider<ThemeMode>((Ref ref) => ThemeMode.dark);
 
 // ===========================================================================
 // Infrastructure
@@ -174,6 +179,13 @@ class ForgeSelection {
     this.label = 'Parcours BD Comic Strip Trail (Brussels)',
     this.geocacheId = 'parcours_bd_brussels',
     this.seedScrobbles = const <String>[],
+    this.consoleMode = 'guided',
+    this.customTempC = 14.0,
+    this.customLightPct = 45.0,
+    this.customColorKelvin = 4200.0,
+    this.customPressureHpa = 1009.0,
+    this.customTrendHpa = -1.5,
+    this.customTargetBpm = 102.0,
   });
 
   final String? themeId;
@@ -185,6 +197,15 @@ class ForgeSelection {
   final String? geocacheId;
   final List<String> seedScrobbles;
 
+  /// 'guided' | 'easy' | 'expert'
+  final String consoleMode;
+  final double customTempC;
+  final double customLightPct;
+  final double customColorKelvin;
+  final double customPressureHpa;
+  final double customTrendHpa;
+  final double customTargetBpm;
+
   ForgeSelection copyWith({
     String? themeId,
     String? genreId,
@@ -194,6 +215,13 @@ class ForgeSelection {
     String? label,
     String? geocacheId,
     List<String>? seedScrobbles,
+    String? consoleMode,
+    double? customTempC,
+    double? customLightPct,
+    double? customColorKelvin,
+    double? customPressureHpa,
+    double? customTrendHpa,
+    double? customTargetBpm,
     bool clearScenario = false,
     bool clearGeocache = false,
   }) =>
@@ -206,17 +234,34 @@ class ForgeSelection {
         label: label ?? this.label,
         geocacheId: clearGeocache ? null : (geocacheId ?? this.geocacheId),
         seedScrobbles: seedScrobbles ?? this.seedScrobbles,
+        consoleMode: consoleMode ?? this.consoleMode,
+        customTempC: customTempC ?? this.customTempC,
+        customLightPct: customLightPct ?? this.customLightPct,
+        customColorKelvin: customColorKelvin ?? this.customColorKelvin,
+        customPressureHpa: customPressureHpa ?? this.customPressureHpa,
+        customTrendHpa: customTrendHpa ?? this.customTrendHpa,
+        customTargetBpm: customTargetBpm ?? this.customTargetBpm,
       );
 
-  ForgeRequest toRequest() => ForgeRequest(
-        lat: lat,
-        lon: lon,
-        themeId: themeId,
-        genreId: genreId,
-        scenario: scenario,
-        geocacheId: geocacheId,
-        seedScrobbles: seedScrobbles,
-      );
+  ForgeRequest toRequest() {
+    final bool isGuided = consoleMode == 'guided';
+    final bool isExpert = consoleMode == 'expert';
+    return ForgeRequest(
+      lat: lat,
+      lon: lon,
+      themeId: themeId,
+      genreId: genreId,
+      scenario: scenario,
+      geocacheId: geocacheId,
+      seedScrobbles: seedScrobbles,
+      customTempC: isGuided ? null : customTempC,
+      customLightPct: isGuided ? null : customLightPct,
+      customColorKelvin: isGuided ? null : customColorKelvin,
+      customPressureHpa: isExpert ? customPressureHpa : null,
+      customTrendHpa: isExpert ? customTrendHpa : null,
+      customTargetBpm: isExpert ? customTargetBpm : null,
+    );
+  }
 }
 
 class ForgeSelectionNotifier extends StateNotifier<ForgeSelection> {
@@ -243,6 +288,24 @@ class ForgeSelectionNotifier extends StateNotifier<ForgeSelection> {
       );
   void setSeedScrobbles(List<String> scrobbles) =>
       state = state.copyWith(seedScrobbles: scrobbles);
+  void setConsoleMode(String mode) =>
+      state = state.copyWith(consoleMode: mode);
+  void setAtmosphericCursors({
+    double? tempC,
+    double? lightPct,
+    double? colorKelvin,
+    double? pressureHpa,
+    double? trendHpa,
+    double? targetBpm,
+  }) =>
+      state = state.copyWith(
+        customTempC: tempC,
+        customLightPct: lightPct,
+        customColorKelvin: colorKelvin,
+        customPressureHpa: pressureHpa,
+        customTrendHpa: trendHpa,
+        customTargetBpm: targetBpm,
+      );
 }
 
 final StateNotifierProvider<ForgeSelectionNotifier, ForgeSelection>

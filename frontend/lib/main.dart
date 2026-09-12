@@ -62,16 +62,14 @@ class BarogrooveApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final ThemeMode mode = ref.watch(themeModeProvider);
     return MaterialApp(
       title: 'BAROGROOVE',
       debugShowCheckedModeBanner: false,
 
-      // Light is the default and the intended register. The dark variant
-      // exists because a system-wide dark preference is not something to
-      // override, but the app was designed light.
       theme: BgTheme.light(),
       darkTheme: BgTheme.dark(),
-      themeMode: ThemeMode.light,
+      themeMode: mode,
 
       home: bootError != null
           ? _BootFailure(message: bootError!)

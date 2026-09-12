@@ -14,6 +14,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../a2ui/messages.dart';
@@ -59,14 +60,23 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen>
   bool _pieShowWeather = false;
   bool _graphShowCircadian = false;
 
+  // State for Tab 4: BigQuery Conversational Data QnA Agent & On-Demand Graphing Studio
+  DataQnAStatusResponse? _qnaStatus;
+  final List<DataQnAResponse> _qnaTurns = <DataQnAResponse>[];
+  bool _loadingQnA = false;
+  final TextEditingController _qnaInputController = TextEditingController();
+  String _qnaPreferredChartType = 'auto';
+  final Set<int> _expandedInspectorTurns = <int>{};
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadHistory();
       _loadScrobbles();
       _runCohortCheck('preset:chanson');
+      _loadDataQnAStatusAndStarter();
     });
   }
 
@@ -75,6 +85,7 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen>
     _tabController.dispose();
     _searchController.dispose();
     _cohortInputController.dispose();
+    _qnaInputController.dispose();
     super.dispose();
   }
 
@@ -150,6 +161,81 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen>
       _cohortInputController.text,
       customTitle: 'Forged Set: ${entry.title}',
     );
+  }
+
+  Future<void> _loadDataQnAStatusAndStarter() async {
+    final BarogrooveApi api = ref.read(apiProvider);
+    final ApiResult<DataQnAStatusResponse> statusRes = await api.getDataQnAStatus();
+    if (!mounted) return;
+    if (statusRes.isOk && statusRes.valueOrNull != null) {
+      setState(() => _qnaStatus = statusRes.valueOrNull);
+    }
+    if (_qnaTurns.isEmpty) {
+      await _askQnAQuestion(
+        'Show me a bar chart of my top 8 artists by scrobble count',
+        preferredChartType: 'horizontal_bar',
+      );
+    }
+  }
+
+  Future<void> _askQnAQuestion(
+    String question, {
+    String? preferredChartType,
+  }) async {
+    final String qTrimmed = question.trim();
+    if (qTrimmed.isEmpty) return;
+
+    setState(() => _loadingQnA = true);
+    final BarogrooveApi api = ref.read(apiProvider);
+    final List<Map<String, String>> history = _qnaTurns
+        .take(4)
+        .expand((DataQnAResponse t) => <Map<String, String>>[
+              <String, String>{'role': 'user', 'content': t.question},
+              <String, String>{'role': 'model', 'content': t.answerMarkdown},
+            ])
+        .toList();
+
+    final ApiResult<DataQnAResponse> res = await api.askDataQnA(
+      question: qTrimmed,
+      preferredChartType: preferredChartType ?? _qnaPreferredChartType,
+      history: history,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _loadingQnA = false;
+      if (res.isOk && res.valueOrNull != null) {
+        _qnaTurns.insert(0, res.valueOrNull!);
+      }
+    });
+  }
+
+  Future<void> _switchTurnChartOnDemand(int turnIndex, String newChartType) async {
+    if (turnIndex < 0 || turnIndex >= _qnaTurns.length) return;
+    final DataQnAResponse current = _qnaTurns[turnIndex];
+    // Immediate 0ms client-side update
+    setState(() {
+      _qnaTurns[turnIndex] = current.copyWith(
+        chartSpec: current.chartSpec.copyWith(chartType: newChartType),
+      );
+    });
+    // Also sync with backend graph-on-demand service
+    if (current.rows.isNotEmpty) {
+      final BarogrooveApi api = ref.read(apiProvider);
+      final ApiResult<QnAChartSpec> res = await api.graphOnDemand(
+        chartType: newChartType,
+        rows: current.rows,
+        title: current.chartSpec.title,
+        subtitle: current.chartSpec.subtitle,
+      );
+      if (mounted && res.isOk && res.valueOrNull != null) {
+        setState(() {
+          _qnaTurns[turnIndex] = _qnaTurns[turnIndex].copyWith(
+            chartSpec: res.valueOrNull,
+          );
+        });
+      }
+    }
   }
 
   Future<void> _syncLastfmToFirestore() async {
@@ -378,6 +464,16 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen>
                     ],
                   ),
                 ),
+                const Tab(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Icon(Icons.auto_graph_rounded, size: 18),
+                      SizedBox(width: 8),
+                      Text('DATA QnA & GRAPH STUDIO (BQ AI)'),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -389,6 +485,7 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen>
                 _buildForgeHistoryTab(context),
                 _buildScrobbleExplorerTab(context),
                 _buildPlaylistCohortAnalysisTab(context),
+                _buildDataQnAStudioTab(context),
               ],
             ),
           ),
@@ -1571,6 +1668,631 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen>
       ),
     );
   }
+
+  // ===========================================================================
+  // TAB 4: BIGQUERY CONVERSATIONAL DATA QnA & ON-DEMAND GRAPH STUDIO
+  // ===========================================================================
+  Widget _buildDataQnAStudioTab(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+    final List<DataQnAStarterPrompt> starters = _qnaStatus?.starterPrompts ??
+        const <DataQnAStarterPrompt>[
+          DataQnAStarterPrompt(
+            id: 'top_artists_bar',
+            icon: 'bar_chart',
+            title: 'Top Artists Rank',
+            prompt: 'Show me a bar chart of my top 8 artists by scrobble count',
+            preferredChartType: 'horizontal_bar',
+          ),
+          DataQnAStarterPrompt(
+            id: 'weather_theme_pie',
+            icon: 'pie_chart',
+            title: 'Weather DNA Donut',
+            prompt: 'Show me the distribution of scrobbles across different weather themes',
+            preferredChartType: 'donut',
+          ),
+          DataQnAStarterPrompt(
+            id: 'annual_trend_line',
+            icon: 'timeline',
+            title: '15-Year Scrobble Trend',
+            prompt: 'What is the yearly trend of my scrobbles from 2012 to 2026?',
+            preferredChartType: 'line',
+          ),
+          DataQnAStarterPrompt(
+            id: 'top_tracks_bar',
+            icon: 'music_note',
+            title: 'All-Time Anthems',
+            prompt: 'What are the top 8 most played tracks of all time?',
+            preferredChartType: 'horizontal_bar',
+          ),
+          DataQnAStarterPrompt(
+            id: 'circadian_hourly',
+            icon: 'schedule',
+            title: '24h Circadian Rhythm',
+            prompt: 'Show me my hourly listening distribution across the 24 hours of the day',
+            preferredChartType: 'bar',
+          ),
+        ];
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: BgSpace.xl, vertical: BgSpace.md),
+      children: <Widget>[
+        // 1. Cosy Agent Status & Telemetry Banner
+        Container(
+          padding: const EdgeInsets.all(BgSpace.lg),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: <Color>[
+                colors.surfaceContainerHighest,
+                colors.surfaceContainerHigh,
+              ],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: colors.primary.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            children: <Widget>[
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.auto_graph_rounded,
+                  color: Color(0xFF10B981),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: BgSpace.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF10B981),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'BIGQUERY DATA QnA AGENT ACTIVE (geminidataanalytics.googleapis.com/v1beta)',
+                          style: text.labelSmall?.copyWith(
+                            color: const Color(0xFF10B981),
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Conversational NL-to-SQL & On-Demand Graphing over 160,717 scrobbles in `netdev-firebase.barogroove_analytics.scrobbles` • Two-Tier Cache (0.00 USD billed)',
+                      style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: BgSpace.md),
+
+        // 2. Starter Prompts Strip
+        Text(
+          'COSY STARTER PROMPTS (ONE-CLICK GRAPH ON DEMAND)',
+          style: text.labelSmall?.copyWith(
+            color: colors.onSurfaceVariant,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: BgSpace.xs),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: starters.map((DataQnAStarterPrompt s) {
+            return ActionChip(
+              avatar: Icon(
+                s.preferredChartType == 'donut'
+                    ? Icons.pie_chart_outline
+                    : s.preferredChartType == 'line'
+                        ? Icons.show_chart
+                        : Icons.bar_chart,
+                size: 16,
+                color: colors.primary,
+              ),
+              label: Text(
+                s.title,
+                style: text.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              onPressed: _loadingQnA
+                  ? null
+                  : () {
+                      _qnaInputController.text = s.prompt;
+                      _qnaPreferredChartType = s.preferredChartType;
+                      _askQnAQuestion(
+                        s.prompt,
+                        preferredChartType: s.preferredChartType,
+                      );
+                    },
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: BgSpace.md),
+
+        // 3. Question Input & Preferred Chart Bar
+        Container(
+          padding: const EdgeInsets.all(BgSpace.md),
+          decoration: BoxDecoration(
+            color: colors.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: colors.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextField(
+                      controller: _qnaInputController,
+                      onSubmitted: (String val) => _askQnAQuestion(val),
+                      decoration: InputDecoration(
+                        hintText: 'Ask anything about your 15-year scrobble history or request a graph...',
+                        prefixIcon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                        isDense: true,
+                        filled: true,
+                        fillColor: colors.surface,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: colors.outlineVariant),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: BgSpace.sm),
+                  FilledButton.icon(
+                    onPressed: _loadingQnA
+                        ? null
+                        : () => _askQnAQuestion(_qnaInputController.text),
+                    icon: _loadingQnA
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send_rounded, size: 16),
+                    label: Text(_loadingQnA ? 'QUERYING...' : 'ASK & GRAPH'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: BgSpace.sm),
+              Row(
+                children: <Widget>[
+                  Text(
+                    'Default Graph Mode:',
+                    style: text.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+                  ),
+                  const SizedBox(width: 8),
+                  Wrap(
+                    spacing: 6,
+                    children: <Map<String, String>>[
+                      <String, String>{'id': 'auto', 'label': '✨ Auto'},
+                      <String, String>{'id': 'horizontal_bar', 'label': '📉 Rank Bar'},
+                      <String, String>{'id': 'bar', 'label': '📊 Column Bar'},
+                      <String, String>{'id': 'donut', 'label': '🍩 Donut / Pie'},
+                      <String, String>{'id': 'line', 'label': '📈 Timeline'},
+                    ].map((Map<String, String> mode) {
+                      final bool selected = _qnaPreferredChartType == mode['id'];
+                      return ChoiceChip(
+                        label: Text(
+                          mode['label']!,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                          ),
+                        ),
+                        selected: selected,
+                        visualDensity: VisualDensity.compact,
+                        onSelected: (bool val) {
+                          if (val) {
+                            setState(() => _qnaPreferredChartType = mode['id']!);
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: BgSpace.lg),
+
+        // 4. Conversational Turn Cards
+        if (_qnaTurns.isEmpty && _loadingQnA)
+          const Padding(
+            padding: EdgeInsets.all(BgSpace.xxl),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else
+          ..._qnaTurns.asMap().entries.map((MapEntry<int, DataQnAResponse> entry) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: BgSpace.lg),
+              child: _buildQnATurnCard(context, entry.key, entry.value),
+            );
+          }),
+      ],
+    );
+  }
+
+  Widget _buildQnATurnCard(BuildContext context, int index, DataQnAResponse turn) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+    final bool expandedInspector = _expandedInspectorTurns.contains(index);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          // Question Header Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: BgSpace.lg, vertical: BgSpace.md),
+            decoration: BoxDecoration(
+              color: colors.surfaceContainerHighest.withValues(alpha: 0.6),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+            ),
+            child: Row(
+              children: <Widget>[
+                Icon(Icons.question_answer_rounded, size: 18, color: colors.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    turn.question,
+                    style: text.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                  ),
+                  child: Text(
+                    '${turn.cacheStatus} • ${turn.executionMs.toStringAsFixed(1)}ms • \$0.00',
+                    style: text.labelSmall?.copyWith(
+                      color: const Color(0xFF10B981),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.all(BgSpace.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                // Conversational Answer Markdown
+                Text(
+                  turn.answerMarkdown,
+                  style: text.bodyMedium?.copyWith(height: 1.45),
+                ),
+                const SizedBox(height: BgSpace.lg),
+
+                // ON-DEMAND GRAPH STUDIO CARD
+                if (turn.chartSpec.series.isNotEmpty) ...<Widget>[
+                  Container(
+                    padding: const EdgeInsets.all(BgSpace.lg),
+                    decoration: BoxDecoration(
+                      color: colors.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: colors.outlineVariant),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        // Graph Title & On-Demand Switcher Toolbar
+                        Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 12,
+                          runSpacing: 8,
+                          children: <Widget>[
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  turn.chartSpec.title.toUpperCase(),
+                                  style: text.labelMedium?.copyWith(
+                                    color: colors.primary,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.7,
+                                  ),
+                                ),
+                                Text(
+                                  turn.chartSpec.subtitle,
+                                  style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
+                            // On-Demand Chart Switcher Pills
+                            Wrap(
+                              spacing: 6,
+                              children: <Map<String, String>>[
+                                <String, String>{'id': 'horizontal_bar', 'label': '📉 Rank'},
+                                <String, String>{'id': 'bar', 'label': '📊 Column'},
+                                <String, String>{'id': 'donut', 'label': '🍩 Donut'},
+                                <String, String>{'id': 'line', 'label': '📈 Line'},
+                              ].map((Map<String, String> ctype) {
+                                final bool active = turn.chartSpec.chartType == ctype['id'];
+                                return ActionChip(
+                                  backgroundColor: active
+                                      ? colors.primary.withValues(alpha: 0.2)
+                                      : colors.surfaceContainerHigh,
+                                  side: BorderSide(
+                                    color: active ? colors.primary : colors.outlineVariant,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  label: Text(
+                                    ctype['label']!,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                                      color: active ? colors.primary : colors.onSurface,
+                                    ),
+                                  ),
+                                  onPressed: () => _switchTurnChartOnDemand(index, ctype['id']!),
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: BgSpace.lg),
+
+                        // Custom-Painted Visual Graph + Side Legend
+                        LayoutBuilder(
+                          builder: (BuildContext ctx, BoxConstraints constraints) {
+                            final bool isWide = constraints.maxWidth > 640;
+                            final Widget canvasBox = SizedBox(
+                              height: 220,
+                              width: isWide ? constraints.maxWidth * 0.62 : constraints.maxWidth,
+                              child: CustomPaint(
+                                painter: _QnAChartPainter(
+                                  spec: turn.chartSpec,
+                                  primaryColor: colors.primary,
+                                  textColor: colors.onSurface,
+                                  mutedColor: colors.onSurfaceVariant,
+                                ),
+                              ),
+                            );
+
+                            final Widget legendBox = SizedBox(
+                              width: isWide ? constraints.maxWidth * 0.34 : constraints.maxWidth,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: turn.chartSpec.series.take(8).map((QnAChartPoint pt) {
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 3),
+                                    child: Row(
+                                      children: <Widget>[
+                                        Container(
+                                          width: 10,
+                                          height: 10,
+                                          decoration: BoxDecoration(
+                                            color: _parseHexColor(pt.colorHex),
+                                            borderRadius: BorderRadius.circular(3),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            pt.label,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: text.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '${pt.extraLabel.isNotEmpty ? pt.extraLabel : pt.value.toStringAsFixed(0)} (${pt.percentage.toStringAsFixed(1)}%)',
+                                          style: text.labelSmall?.copyWith(
+                                            color: colors.onSurfaceVariant,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            );
+
+                            if (isWide) {
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: <Widget>[canvasBox, legendBox],
+                              );
+                            }
+                            return Column(
+                              children: <Widget>[
+                                canvasBox,
+                                const SizedBox(height: BgSpace.md),
+                                legendBox,
+                              ],
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: BgSpace.md),
+                ],
+
+                // Collapsible Agent Reasoning & Generated BigQuery SQL Drawer
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      if (expandedInspector) {
+                        _expandedInspectorTurns.remove(index);
+                      } else {
+                        _expandedInspectorTurns.add(index);
+                      }
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceContainerHighest.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: colors.outlineVariant),
+                    ),
+                    child: Row(
+                      children: <Widget>[
+                        Icon(
+                          expandedInspector ? Icons.expand_less : Icons.expand_more,
+                          size: 18,
+                          color: colors.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'AGENT REASONING, GENERATED BIGQUERY SQL & TABULAR ROWS (${turn.rows.length} rows)',
+                          style: text.labelSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (expandedInspector) ...<Widget>[
+                  const SizedBox(height: BgSpace.sm),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(BgSpace.md),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        if (turn.thoughts.isNotEmpty) ...<Widget>[
+                          Text(
+                            'AGENT THOUGHT TRAIL:',
+                            style: text.labelSmall?.copyWith(
+                              color: const Color(0xFF38BDF8),
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          ...turn.thoughts.map(
+                            (String th) => Padding(
+                              padding: const EdgeInsets.only(bottom: 3),
+                              child: Text(
+                                '• $th',
+                                style: const TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 11,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: <Widget>[
+                            Text(
+                              'GENERATED BIGQUERY SQL:',
+                              style: text.labelSmall?.copyWith(
+                                color: const Color(0xFF10B981),
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.copy_rounded, size: 15, color: Colors.white70),
+                              tooltip: 'Copy BigQuery SQL',
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: turn.sqlQuery));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Copied BigQuery SQL to clipboard')),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                        SelectableText(
+                          turn.sqlQuery,
+                          style: const TextStyle(
+                            color: Color(0xFFE2E8F0),
+                            fontSize: 12,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // Clickable Follow-Up Suggestions
+                if (turn.suggestions.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: BgSpace.md),
+                  Text(
+                    'SUGGESTED FOLLOW-UP QUESTIONS:',
+                    style: text.labelSmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: turn.suggestions.map((String sug) {
+                      return ActionChip(
+                        avatar: Icon(Icons.subdirectory_arrow_right_rounded, size: 15, color: colors.primary),
+                        label: Text(
+                          sug,
+                          style: text.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        onPressed: _loadingQnA
+                            ? null
+                            : () {
+                                _qnaInputController.text = sug;
+                                _askQnAQuestion(sug);
+                              },
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 Color _parseHexColor(String hex) {
@@ -1813,3 +2535,246 @@ class _DnaStatCard extends StatelessWidget {
     );
   }
 }
+
+class _QnAChartPainter extends CustomPainter {
+  _QnAChartPainter({
+    required this.spec,
+    required this.primaryColor,
+    required this.textColor,
+    required this.mutedColor,
+  });
+
+  final QnAChartSpec spec;
+  final Color primaryColor;
+  final Color textColor;
+  final Color mutedColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final List<QnAChartPoint> series = spec.series;
+    if (series.isEmpty) return;
+
+    final String ctype = spec.chartType;
+    if (ctype == 'donut') {
+      _paintDonut(canvas, size, series);
+    } else if (ctype == 'horizontal_bar') {
+      _paintHorizontalBar(canvas, size, series);
+    } else if (ctype == 'line') {
+      _paintLine(canvas, size, series);
+    } else {
+      _paintVerticalBar(canvas, size, series);
+    }
+  }
+
+  void _paintDonut(Canvas canvas, Size size, List<QnAChartPoint> series) {
+    final double cx = size.width / 2;
+    final double cy = size.height / 2;
+    final double radius = math.min(cx, cy) * 0.82;
+    final double strokeWidth = radius * 0.42;
+
+    double startAngle = -math.pi / 2;
+    final double total = series.fold<double>(0.0, (double s, QnAChartPoint p) => s + p.value);
+    final double denom = total > 0 ? total : 1.0;
+
+    for (final QnAChartPoint pt in series) {
+      final double sweep = (pt.value / denom) * (2 * math.pi);
+      final Paint paint = Paint()
+        ..color = _parseHexColor(pt.colorHex)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.butt;
+
+      canvas.drawArc(
+        Rect.fromCircle(center: Offset(cx, cy), radius: radius - strokeWidth / 2),
+        startAngle,
+        math.max(sweep - 0.03, 0.02),
+        false,
+        paint,
+      );
+      startAngle += sweep;
+    }
+
+    // Center label
+    final TextPainter tp = TextPainter(
+      text: TextSpan(
+        text: '${series.length} Groups',
+        style: TextStyle(
+          color: textColor,
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, Offset(cx - tp.width / 2, cy - tp.height / 2));
+  }
+
+  void _paintHorizontalBar(Canvas canvas, Size size, List<QnAChartPoint> series) {
+    final List<QnAChartPoint> items = series.take(8).toList();
+    final double maxVal = items.fold<double>(1.0, (double m, QnAChartPoint p) => math.max(m, p.value));
+    final double rowHeight = size.height / items.length;
+    const double leftLabelWidth = 115.0;
+    const double rightValueWidth = 65.0;
+    final double barAreaWidth = math.max(size.width - leftLabelWidth - rightValueWidth - 16, 40.0);
+
+    for (int i = 0; i < items.length; i++) {
+      final QnAChartPoint pt = items[i];
+      final double cy = i * rowHeight + rowHeight / 2;
+      final double barH = math.min(rowHeight * 0.56, 16.0);
+
+      // Left label
+      final String lblText = pt.label.length > 16 ? '${pt.label.substring(0, 15)}…' : pt.label;
+      final TextPainter tpLbl = TextPainter(
+        text: TextSpan(
+          text: lblText,
+          style: TextStyle(color: textColor, fontSize: 11, fontWeight: FontWeight.w600),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: leftLabelWidth);
+      tpLbl.paint(canvas, Offset(0, cy - tpLbl.height / 2));
+
+      // Bar background track
+      final Paint bgPaint = Paint()
+        ..color = mutedColor.withValues(alpha: 0.14)
+        ..style = PaintingStyle.fill;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(leftLabelWidth + 8, cy - barH / 2, barAreaWidth, barH),
+          const Radius.circular(5),
+        ),
+        bgPaint,
+      );
+
+      // Active bar
+      final double fillW = math.max((pt.value / maxVal) * barAreaWidth, 4.0);
+      final Paint fillPaint = Paint()
+        ..color = _parseHexColor(pt.colorHex)
+        ..style = PaintingStyle.fill;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(leftLabelWidth + 8, cy - barH / 2, fillW, barH),
+          const Radius.circular(5),
+        ),
+        fillPaint,
+      );
+
+      // Right value text
+      final String valStr = pt.extraLabel.isNotEmpty ? pt.extraLabel : pt.value.toStringAsFixed(0);
+      final TextPainter tpVal = TextPainter(
+        text: TextSpan(
+          text: valStr,
+          style: TextStyle(color: mutedColor, fontSize: 10, fontWeight: FontWeight.w700),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tpVal.paint(canvas, Offset(leftLabelWidth + 14 + fillW, cy - tpVal.height / 2));
+    }
+  }
+
+  void _paintVerticalBar(Canvas canvas, Size size, List<QnAChartPoint> series) {
+    final List<QnAChartPoint> items = series.take(16).toList();
+    final double maxVal = items.fold<double>(1.0, (double m, QnAChartPoint p) => math.max(m, p.value));
+    const double topPad = 18.0;
+    const double bottomPad = 24.0;
+    final double chartH = math.max(size.height - topPad - bottomPad, 30.0);
+    final double slotW = size.width / items.length;
+    final double barW = math.max(slotW * 0.62, 6.0);
+
+    for (int i = 0; i < items.length; i++) {
+      final QnAChartPoint pt = items[i];
+      final double ratio = pt.value / maxVal;
+      final double barH = math.max(ratio * chartH, 4.0);
+      final double x = i * slotW + (slotW - barW) / 2;
+      final double y = topPad + chartH - barH;
+
+      final Paint barPaint = Paint()
+        ..color = _parseHexColor(pt.colorHex)
+        ..style = PaintingStyle.fill;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x, y, barW, barH),
+          const Radius.circular(4),
+        ),
+        barPaint,
+      );
+
+      // Bottom label (every item if <=10 else every 2nd)
+      if (items.length <= 10 || i % 2 == 0) {
+        final String shortLbl = pt.label.length > 6 ? pt.label.substring(0, 5) : pt.label;
+        final TextPainter tp = TextPainter(
+          text: TextSpan(
+            text: shortLbl,
+            style: TextStyle(color: mutedColor, fontSize: 9, fontWeight: FontWeight.w600),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas, Offset(x + barW / 2 - tp.width / 2, topPad + chartH + 5));
+      }
+    }
+  }
+
+  void _paintLine(Canvas canvas, Size size, List<QnAChartPoint> series) {
+    if (series.isEmpty) return;
+    final double maxVal = series.fold<double>(1.0, (double m, QnAChartPoint p) => math.max(m, p.value));
+    const double topPad = 18.0;
+    const double bottomPad = 24.0;
+    const double leftPad = 12.0;
+    const double rightPad = 12.0;
+    final double chartW = math.max(size.width - leftPad - rightPad, 40.0);
+    final double chartH = math.max(size.height - topPad - bottomPad, 30.0);
+
+    final Path linePath = Path();
+    final Path areaPath = Path();
+    final List<Offset> points = <Offset>[];
+
+    for (int i = 0; i < series.length; i++) {
+      final double x = leftPad + (series.length > 1 ? (i / (series.length - 1)) * chartW : chartW / 2);
+      final double y = topPad + chartH - (series[i].value / maxVal) * chartH;
+      points.add(Offset(x, y));
+      if (i == 0) {
+        linePath.moveTo(x, y);
+        areaPath.moveTo(x, topPad + chartH);
+        areaPath.lineTo(x, y);
+      } else {
+        linePath.lineTo(x, y);
+        areaPath.lineTo(x, y);
+      }
+    }
+    if (points.isNotEmpty) {
+      areaPath.lineTo(points.last.dx, topPad + chartH);
+      areaPath.close();
+    }
+
+    final Paint areaPaint = Paint()
+      ..color = primaryColor.withValues(alpha: 0.16)
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(areaPath, areaPaint);
+
+    final Paint linePaint = Paint()
+      ..color = primaryColor
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke;
+    canvas.drawPath(linePath, linePaint);
+
+    for (int i = 0; i < points.length; i++) {
+      final Offset pt = points[i];
+      canvas.drawCircle(pt, 4.0, Paint()..color = _parseHexColor(series[i].colorHex));
+      if (series.length <= 10 || i % 2 == 0) {
+        final String shortLbl = series[i].label.length > 6 ? series[i].label.substring(0, 4) : series[i].label;
+        final TextPainter tp = TextPainter(
+          text: TextSpan(
+            text: shortLbl,
+            style: TextStyle(color: mutedColor, fontSize: 9, fontWeight: FontWeight.w600),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas, Offset(pt.dx - tp.width / 2, topPad + chartH + 5));
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _QnAChartPainter oldDelegate) =>
+      oldDelegate.spec != spec || oldDelegate.primaryColor != primaryColor;
+}
+

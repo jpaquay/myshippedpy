@@ -369,6 +369,12 @@ class ForgeRequest {
     this.trackCount,
     this.geocacheId,
     this.seedScrobbles = const <String>[],
+    this.customTempC,
+    this.customLightPct,
+    this.customColorKelvin,
+    this.customPressureHpa,
+    this.customTrendHpa,
+    this.customTargetBpm,
   });
 
   final double? lat;
@@ -383,6 +389,12 @@ class ForgeRequest {
   final int? trackCount;
   final String? geocacheId;
   final List<String> seedScrobbles;
+  final double? customTempC;
+  final double? customLightPct;
+  final double? customColorKelvin;
+  final double? customPressureHpa;
+  final double? customTrendHpa;
+  final double? customTargetBpm;
 
   JsonMap toJson() => <String, Object?>{
         if (lat != null) 'lat': lat,
@@ -393,6 +405,12 @@ class ForgeRequest {
         if (trackCount != null) 'track_count': trackCount,
         if (geocacheId != null) 'geocache_id': geocacheId,
         if (seedScrobbles.isNotEmpty) 'seed_scrobbles': seedScrobbles,
+        if (customTempC != null) 'custom_temp_c': customTempC,
+        if (customLightPct != null) 'custom_light_pct': customLightPct,
+        if (customColorKelvin != null) 'custom_color_kelvin': customColorKelvin,
+        if (customPressureHpa != null) 'custom_pressure_hpa': customPressureHpa,
+        if (customTrendHpa != null) 'custom_trend_hpa': customTrendHpa,
+        if (customTargetBpm != null) 'custom_target_bpm': customTargetBpm,
       };
 
   ForgeRequest copyWith({
@@ -404,6 +422,12 @@ class ForgeRequest {
     int? trackCount,
     String? geocacheId,
     List<String>? seedScrobbles,
+    double? customTempC,
+    double? customLightPct,
+    double? customColorKelvin,
+    double? customPressureHpa,
+    double? customTrendHpa,
+    double? customTargetBpm,
   }) =>
       ForgeRequest(
         lat: lat ?? this.lat,
@@ -414,6 +438,12 @@ class ForgeRequest {
         trackCount: trackCount ?? this.trackCount,
         geocacheId: geocacheId ?? this.geocacheId,
         seedScrobbles: seedScrobbles ?? this.seedScrobbles,
+        customTempC: customTempC ?? this.customTempC,
+        customLightPct: customLightPct ?? this.customLightPct,
+        customColorKelvin: customColorKelvin ?? this.customColorKelvin,
+        customPressureHpa: customPressureHpa ?? this.customPressureHpa,
+        customTrendHpa: customTrendHpa ?? this.customTrendHpa,
+        customTargetBpm: customTargetBpm ?? this.customTargetBpm,
       );
 }
 
@@ -1291,4 +1321,202 @@ class AdvisorLiveResponse {
         modelUsed: asStringOrNull(json['model_used']) ?? 'gemini-2.5-flash',
       );
 }
+
+// ===========================================================================
+// BigQuery Conversational Data QnA Agent & On-Demand Graphing Models
+// ===========================================================================
+
+class QnAChartPoint {
+  const QnAChartPoint({
+    required this.label,
+    required this.value,
+    required this.colorHex,
+    required this.percentage,
+    required this.extraLabel,
+  });
+
+  final String label;
+  final double value;
+  final String colorHex;
+  final double percentage;
+  final String extraLabel;
+
+  factory QnAChartPoint.fromJson(JsonMap json) => QnAChartPoint(
+        label: asStringOrNull(json['label']) ?? '',
+        value: asDoubleOrNull(json['value']) ?? 0.0,
+        colorHex: asStringOrNull(json['color_hex']) ?? '#FFB74D',
+        percentage: asDoubleOrNull(json['percentage']) ?? 0.0,
+        extraLabel: asStringOrNull(json['extra_label']) ?? '',
+      );
+}
+
+class QnAChartSpec {
+  const QnAChartSpec({
+    required this.chartType,
+    required this.title,
+    required this.subtitle,
+    required this.xLabel,
+    required this.yLabel,
+    required this.series,
+  });
+
+  final String chartType;
+  final String title;
+  final String subtitle;
+  final String xLabel;
+  final String yLabel;
+  final List<QnAChartPoint> series;
+
+  QnAChartSpec copyWith({
+    String? chartType,
+    String? title,
+    String? subtitle,
+    List<QnAChartPoint>? series,
+  }) =>
+      QnAChartSpec(
+        chartType: chartType ?? this.chartType,
+        title: title ?? this.title,
+        subtitle: subtitle ?? this.subtitle,
+        xLabel: xLabel,
+        yLabel: yLabel,
+        series: series ?? this.series,
+      );
+
+  factory QnAChartSpec.fromJson(JsonMap json) => QnAChartSpec(
+        chartType: asStringOrNull(json['chart_type']) ?? 'horizontal_bar',
+        title: asStringOrNull(json['title']) ?? 'Almanac Data Visualization',
+        subtitle: asStringOrNull(json['subtitle']) ?? 'BigQuery OLAP',
+        xLabel: asStringOrNull(json['x_label']) ?? 'Category',
+        yLabel: asStringOrNull(json['y_label']) ?? 'Scrobbles',
+        series: <QnAChartPoint>[
+          for (final Object? item in asJsonList(json['series']) ?? const <Object?>[])
+            if (asJsonMap(item) case final JsonMap m) QnAChartPoint.fromJson(m),
+        ],
+      );
+}
+
+class DataQnAStarterPrompt {
+  const DataQnAStarterPrompt({
+    required this.id,
+    required this.icon,
+    required this.title,
+    required this.prompt,
+    required this.preferredChartType,
+  });
+
+  final String id;
+  final String icon;
+  final String title;
+  final String prompt;
+  final String preferredChartType;
+
+  factory DataQnAStarterPrompt.fromJson(JsonMap json) => DataQnAStarterPrompt(
+        id: asStringOrNull(json['id']) ?? '',
+        icon: asStringOrNull(json['icon']) ?? 'auto_graph',
+        title: asStringOrNull(json['title']) ?? '',
+        prompt: asStringOrNull(json['prompt']) ?? '',
+        preferredChartType: asStringOrNull(json['preferred_chart_type']) ?? 'auto',
+      );
+}
+
+class DataQnAStatusResponse {
+  const DataQnAStatusResponse({
+    required this.agentActive,
+    required this.serviceName,
+    required this.projectId,
+    required this.datasetId,
+    required this.tables,
+    required this.cacheEnabled,
+    required this.starterPrompts,
+  });
+
+  final bool agentActive;
+  final String serviceName;
+  final String projectId;
+  final String datasetId;
+  final List<String> tables;
+  final bool cacheEnabled;
+  final List<DataQnAStarterPrompt> starterPrompts;
+
+  factory DataQnAStatusResponse.fromJson(JsonMap json) => DataQnAStatusResponse(
+        agentActive: json['agent_active'] != false,
+        serviceName: asStringOrNull(json['service_name']) ??
+            'BigQuery Conversational Data QnA Agent (geminidataanalytics.googleapis.com/v1beta)',
+        projectId: asStringOrNull(json['project_id']) ?? 'netdev-firebase',
+        datasetId: asStringOrNull(json['dataset_id']) ?? 'barogroove_analytics',
+        tables: asStringList(json['tables']),
+        cacheEnabled: json['cache_enabled'] != false,
+        starterPrompts: <DataQnAStarterPrompt>[
+          for (final Object? item in asJsonList(json['starter_prompts']) ?? const <Object?>[])
+            if (asJsonMap(item) case final JsonMap m) DataQnAStarterPrompt.fromJson(m),
+        ],
+      );
+}
+
+class DataQnAResponse {
+  const DataQnAResponse({
+    required this.question,
+    required this.answerMarkdown,
+    required this.thoughts,
+    required this.sqlQuery,
+    required this.rows,
+    required this.chartSpec,
+    required this.suggestions,
+    required this.engine,
+    required this.cacheStatus,
+    required this.executionMs,
+    required this.bytesBilled,
+    required this.estimatedCostUsd,
+  });
+
+  final String question;
+  final String answerMarkdown;
+  final List<String> thoughts;
+  final String sqlQuery;
+  final List<JsonMap> rows;
+  final QnAChartSpec chartSpec;
+  final List<String> suggestions;
+  final String engine;
+  final String cacheStatus;
+  final double executionMs;
+  final int bytesBilled;
+  final double estimatedCostUsd;
+
+  DataQnAResponse copyWith({
+    QnAChartSpec? chartSpec,
+  }) =>
+      DataQnAResponse(
+        question: question,
+        answerMarkdown: answerMarkdown,
+        thoughts: thoughts,
+        sqlQuery: sqlQuery,
+        rows: rows,
+        chartSpec: chartSpec ?? this.chartSpec,
+        suggestions: suggestions,
+        engine: engine,
+        cacheStatus: cacheStatus,
+        executionMs: executionMs,
+        bytesBilled: bytesBilled,
+        estimatedCostUsd: estimatedCostUsd,
+      );
+
+  factory DataQnAResponse.fromJson(JsonMap json) => DataQnAResponse(
+        question: asStringOrNull(json['question']) ?? '',
+        answerMarkdown: asStringOrNull(json['answer_markdown']) ?? '',
+        thoughts: asStringList(json['thoughts']),
+        sqlQuery: asStringOrNull(json['sql_query']) ?? '',
+        rows: <JsonMap>[
+          for (final Object? item in asJsonList(json['rows']) ?? const <Object?>[])
+            if (asJsonMap(item) case final JsonMap m) m,
+        ],
+        chartSpec: QnAChartSpec.fromJson(asJsonMap(json['chart_spec']) ?? const <String, Object?>{}),
+        suggestions: asStringList(json['suggestions']),
+        engine: asStringOrNull(json['engine']) ?? 'bigquery_data_qna_v1beta',
+        cacheStatus: asStringOrNull(json['cache_status']) ?? 'MEMORY_HIT',
+        executionMs: asDoubleOrNull(json['execution_ms']) ?? 0.4,
+        bytesBilled: (asDoubleOrNull(json['bytes_billed']) ?? 0).round(),
+        estimatedCostUsd: asDoubleOrNull(json['estimated_cost_usd']) ?? 0.0,
+      );
+}
+
 

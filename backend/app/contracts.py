@@ -584,6 +584,14 @@ class ForgeRequest(BaseModel):
         default_factory=list,
         description="Optional scrobble keys or titles ('Artist - Title') selected from Almanac to seed the set.",
     )
+    custom_temp_c: float | None = Field(None, description="Manual temperature override in °C (-15 to 42).")
+    custom_light_pct: float | None = Field(None, description="Manual solar luminance override in % (0 to 100).")
+    custom_color_kelvin: float | None = Field(
+        None, description="Manual sky color spectrum override in Kelvin (2000K Warm Amber to 10000K Deep Cyan)."
+    )
+    custom_pressure_hpa: float | None = Field(None, description="Manual barometric pressure override in hPa (975 to 1040).")
+    custom_trend_hpa: float | None = Field(None, description="Manual 6h pressure derivative override in hPa/6h (-6 to +6).")
+    custom_target_bpm: float | None = Field(None, description="Manual target BPM override (60 to 165).")
 
     @model_validator(mode="before")
     @classmethod

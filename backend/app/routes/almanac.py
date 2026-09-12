@@ -24,8 +24,20 @@ from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from ..almanac.data_qna import (
+    DataQnARequest,
+    DataQnAResponse,
+    DataQnAStatusResponse,
+    GraphOnDemandRequest,
+    QnAChartSpec,
+    ask_data_qna,
+    generate_graph_on_demand,
+    get_qna_cache_stats,
+    stream_data_qna_sse,
+)
 from ..almanac.scrobbles import (
     ComplexAnalyticsResponse,
     PlaylistCohortRequest,
@@ -208,6 +220,59 @@ async def get_cache_stats() -> dict[str, Any]:
 async def post_clear_cache() -> dict[str, Any]:
     """Clears in-memory and persistent disk BigQuery query caches."""
     return clear_bq_cache()
+
+
+# --------------------------------------------------------------------------
+# BigQuery Conversational Data QnA Agent & On-Demand Graphing API
+# --------------------------------------------------------------------------
+
+
+@router.get(
+    "/qna/status",
+    response_model=DataQnAStatusResponse,
+    summary="Status & starter prompts for BigQuery Conversational Data QnA Agent",
+)
+async def get_data_qna_status() -> DataQnAStatusResponse:
+    """Returns active status of BigQuery Data QnA Agent (`geminidataanalytics.googleapis.com/v1beta`), cache stats, and starter prompts."""
+    return DataQnAStatusResponse(cache_stats=get_qna_cache_stats())
+
+
+@router.post(
+    "/qna/ask",
+    response_model=DataQnAResponse,
+    summary="Ask a natural language question to the BigQuery Data QnA Agent with On-Demand Graphing",
+)
+async def post_data_qna_ask(
+    req: DataQnARequest,
+    user: AuthUser = Depends(_resolve_user),
+) -> DataQnAResponse:
+    """Executes a conversational BigQuery Data QnA turn and returns answer markdown, SQL, tabular rows, and QnAChartSpec."""
+    return ask_data_qna(req)
+
+
+@router.post(
+    "/qna/stream",
+    summary="Server-Sent Events (SSE) streaming endpoint for BigQuery Data QnA Agent",
+)
+async def post_data_qna_stream(
+    req: DataQnARequest,
+    user: AuthUser = Depends(_resolve_user),
+) -> StreamingResponse:
+    """Streams THOUGHT, SQL, CHART, FINAL_RESPONSE, and SUGGESTION events in real time."""
+    return StreamingResponse(stream_data_qna_sse(req), media_type="text/event-stream")
+
+
+@router.post(
+    "/qna/graph-on-demand",
+    response_model=QnAChartSpec,
+    summary="Re-synthesize any tabular query result into a bar, horizontal_bar, donut, or line chart on demand",
+)
+async def post_graph_on_demand(
+    req: GraphOnDemandRequest,
+    user: AuthUser = Depends(_resolve_user),
+) -> QnAChartSpec:
+    """Generates a structured visual QnAChartSpec on demand for any requested chart type."""
+    return generate_graph_on_demand(req)
 
 
 @router.post("/scrobbles/sync", response_model=ScrobbleSearchResponse, summary="Sync Last.fm scrobbles into Firestore")

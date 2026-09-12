@@ -327,6 +327,45 @@ class BarogrooveApi {
         PlaylistCohortResponse.fromJson,
       );
 
+  Future<ApiResult<DataQnAStatusResponse>> getDataQnAStatus() => _getJson(
+        '/api/almanac/qna/status',
+        DataQnAStatusResponse.fromJson,
+      );
+
+  Future<ApiResult<DataQnAResponse>> askDataQnA({
+    required String question,
+    String preferredChartType = 'auto',
+    List<Map<String, String>> history = const <Map<String, String>>[],
+    bool forceRefresh = false,
+  }) =>
+      _postJson(
+        '/api/almanac/qna/ask',
+        <String, Object?>{
+          'question': question,
+          'preferred_chart_type': preferredChartType,
+          'history': history,
+          'force_refresh': forceRefresh,
+        },
+        DataQnAResponse.fromJson,
+      );
+
+  Future<ApiResult<QnAChartSpec>> graphOnDemand({
+    required String chartType,
+    required List<JsonMap> rows,
+    String title = '',
+    String subtitle = '',
+  }) =>
+      _postJson(
+        '/api/almanac/qna/graph-on-demand',
+        <String, Object?>{
+          'chart_type': chartType,
+          'rows': rows,
+          if (title.isNotEmpty) 'title': title,
+          if (subtitle.isNotEmpty) 'subtitle': subtitle,
+        },
+        QnAChartSpec.fromJson,
+      );
+
   Future<ApiResult<Playlist>> getForgedPlaylist(String playlistId) async {
     final ApiResult<http.Response> res =
         await _get('/api/almanac/forges/$playlistId');
