@@ -10,6 +10,19 @@ Live at [bg.netdev.be](https://bg.netdev.be).
 
 ---
 
+## 📚 Documentation & Deep-Dive Guides (`docs/`)
+
+For full architectural blueprints, API contracts, and implementation details, explore the **[Documentation Hub (`docs/README.md`)](./docs/README.md)**:
+
+| Guide | Topics Covered |
+| :--- | :--- |
+| **[15-Year Scrobble Dual-Store & Two-Tier OLAP Cache](./docs/ALMANAC_DUAL_STORE_AND_CACHE.md)** | Hydration of `160,717` Last.fm/Spotify scrobbles (`2012–2026`), Firestore OLTP + BigQuery OLAP (`netdev-firebase.barogroove_almanac.scrobbles`) Dual-Store architecture, Two-Tier L1/L2 caching (`0.4ms` latency), and `$0.00` query cost guardrails. |
+| **[Playlist & Song Cohort Analysis Engine](./docs/PLAYLIST_COHORT_ANALYSIS.md)** | Universal playlist/tracklist parser (`POST /api/almanac/playlist-cohort-check`), 4-tier cohort classification (`Obsession`, `Heavy Rotation`, `Discovery`, `Unheard`), Sonic DNA affinity scoring, and custom-painted Donut & 15-Year Timeline charts. |
+| **[BigQuery Conversational Data QnA Agent & Graph Studio](./docs/BIGQUERY_DATA_QNA_AGENT.md)** | Live conversational BigQuery analytics (`geminidataanalytics.googleapis.com/v1beta`), SSE streaming, On-Demand Graph Synthesis (`horizontal_bar`, `bar`, `donut`, `line`), Two-Tier QnA cache, and local OLAP fallback. |
+| **[A2UI v1.0 Single-Source UI & AI Observability](./docs/A2UI_ARCHITECTURE.md)** | Single-source Python surface catalog (`backend/app/a2ui/`), 3-mode Atmospheric Synthesis Console, 4-tab Almanac UI, and real-time AI Observability & Telemetry Inspector (`TelemetryInspectorPanel`). |
+
+---
+
 ## The insight
 
 Every weather-playlist app ever built maps `rain -> sad songs`. That is worthless.
@@ -124,7 +137,8 @@ flowchart TB
         SINK["PlaylistSink<br/>Spotify → M3U fallback"]
     end
 
-    ALM["<b>The Almanac</b><br/>every forge persisted<br/>loved/skipped → ridge regression<br/>→ per-user nudge to the matrix"]
+    ALM["<b>The Almanac & Dual-Store Warehouse</b><br/>Firestore OLTP + BigQuery OLAP (160,717 scrobbles)<br/>Two-Tier Cache ($0.00 cost ceiling)<br/>loved/skipped → ridge regression nudge"]
+    QNA["<b>BigQuery Data QnA & Cohort Studio</b><br/>geminidataanalytics.googleapis.com/v1beta<br/>Playlist Cohort Check + On-Demand Graphing"]
 
     OM --> SKY --> MTX --> SON --> BIAS --> FORGE
     LFM --> FORGE
@@ -134,6 +148,8 @@ flowchart TB
     A2UI --> FLUT
     A2UI --> MCP
     FORGE --> ALM
+    ALM <--> QNA
+    QNA --> FLUT
     ALM -. "nudge matrix" .-> MTX
 
     classDef dead fill:#fee,stroke:#c33,stroke-dasharray:4
@@ -184,7 +200,7 @@ Nothing below needs a credential, an API key, or a network connection.
 ```bash
 cd barogroove
 make install          # venv + dependencies
-make test             # 820 tests, no network required
+make test             # 861 tests, no network required
 make run              # http://localhost:8000
 ```
 
@@ -268,18 +284,32 @@ the token documents are never client-readable.
 
 ---
 
-## The Almanac
+## The Almanac & BigQuery Analytical Studio
 
 Every forge is persisted with its sky, its target, its theme, its genre and its
 tracks. Loved and skipped signals feed a **per-user ridge regression** that emits a
-9×7 delta added to the transfer matrix.
+9×7 delta added to the transfer matrix. It is regularised hard and clamped harder,
+refusing to emit anything below a minimum sample count.
 
-It is regularised hard and clamped harder, and it refuses to emit anything at all
-below a minimum sample count. The base matrix is the product's opinion; the nudge
-is a lean, not a coup.
+Beyond forge history, the Almanac operates as a **4-Tab Musical Intelligence Studio**
+backed by a **Dual-Store Architecture** (`Firestore OLTP` + `BigQuery OLAP` over
+**`160,717` scrobbles spanning 15 years** from `2012` to `2026`):
 
-Out of that history come the retrospectives: *your rain sound*, *your first-frost
-record*, and — most on-thesis — *your falling barometer*.
+1. **Forge History & Retrospectives**: Chronological weather-forged sets (*your rain sound*,
+   *your first-frost record*, *your falling barometer*) and Ridge Regression feedback loops.
+2. **Scrobble Explorer & Sonic DNA**: Sub-millisecond inspection of `160,717` scrobbles across
+   `1,499` artists and `4,300` tracks, protected by a **Two-Tier L1/L2 Cache** (`0.4ms` hit latency)
+   and strict **`$0.00` BigQuery cost guardrails** (`useQueryCache: True`, `100 MB` max billed ceiling).
+3. **Playlist Cohort Analysis Cross-Check (`POST /api/almanac/playlist-cohort-check`)**: Paste any
+   Spotify URL, Last.fm URL, M3U, or tracklist to cross-check against your 15-year scrobble cohort.
+   Classifies every song into *Obsession (50+ plays)*, *Heavy Rotation (10–49)*, *Discovery (1–9)*,
+   or *Unheard (Fresh)* with custom-painted Donut & 15-Year Timeline charts.
+4. **BigQuery Data QnA & On-Demand Graph Studio (`POST /api/almanac/qna/ask` & `/graph-on-demand`)**:
+   Conversational analytics powered by Google Cloud `geminidataanalytics.googleapis.com/v1beta`
+   directly over `netdev-firebase.barogroove_almanac.scrobbles`, synthesizing live SQL, natural-language
+   answers, and on-demand custom charts (`horizontal_bar`, `bar`, `donut`, `line`).
+
+👉 *See the full technical deep-dives in [`docs/`](./docs/README.md).*
 
 ---
 
@@ -288,24 +318,33 @@ record*, and — most on-thesis — *your falling barometer*.
 ```
 app.py                      entry point (uvicorn app:app)
 CNAME                       bg.netdev.be
+docs/                       Architecture & deep-dive documentation hub
+  README.md                 Documentation index & quick reference
+  ALMANAC_DUAL_STORE_AND_CACHE.md
+  PLAYLIST_COHORT_ANALYSIS.md
+  BIGQUERY_DATA_QNA_AGENT.md
+  A2UI_ARCHITECTURE.md
+data/scrobbles/             Pre-warmed 160k scrobble summary, track catalog & QnA cache
 backend/app/
   contracts.py              the treaty: every shared type lives here
   config.py  http.py        settings + Secret Manager; the one retrying client
   container.py              lazy service resolution with graceful fallback
-  sky/                      Open-Meteo, the 9-dim extractor, fixtures
+  sky/                      Open-Meteo, the 9-dim extractor, world street-art geocaches
   sonic/                    the transfer matrix, 8 themes, corridors, rationale
   lastfm/                   client, tag lexicon, taste-graph oracle, offline corpus
   sinks/                    PlaylistSink: Spotify (PKCE) and the M3U fallback
   forge/                    candidates, rerank, diversity, arc shaping, engine
   a2ui/                     the catalog + surface builders (single source of UI truth)
   mcp/                      5 MCP tools over streamable HTTP, same surfaces
-  almanac/                  persistence, ridge regression, retrospectives
+  almanac/                  Dual-Store OLAP, Two-Tier cache, Cohort check, BigQuery Data QnA
+  dataviz/                  Atmospheric telemetry charts & Gemini Live 2.5 Voice/Text advisor
+  telemetry/                AI observability, distributed trace spans & memory extractor
   firebase/                 auth, Firestore, encrypted token vault
-frontend/                   Flutter app — an A2UI renderer
+frontend/                   Flutter Web & PWA app — A2UI renderer + custom canvas charts
 deploy/                     Cloud Run, Cloud Build, IAM
 firebase_cfg/               Hosting, Firestore rules and indexes
 scripts/demo.py             the 60-second demo
-tests/                      820 tests, no network
+tests/                      861 tests, no network required
 ```
 
 ### Where to look first
