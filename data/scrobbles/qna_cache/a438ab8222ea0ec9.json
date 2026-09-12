@@ -1,0 +1,147 @@
+{
+  "answer_markdown": "The most played track of all time is **\"Walk on the Wild Side\" by Lou Reed** with 182 plays, followed by Stromae's **\"Formidable\"** (156) and **\"Papaoutai\"** (143).\n\n### Key Takeaways\n- **Lou Reed** leads all individual tracks with 182 scrobbles for *\"Walk on the Wild Side\"*.\n- **Stromae** and **Georges Brassens** each have two tracks featured in the top 8 (Stromae with *\"Formidable\"* and *\"Papaoutai\"*; Brassens with *\"Je me suis fait tout petit\"* and *\"La mauvaise r\u00e9putation\"*).\n- Classic rock, French chanson, and reggae comprise the upper echelon of your all-time library.",
+  "thoughts": [
+    "Analyzing context \u2014 Retrieved context for 2 tables.",
+    "Running a query \u2014 SELECT artist,\n       track,\n       COUNT(*) AS play_count\nFROM `netdev-firebase.barogroove_analytics.scrobbles`\nGROUP BY artist,\n         track\nORDER BY play_count DESC\nLIMIT 8",
+    "Query execution completed \u2014 Query returned 8 rows in 1.84s."
+  ],
+  "sql_query": "SELECT artist,\n       track,\n       COUNT(*) AS play_count\nFROM `netdev-firebase.barogroove_analytics.scrobbles`\nGROUP BY artist,\n         track\nORDER BY play_count DESC\nLIMIT 8",
+  "rows": [
+    {
+      "track": "Walk on the Wild Side",
+      "play_count": 182,
+      "artist": "Lou Reed"
+    },
+    {
+      "artist": "Stromae",
+      "play_count": 156,
+      "track": "Formidable"
+    },
+    {
+      "artist": "Stromae",
+      "track": "Papaoutai",
+      "play_count": 143
+    },
+    {
+      "track": "Via con me",
+      "play_count": 140,
+      "artist": "Paolo Conte"
+    },
+    {
+      "track": "Je me suis fait tout petit",
+      "play_count": 131,
+      "artist": "Georges Brassens"
+    },
+    {
+      "artist": "Georges Brassens",
+      "track": "La mauvaise r\u00e9putation",
+      "play_count": 122
+    },
+    {
+      "artist": "Max Romeo",
+      "track": "I Chase The Devil",
+      "play_count": 119
+    },
+    {
+      "artist": "Paul Simon",
+      "play_count": 117,
+      "track": "50 Ways to Leave Your Lover"
+    }
+  ],
+  "vega_config": {
+    "title": "Top 8 Most Played Tracks of All Time",
+    "mark": "bar",
+    "usermeta": {
+      "data_result_name": "top_8_most_played_tracks",
+      "chart_id": "top_8_tracks_chart"
+    },
+    "encoding": {
+      "y": {
+        "field": "track",
+        "title": "Track Title",
+        "sort": "-x",
+        "type": "nominal"
+      },
+      "tooltip": [
+        {
+          "type": "nominal",
+          "field": "track"
+        },
+        {
+          "type": "nominal",
+          "field": "artist"
+        },
+        {
+          "field": "play_count",
+          "type": "quantitative"
+        }
+      ],
+      "x": {
+        "title": "Play Count",
+        "field": "play_count",
+        "type": "quantitative"
+      },
+      "color": {
+        "field": "artist",
+        "title": "Artist",
+        "type": "nominal"
+      }
+    },
+    "data": {
+      "values": [
+        {
+          "track": "Walk on the Wild Side",
+          "artist": "Lou Reed",
+          "play_count": 182
+        },
+        {
+          "artist": "Stromae",
+          "play_count": 156,
+          "track": "Formidable"
+        },
+        {
+          "artist": "Stromae",
+          "track": "Papaoutai",
+          "play_count": 143
+        },
+        {
+          "artist": "Paolo Conte",
+          "play_count": 140,
+          "track": "Via con me"
+        },
+        {
+          "play_count": 131,
+          "track": "Je me suis fait tout petit",
+          "artist": "Georges Brassens"
+        },
+        {
+          "artist": "Georges Brassens",
+          "play_count": 122,
+          "track": "La mauvaise r\u00e9putation"
+        },
+        {
+          "play_count": 119,
+          "track": "I Chase The Devil",
+          "artist": "Max Romeo"
+        },
+        {
+          "play_count": 117,
+          "artist": "Paul Simon",
+          "track": "50 Ways to Leave Your Lover"
+        }
+      ]
+    },
+    "config": {
+      "view": {
+        "continuousWidth": 400,
+        "continuousHeight": 300
+      }
+    }
+  },
+  "suggestions": [
+    "Show the top artists by total play count.",
+    "Analyze the play count trend over time for Lou Reed's \"Walk on the Wild Side\".",
+    "What are the most common weather themes associated with these top tracks?"
+  ],
+  "engine": "bigquery_data_qna_v1beta"
+}

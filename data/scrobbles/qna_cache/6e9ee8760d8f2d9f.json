@@ -1,0 +1,49 @@
+{
+  "answer_markdown": "I identified French chanson and trip-hop artists based on track tag matches for 'french chanson', 'chanson', 'chanson fran\u00e7aise', and 'trip-hop'.\n\nYour top 6 French chanson and trip-hop artists by scrobbles are **Chinese Man** (1,820 scrobbles), **Stromae** (583 scrobbles), **Wax Tailor** (434 scrobbles), **Daft Punk** (391 scrobbles), **Moby** (306 scrobbles), and **Massive Attack** (175 scrobbles).",
+  "thoughts": [
+    "Analyzing context \u2014 Retrieving context for 2 tables.",
+    "Context retrieved \u2014 Retrieved context for 2 tables.",
+    "Running a query \u2014 SELECT s.artist,\n       COUNT(*) AS scrobble_count,\n       ARRAY_TO_STRING(ARRAY_AGG(DISTINCT t\n                                 IGNORE NULLS), ', ') AS matching_tags\nFROM `netdev-firebase.barogroove_analytics.scrobbles` AS s,\n     UNNEST(s.tags) AS t\nWHERE LOWER(t) LIKE '%french chanson%'\n  OR LOWER(t) LIKE '%chanson fran\u00e7aise%'\n  OR LOWER(t) LIKE '%chanson francaise%'\n  OR LOWER(t) = 'chanson'\n  OR LOWER(t) LIKE '%trip-hop%'\n  OR LOWER(t) LIKE '%trip hop%'\nGROUP BY s.artist\nORDER BY scrobble_count DESC\nLIMIT 6",
+    "Query execution completed \u2014 Query returned 6 rows in 1.76s."
+  ],
+  "sql_query": "SELECT s.artist,\n       COUNT(*) AS scrobble_count,\n       ARRAY_TO_STRING(ARRAY_AGG(DISTINCT t\n                                 IGNORE NULLS), ', ') AS matching_tags\nFROM `netdev-firebase.barogroove_analytics.scrobbles` AS s,\n     UNNEST(s.tags) AS t\nWHERE LOWER(t) LIKE '%french chanson%'\n  OR LOWER(t) LIKE '%chanson fran\u00e7aise%'\n  OR LOWER(t) LIKE '%chanson francaise%'\n  OR LOWER(t) = 'chanson'\n  OR LOWER(t) LIKE '%trip-hop%'\n  OR LOWER(t) LIKE '%trip hop%'\nGROUP BY s.artist\nORDER BY scrobble_count DESC\nLIMIT 6",
+  "rows": [
+    {
+      "artist": "Chinese Man",
+      "scrobble_count": 1820,
+      "matching_tags": "trip-hop"
+    },
+    {
+      "artist": "Stromae",
+      "scrobble_count": 583,
+      "matching_tags": "trip-hop"
+    },
+    {
+      "artist": "Wax Tailor",
+      "matching_tags": "trip-hop",
+      "scrobble_count": 434
+    },
+    {
+      "matching_tags": "trip-hop",
+      "scrobble_count": 391,
+      "artist": "Daft Punk"
+    },
+    {
+      "artist": "Moby",
+      "scrobble_count": 306,
+      "matching_tags": "trip-hop"
+    },
+    {
+      "scrobble_count": 175,
+      "artist": "Massive Attack",
+      "matching_tags": "trip-hop"
+    }
+  ],
+  "vega_config": null,
+  "suggestions": [
+    "What are my top tracks for Chinese Man?",
+    "Show my scrobble trends over time for French chanson and trip-hop artists.",
+    "Detect any anomalous listening spikes for trip-hop artists in my history."
+  ],
+  "engine": "bigquery_data_qna_v1beta"
+}

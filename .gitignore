@@ -20,7 +20,11 @@ flutter_app/.dart_tool/
 frontend/build/
 
 frontend/.dart_tool/
-frontend/build/
-.venv/
-__pycache__/
-data/
+# Ignore raw temporary data dumps, keep pre-computed OLAP & QnA caches
+data/*
+!data/scrobbles/
+data/scrobbles/*
+!data/scrobbles/summary_cache.json
+!data/scrobbles/track_catalog.jsonl
+!data/scrobbles/qna_cache/
+

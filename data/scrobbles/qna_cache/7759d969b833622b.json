@@ -1,0 +1,108 @@
+{
+  "answer_markdown": "Here is the yearly breakdown of your scrobbles, unique artists, and unique tracks from 2012 to 2026:\n\n### Listening Trends & Milestones\n- **Peak Listening Years**: Scrobbles peaked in **2025** with **18,072 scrobbles** across 4,562 unique artists and 11,459 tracks, following strong years in **2013** (17,059) and **2023** (16,429).\n- **Diversity Expansion**: Catalog diversity grew substantially from 2021 onwards, with unique artists increasing from 1,385 in 2021 to a high of 4,562 in 2025.\n- **Low Activity Period**: Listening activity hit its lowest level between **2019 and 2020** (~4.1k\u20134.2k scrobbles/year) before surging into a multi-year growth trend.",
+  "thoughts": [
+    "Analyzing context \u2014 Retrieved context for 2 tables.",
+    "Running a query \u2014 SELECT YEAR,\n       COUNT(*) AS total_scrobbles,\n       COUNT(DISTINCT artist_norm) AS unique_artists,\n       COUNT(DISTINCT track_key) AS unique_tracks\nFROM `netdev-firebase.barogroove_analytics.scrobbles`\nWHERE YEAR BETWEEN 2012 AND 2026\nGROUP BY YEAR\nORDER BY YEAR ASC;",
+    "Query execution completed \u2014 Query returned 15 rows in 1.88s."
+  ],
+  "sql_query": "SELECT YEAR,\n       COUNT(*) AS total_scrobbles,\n       COUNT(DISTINCT artist_norm) AS unique_artists,\n       COUNT(DISTINCT track_key) AS unique_tracks\nFROM `netdev-firebase.barogroove_analytics.scrobbles`\nWHERE YEAR BETWEEN 2012 AND 2026\nGROUP BY YEAR\nORDER BY YEAR ASC;",
+  "rows": [
+    {
+      "unique_tracks": 1337,
+      "total_scrobbles": 2324,
+      "year": 2012,
+      "unique_artists": 414
+    },
+    {
+      "unique_artists": 1389,
+      "total_scrobbles": 17059,
+      "unique_tracks": 5443,
+      "year": 2013
+    },
+    {
+      "unique_tracks": 2883,
+      "total_scrobbles": 9928,
+      "unique_artists": 1174,
+      "year": 2014
+    },
+    {
+      "total_scrobbles": 11622,
+      "unique_artists": 759,
+      "unique_tracks": 2391,
+      "year": 2015
+    },
+    {
+      "year": 2016,
+      "total_scrobbles": 8451,
+      "unique_tracks": 1708,
+      "unique_artists": 559
+    },
+    {
+      "year": 2017,
+      "unique_artists": 945,
+      "total_scrobbles": 12579,
+      "unique_tracks": 3484
+    },
+    {
+      "total_scrobbles": 8033,
+      "unique_artists": 777,
+      "year": 2018,
+      "unique_tracks": 2170
+    },
+    {
+      "year": 2019,
+      "unique_tracks": 2203,
+      "total_scrobbles": 4132,
+      "unique_artists": 1016
+    },
+    {
+      "unique_artists": 1080,
+      "total_scrobbles": 4246,
+      "year": 2020,
+      "unique_tracks": 2284
+    },
+    {
+      "year": 2021,
+      "unique_artists": 1385,
+      "total_scrobbles": 6463,
+      "unique_tracks": 3491
+    },
+    {
+      "total_scrobbles": 11363,
+      "year": 2022,
+      "unique_tracks": 5630,
+      "unique_artists": 2130
+    },
+    {
+      "year": 2023,
+      "unique_tracks": 6676,
+      "total_scrobbles": 16429,
+      "unique_artists": 2666
+    },
+    {
+      "unique_tracks": 7628,
+      "total_scrobbles": 15136,
+      "year": 2024,
+      "unique_artists": 3374
+    },
+    {
+      "unique_tracks": 11459,
+      "unique_artists": 4562,
+      "total_scrobbles": 18072,
+      "year": 2025
+    },
+    {
+      "year": 2026,
+      "total_scrobbles": 14880,
+      "unique_tracks": 8775,
+      "unique_artists": 3671
+    }
+  ],
+  "vega_config": null,
+  "suggestions": [
+    "Forecast my scrobble count for 2027 based on historical trends.",
+    "Which artists contributed most to the peak listening in 2025?",
+    "Analyze the monthly scrobble distribution across 2025 and 2026."
+  ],
+  "engine": "bigquery_data_qna_v1beta"
+}

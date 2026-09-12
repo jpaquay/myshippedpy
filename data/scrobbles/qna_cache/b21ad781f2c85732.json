@@ -1,0 +1,112 @@
+{
+  "answer_markdown": "Here is the breakdown and bar chart of your top 8 artists by total scrobble count, led by Georges Brassens (3,802 scrobbles) and Serge Gainsbourg (3,427 scrobbles).\n\n### Key Takeaways\n- **French Chanson Dominance:** **Georges Brassens** (3,802) and **Serge Gainsbourg** (3,427) lead by a substantial margin, accounting for over 7,200 plays combined.\n- **Top Tier Distribution:** The top 8 is rounded out by **Chinese Man** (1,820), **Tryo** (1,645), **Jacques Brel** (1,574), **Paolo Conte** (1,426), **Claude Nougaro** (1,267), and **Simon & Garfunkel** (1,211).",
+  "thoughts": [
+    "Analyzing context \u2014 Retrieved context for 2 tables.",
+    "Running a query \u2014 SELECT scrobbles.artist,\n       COUNT(*) AS scrobble_count\nFROM `netdev-firebase.barogroove_analytics.scrobbles` AS scrobbles\nWHERE scrobbles.artist IS NOT NULL\nGROUP BY scrobbles.artist\nORDER BY scrobble_count DESC\nLIMIT 8",
+    "Query execution completed \u2014 Query returned 8 rows in 2.05s."
+  ],
+  "sql_query": "SELECT scrobbles.artist,\n       COUNT(*) AS scrobble_count\nFROM `netdev-firebase.barogroove_analytics.scrobbles` AS scrobbles\nWHERE scrobbles.artist IS NOT NULL\nGROUP BY scrobbles.artist\nORDER BY scrobble_count DESC\nLIMIT 8",
+  "rows": [
+    {
+      "artist": "Georges Brassens",
+      "scrobble_count": 3802
+    },
+    {
+      "scrobble_count": 3427,
+      "artist": "Serge Gainsbourg"
+    },
+    {
+      "scrobble_count": 1820,
+      "artist": "Chinese Man"
+    },
+    {
+      "scrobble_count": 1645,
+      "artist": "Tryo"
+    },
+    {
+      "artist": "Jacques Brel",
+      "scrobble_count": 1574
+    },
+    {
+      "scrobble_count": 1426,
+      "artist": "Paolo Conte"
+    },
+    {
+      "scrobble_count": 1267,
+      "artist": "Claude Nougaro"
+    },
+    {
+      "artist": "Simon & Garfunkel",
+      "scrobble_count": 1211
+    }
+  ],
+  "vega_config": {
+    "mark": "bar",
+    "title": "Top 8 Artists by Scrobble Count",
+    "usermeta": {
+      "data_result_name": "top_8_artists_by_scrobbles",
+      "chart_id": "top_8_artists_chart"
+    },
+    "encoding": {
+      "y": {
+        "type": "nominal",
+        "field": "artist",
+        "sort": "-x",
+        "title": "Artist"
+      },
+      "x": {
+        "type": "quantitative",
+        "title": "Scrobble Count",
+        "field": "scrobble_count"
+      }
+    },
+    "data": {
+      "values": [
+        {
+          "scrobble_count": 3802,
+          "artist": "Georges Brassens"
+        },
+        {
+          "scrobble_count": 3427,
+          "artist": "Serge Gainsbourg"
+        },
+        {
+          "artist": "Chinese Man",
+          "scrobble_count": 1820
+        },
+        {
+          "scrobble_count": 1645,
+          "artist": "Tryo"
+        },
+        {
+          "scrobble_count": 1574,
+          "artist": "Jacques Brel"
+        },
+        {
+          "artist": "Paolo Conte",
+          "scrobble_count": 1426
+        },
+        {
+          "scrobble_count": 1267,
+          "artist": "Claude Nougaro"
+        },
+        {
+          "scrobble_count": 1211,
+          "artist": "Simon & Garfunkel"
+        }
+      ]
+    },
+    "config": {
+      "view": {
+        "continuousHeight": 300,
+        "continuousWidth": 400
+      }
+    }
+  },
+  "suggestions": [
+    "Show my monthly scrobble trend over time.",
+    "What are my top 10 most played tracks for Georges Brassens?",
+    "Forecast my weekly scrobbles for the next 3 months."
+  ],
+  "engine": "bigquery_data_qna_v1beta"
+}

@@ -1,0 +1,312 @@
+{
+  "answer_markdown": "Your listening peaks in the late afternoon and evening hours (UTC), reaching its highest activity at 18:00 UTC with 12,589 scrobbles (7.83% of total listening), while the lowest activity occurs in the early morning between 02:00 and 04:00 UTC.\n\n### Key Listening Patterns\n- **Peak Listening Window:** 17:00 to 19:00 UTC accounts for over 22% of all scrobbles (35,404 scrobbles combined).\n- **Daytime Consistency:** Listening remains steady throughout the midday hours (10:00 to 15:00 UTC), averaging around 8,100 to 8,300 scrobbles per hour (~5% share each).\n- **Quiet Hours:** Scrobbling sharply drops after 22:00 UTC and stays under 2% per hour between 00:00 and 05:00 UTC.",
+  "thoughts": [
+    "Analyzing context \u2014 Retrieving context for 2 tables.",
+    "Context retrieved \u2014 Retrieved context for 2 tables.",
+    "Running a query \u2014 SELECT hour_utc,\n       COUNT(*) AS total_scrobbles,\n       ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) AS percentage_of_total\nFROM `netdev-firebase.barogroove_analytics.scrobbles`\nGROUP BY hour_utc\nORDER BY hour_utc ASC;",
+    "Query execution completed \u2014 Query returned 24 rows in 2.42s."
+  ],
+  "sql_query": "SELECT hour_utc,\n       COUNT(*) AS total_scrobbles,\n       ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) AS percentage_of_total\nFROM `netdev-firebase.barogroove_analytics.scrobbles`\nGROUP BY hour_utc\nORDER BY hour_utc ASC;",
+  "rows": [
+    {
+      "hour_utc": 0,
+      "total_scrobbles": 2750,
+      "percentage_of_total": 1.71
+    },
+    {
+      "total_scrobbles": 1845,
+      "percentage_of_total": 1.15,
+      "hour_utc": 1
+    },
+    {
+      "percentage_of_total": 0.92,
+      "total_scrobbles": 1477,
+      "hour_utc": 2
+    },
+    {
+      "hour_utc": 3,
+      "percentage_of_total": 0.84,
+      "total_scrobbles": 1348
+    },
+    {
+      "percentage_of_total": 0.83,
+      "total_scrobbles": 1328,
+      "hour_utc": 4
+    },
+    {
+      "percentage_of_total": 1.2,
+      "hour_utc": 5,
+      "total_scrobbles": 1929
+    },
+    {
+      "percentage_of_total": 2.69,
+      "total_scrobbles": 4324,
+      "hour_utc": 6
+    },
+    {
+      "percentage_of_total": 4.11,
+      "total_scrobbles": 6608,
+      "hour_utc": 7
+    },
+    {
+      "total_scrobbles": 7943,
+      "hour_utc": 8,
+      "percentage_of_total": 4.94
+    },
+    {
+      "hour_utc": 9,
+      "percentage_of_total": 4.89,
+      "total_scrobbles": 7860
+    },
+    {
+      "percentage_of_total": 5.2,
+      "total_scrobbles": 8358,
+      "hour_utc": 10
+    },
+    {
+      "total_scrobbles": 8358,
+      "percentage_of_total": 5.2,
+      "hour_utc": 11
+    },
+    {
+      "hour_utc": 12,
+      "total_scrobbles": 8162,
+      "percentage_of_total": 5.08
+    },
+    {
+      "total_scrobbles": 8106,
+      "percentage_of_total": 5.04,
+      "hour_utc": 13
+    },
+    {
+      "percentage_of_total": 5,
+      "hour_utc": 14,
+      "total_scrobbles": 8039
+    },
+    {
+      "hour_utc": 15,
+      "percentage_of_total": 5.1,
+      "total_scrobbles": 8197
+    },
+    {
+      "hour_utc": 16,
+      "total_scrobbles": 9468,
+      "percentage_of_total": 5.89
+    },
+    {
+      "percentage_of_total": 7.31,
+      "hour_utc": 17,
+      "total_scrobbles": 11743
+    },
+    {
+      "total_scrobbles": 12589,
+      "percentage_of_total": 7.83,
+      "hour_utc": 18
+    },
+    {
+      "total_scrobbles": 11072,
+      "percentage_of_total": 6.89,
+      "hour_utc": 19
+    },
+    {
+      "hour_utc": 20,
+      "total_scrobbles": 9891,
+      "percentage_of_total": 6.15
+    },
+    {
+      "percentage_of_total": 5.34,
+      "total_scrobbles": 8587,
+      "hour_utc": 21
+    },
+    {
+      "total_scrobbles": 6510,
+      "percentage_of_total": 4.05,
+      "hour_utc": 22
+    },
+    {
+      "percentage_of_total": 2.63,
+      "total_scrobbles": 4225,
+      "hour_utc": 23
+    }
+  ],
+  "vega_config": {
+    "data": {
+      "values": [
+        {
+          "hour_utc": 0,
+          "percentage_of_total": 1.71,
+          "total_scrobbles": 2750
+        },
+        {
+          "percentage_of_total": 1.15,
+          "hour_utc": 1,
+          "total_scrobbles": 1845
+        },
+        {
+          "percentage_of_total": 0.92,
+          "total_scrobbles": 1477,
+          "hour_utc": 2
+        },
+        {
+          "hour_utc": 3,
+          "percentage_of_total": 0.84,
+          "total_scrobbles": 1348
+        },
+        {
+          "total_scrobbles": 1328,
+          "hour_utc": 4,
+          "percentage_of_total": 0.83
+        },
+        {
+          "total_scrobbles": 1929,
+          "hour_utc": 5,
+          "percentage_of_total": 1.2
+        },
+        {
+          "percentage_of_total": 2.69,
+          "hour_utc": 6,
+          "total_scrobbles": 4324
+        },
+        {
+          "total_scrobbles": 6608,
+          "percentage_of_total": 4.11,
+          "hour_utc": 7
+        },
+        {
+          "percentage_of_total": 4.94,
+          "hour_utc": 8,
+          "total_scrobbles": 7943
+        },
+        {
+          "percentage_of_total": 4.89,
+          "hour_utc": 9,
+          "total_scrobbles": 7860
+        },
+        {
+          "hour_utc": 10,
+          "percentage_of_total": 5.2,
+          "total_scrobbles": 8358
+        },
+        {
+          "percentage_of_total": 5.2,
+          "total_scrobbles": 8358,
+          "hour_utc": 11
+        },
+        {
+          "hour_utc": 12,
+          "percentage_of_total": 5.08,
+          "total_scrobbles": 8162
+        },
+        {
+          "hour_utc": 13,
+          "total_scrobbles": 8106,
+          "percentage_of_total": 5.04
+        },
+        {
+          "hour_utc": 14,
+          "total_scrobbles": 8039,
+          "percentage_of_total": 5
+        },
+        {
+          "percentage_of_total": 5.1,
+          "hour_utc": 15,
+          "total_scrobbles": 8197
+        },
+        {
+          "percentage_of_total": 5.89,
+          "total_scrobbles": 9468,
+          "hour_utc": 16
+        },
+        {
+          "total_scrobbles": 11743,
+          "percentage_of_total": 7.31,
+          "hour_utc": 17
+        },
+        {
+          "hour_utc": 18,
+          "total_scrobbles": 12589,
+          "percentage_of_total": 7.83
+        },
+        {
+          "total_scrobbles": 11072,
+          "percentage_of_total": 6.89,
+          "hour_utc": 19
+        },
+        {
+          "hour_utc": 20,
+          "total_scrobbles": 9891,
+          "percentage_of_total": 6.15
+        },
+        {
+          "percentage_of_total": 5.34,
+          "hour_utc": 21,
+          "total_scrobbles": 8587
+        },
+        {
+          "hour_utc": 22,
+          "total_scrobbles": 6510,
+          "percentage_of_total": 4.05
+        },
+        {
+          "percentage_of_total": 2.63,
+          "total_scrobbles": 4225,
+          "hour_utc": 23
+        }
+      ]
+    },
+    "width": 600,
+    "encoding": {
+      "y": {
+        "field": "total_scrobbles",
+        "title": "Total Scrobbles",
+        "type": "quantitative"
+      },
+      "x": {
+        "field": "hour_utc",
+        "title": "Hour of Day (UTC)",
+        "type": "ordinal",
+        "axis": {
+          "labelAngle": 0
+        }
+      },
+      "tooltip": [
+        {
+          "field": "hour_utc",
+          "type": "ordinal",
+          "title": "Hour (UTC)"
+        },
+        {
+          "format": ",",
+          "type": "quantitative",
+          "field": "total_scrobbles",
+          "title": "Scrobbles"
+        },
+        {
+          "format": ".2f",
+          "title": "Share (%)",
+          "type": "quantitative",
+          "field": "percentage_of_total"
+        }
+      ]
+    },
+    "title": "Hourly Listening Distribution (UTC)",
+    "mark": "bar",
+    "config": {
+      "view": {
+        "continuousHeight": 300,
+        "continuousWidth": 400
+      }
+    },
+    "usermeta": {
+      "chart_id": "hourly_listening_chart",
+      "data_result_name": "hourly_listening_distribution"
+    },
+    "height": 300
+  },
+  "suggestions": [
+    "Show my top artists listened to during peak hours (17:00 to 19:00 UTC).",
+    "Break down my listening distribution across days of the week.",
+    "Detect anomalies in my daily scrobble counts over time."
+  ],
+  "engine": "bigquery_data_qna_v1beta"
+}

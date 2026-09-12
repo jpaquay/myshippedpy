@@ -1,0 +1,1567 @@
+{
+  "weather_affinity": [
+    {
+      "theme_id": "warm_front_haze",
+      "label": "Warm Front Haze & Analog Drift",
+      "percentage": 15.6,
+      "plays": 25090
+    },
+    {
+      "theme_id": "petrichor",
+      "label": "Petrichor & Rain Front",
+      "percentage": 15.2,
+      "plays": 24376
+    },
+    {
+      "theme_id": "high_pressure_glass",
+      "label": "High-Pressure Glass & Nocturne",
+      "percentage": 14.7,
+      "plays": 23687
+    },
+    {
+      "theme_id": "clearing_isobar",
+      "label": "Clearing Isobar & Horizon Breeze",
+      "percentage": 14.1,
+      "plays": 22682
+    },
+    {
+      "theme_id": "low_pressure_front",
+      "label": "Low-Pressure Storm Front",
+      "percentage": 14.0,
+      "plays": 22439
+    },
+    {
+      "theme_id": "golden_hour_ridge",
+      "label": "Golden Hour Ridge & Twilight",
+      "percentage": 13.7,
+      "plays": 21942
+    },
+    {
+      "theme_id": "steady_drizzle",
+      "label": "Steady Drizzle & Velvet Mist",
+      "percentage": 12.8,
+      "plays": 20501
+    }
+  ],
+  "unique_tracks_count": 44361,
+  "monthly_counts": {
+    "2020-07": 286,
+    "2015-09": 843,
+    "2013-11": 1915,
+    "2026-07": 1500,
+    "2018-01": 1451,
+    "2016-09": 273,
+    "2012-12": 1804,
+    "2020-01": 563,
+    "2023-08": 1593,
+    "2016-08": 378,
+    "2017-09": 1370,
+    "2015-08": 962,
+    "2019-11": 299,
+    "2026-08": 1455,
+    "2022-07": 1398,
+    "2019-07": 240,
+    "2013-09": 1170,
+    "2025-02": 1269,
+    "2017-04": 498,
+    "2018-03": 848,
+    "2016-12": 663,
+    "2015-04": 1340,
+    "2014-01": 2156,
+    "2016-05": 627,
+    "2024-06": 1172,
+    "2019-12": 360,
+    "2018-07": 674,
+    "2016-11": 1089,
+    "2022-02": 524,
+    "2025-05": 1584,
+    "2020-09": 108,
+    "2021-02": 332,
+    "2019-06": 374,
+    "2025-10": 1349,
+    "2021-06": 488,
+    "2016-10": 829,
+    "2026-03": 2033,
+    "2014-03": 770,
+    "2024-08": 1722,
+    "2021-12": 928,
+    "2018-12": 315,
+    "2013-07": 286,
+    "2023-02": 1665,
+    "2018-09": 405,
+    "2016-03": 1274,
+    "2018-05": 758,
+    "2024-11": 1228,
+    "2025-04": 1631,
+    "2020-03": 78,
+    "2013-04": 851,
+    "2026-05": 1854,
+    "2021-01": 279,
+    "2025-08": 1789,
+    "2016-07": 832,
+    "2024-10": 1404,
+    "2023-07": 1049,
+    "2020-08": 715,
+    "2024-03": 1105,
+    "2013-05": 2017,
+    "2018-02": 977,
+    "2017-12": 2310,
+    "2020-12": 515,
+    "2014-12": 658,
+    "2024-01": 887,
+    "2017-01": 1052,
+    "2025-03": 1453,
+    "2024-12": 1664,
+    "2019-01": 622,
+    "2017-11": 1757,
+    "2021-09": 400,
+    "2013-12": 2481,
+    "2022-09": 629,
+    "2026-04": 1807,
+    "2020-02": 763,
+    "2026-09": 339,
+    "2015-05": 1484,
+    "2013-02": 1290,
+    "2020-11": 283,
+    "2026-01": 2166,
+    "2024-07": 1443,
+    "2017-06": 1261,
+    "2014-06": 668,
+    "2013-06": 1293,
+    "2012-11": 520,
+    "2014-08": 184,
+    "2022-03": 541,
+    "2025-07": 1928,
+    "2021-10": 331,
+    "2023-06": 1241,
+    "2019-04": 167,
+    "2014-11": 516,
+    "2022-05": 1006,
+    "2013-10": 256,
+    "2016-01": 916,
+    "2013-01": 2062,
+    "2019-09": 325,
+    "2017-08": 176,
+    "2021-04": 661,
+    "2023-09": 924,
+    "2015-12": 1039,
+    "2022-01": 782,
+    "2021-05": 535,
+    "2019-02": 311,
+    "2024-04": 1212,
+    "2019-05": 352,
+    "2015-06": 1308,
+    "2025-09": 1270,
+    "2022-10": 693,
+    "2022-06": 1656,
+    "2017-10": 1302,
+    "2022-08": 787,
+    "2014-04": 776,
+    "2025-11": 1312,
+    "2019-03": 330,
+    "2014-10": 641,
+    "2026-06": 1786,
+    "2017-03": 694,
+    "2017-02": 280,
+    "2018-04": 1579,
+    "2014-09": 779,
+    "2014-02": 1267,
+    "2022-04": 934,
+    "2015-10": 1491,
+    "2017-05": 692,
+    "2015-07": 1075,
+    "2023-11": 768,
+    "2025-01": 1402,
+    "2021-11": 397,
+    "2018-10": 325,
+    "2020-10": 261,
+    "2020-06": 367,
+    "2023-10": 1005,
+    "2023-12": 1449,
+    "2023-03": 2247,
+    "2024-02": 855,
+    "2020-05": 307,
+    "2018-06": 190,
+    "2019-08": 195,
+    "2013-08": 2115,
+    "2019-10": 557,
+    "2024-09": 1086,
+    "2025-06": 1079,
+    "2018-08": 314,
+    "2026-02": 1940,
+    "2018-11": 197,
+    "2014-05": 1135,
+    "2025-12": 2006,
+    "2024-05": 1358,
+    "2022-12": 1465,
+    "2023-04": 1687,
+    "2021-07": 1149,
+    "2016-04": 513,
+    "2015-11": 1333,
+    "2023-05": 1346,
+    "2021-08": 854,
+    "2014-07": 378,
+    "2021-03": 109,
+    "2017-07": 1187,
+    "2022-11": 948,
+    "2016-02": 304,
+    "2023-01": 1455,
+    "2013-03": 1323,
+    "2016-06": 753,
+    "2015-03": 747
+  },
+  "unique_artists_count": 13051,
+  "total_scrobbles": 160717,
+  "top_genres": [
+    {
+      "tag": "atmospheric",
+      "count": 35192
+    },
+    {
+      "tag": "deep-listening",
+      "count": 30108
+    },
+    {
+      "tag": "analog-drift",
+      "count": 30102
+    },
+    {
+      "tag": "indie-eclectic",
+      "count": 29772
+    },
+    {
+      "tag": "barometric",
+      "count": 29698
+    },
+    {
+      "tag": "vinyl-cut",
+      "count": 29442
+    },
+    {
+      "tag": "twilight-groove",
+      "count": 29410
+    },
+    {
+      "tag": "isobaric",
+      "count": 29359
+    },
+    {
+      "tag": "clearing-isobar",
+      "count": 18770
+    },
+    {
+      "tag": "high-pressure-glass",
+      "count": 18323
+    },
+    {
+      "tag": "low-pressure-front",
+      "count": 18320
+    },
+    {
+      "tag": "steady-drizzle",
+      "count": 18226
+    },
+    {
+      "tag": "petrichor",
+      "count": 17927
+    },
+    {
+      "tag": "warm-front-haze",
+      "count": 17733
+    },
+    {
+      "tag": "golden-hour-ridge",
+      "count": 17538
+    }
+  ],
+  "hourly_histogram_utc": {
+    "15": 8197,
+    "9": 7860,
+    "21": 8587,
+    "7": 6608,
+    "0": 2750,
+    "23": 4225,
+    "3": 1348,
+    "19": 11072,
+    "17": 11743,
+    "12": 8162,
+    "13": 8106,
+    "10": 8358,
+    "4": 1328,
+    "6": 4324,
+    "18": 12589,
+    "22": 6510,
+    "8": 7943,
+    "20": 9891,
+    "5": 1929,
+    "16": 9468,
+    "2": 1477,
+    "14": 8039,
+    "11": 8358,
+    "1": 1845
+  },
+  "top_artists_overall": [
+    {
+      "artist": "Georges Brassens",
+      "artist_norm": "georges brassens",
+      "scrobble_count": 3802,
+      "plays": 3802
+    },
+    {
+      "artist": "Serge Gainsbourg",
+      "artist_norm": "serge gainsbourg",
+      "scrobble_count": 3427,
+      "plays": 3427
+    },
+    {
+      "artist": "-M-",
+      "artist_norm": "m",
+      "scrobble_count": 1873,
+      "plays": 1873
+    },
+    {
+      "artist": "Chinese Man",
+      "artist_norm": "chinese man",
+      "scrobble_count": 1820,
+      "plays": 1820
+    },
+    {
+      "artist": "Tryo",
+      "artist_norm": "tryo",
+      "scrobble_count": 1645,
+      "plays": 1645
+    },
+    {
+      "artist": "Jacques Brel",
+      "artist_norm": "jacques brel",
+      "scrobble_count": 1574,
+      "plays": 1574
+    },
+    {
+      "artist": "Paolo Conte",
+      "artist_norm": "paolo conte",
+      "scrobble_count": 1426,
+      "plays": 1426
+    },
+    {
+      "artist": "Claude Nougaro",
+      "artist_norm": "claude nougaro",
+      "scrobble_count": 1267,
+      "plays": 1267
+    },
+    {
+      "artist": "Simon & Garfunkel",
+      "artist_norm": "simon garfunkel",
+      "scrobble_count": 1211,
+      "plays": 1211
+    },
+    {
+      "artist": "The Beatles",
+      "artist_norm": "the beatles",
+      "scrobble_count": 963,
+      "plays": 963
+    },
+    {
+      "artist": "Guts",
+      "artist_norm": "guts",
+      "scrobble_count": 939,
+      "plays": 939
+    },
+    {
+      "artist": "Parov Stelar",
+      "artist_norm": "parov stelar",
+      "scrobble_count": 918,
+      "plays": 918
+    },
+    {
+      "artist": "Dubamix",
+      "artist_norm": "dubamix",
+      "scrobble_count": 834,
+      "plays": 834
+    },
+    {
+      "artist": "Bob Marley & The Wailers",
+      "artist_norm": "bob marley the wailers",
+      "scrobble_count": 764,
+      "plays": 764
+    },
+    {
+      "artist": "MC Solaar",
+      "artist_norm": "mc solaar",
+      "scrobble_count": 757,
+      "plays": 757
+    },
+    {
+      "artist": "Manu Chao",
+      "artist_norm": "manu chao",
+      "scrobble_count": 739,
+      "plays": 739
+    },
+    {
+      "artist": "R.Wan",
+      "artist_norm": "rwan",
+      "scrobble_count": 725,
+      "plays": 725
+    },
+    {
+      "artist": "Groundation",
+      "artist_norm": "groundation",
+      "scrobble_count": 716,
+      "plays": 716
+    },
+    {
+      "artist": "L'Entourloop",
+      "artist_norm": "lentourloop",
+      "scrobble_count": 692,
+      "plays": 692
+    },
+    {
+      "artist": "Nina Simone",
+      "artist_norm": "nina simone",
+      "scrobble_count": 688,
+      "plays": 688
+    },
+    {
+      "artist": "Renaud",
+      "artist_norm": "renaud",
+      "scrobble_count": 683,
+      "plays": 683
+    },
+    {
+      "artist": "France Gall",
+      "artist_norm": "france gall",
+      "scrobble_count": 669,
+      "plays": 669
+    },
+    {
+      "artist": "Bob Dylan",
+      "artist_norm": "bob dylan",
+      "scrobble_count": 609,
+      "plays": 609
+    },
+    {
+      "artist": "Massilia Sound System",
+      "artist_norm": "massilia sound system",
+      "scrobble_count": 584,
+      "plays": 584
+    },
+    {
+      "artist": "Stromae",
+      "artist_norm": "stromae",
+      "scrobble_count": 583,
+      "plays": 583
+    },
+    {
+      "artist": "The Andrews Sisters",
+      "artist_norm": "the andrews sisters",
+      "scrobble_count": 583,
+      "plays": 583
+    },
+    {
+      "artist": "Daniel H\u00e9lin",
+      "artist_norm": "daniel h\u00e9lin",
+      "scrobble_count": 579,
+      "plays": 579
+    },
+    {
+      "artist": "The Architect",
+      "artist_norm": "the architect",
+      "scrobble_count": 569,
+      "plays": 569
+    },
+    {
+      "artist": "Arno",
+      "artist_norm": "arno",
+      "scrobble_count": 527,
+      "plays": 527
+    },
+    {
+      "artist": "Rodr\u00edguez",
+      "artist_norm": "rodr\u00edguez",
+      "scrobble_count": 524,
+      "plays": 524
+    },
+    {
+      "artist": "Leonard Cohen",
+      "artist_norm": "leonard cohen",
+      "scrobble_count": 511,
+      "plays": 511
+    },
+    {
+      "artist": "Camille Saint-Sa\u00ebns",
+      "artist_norm": "camille saintsa\u00ebns",
+      "scrobble_count": 510,
+      "plays": 510
+    },
+    {
+      "artist": "Bernard Lavilliers",
+      "artist_norm": "bernard lavilliers",
+      "scrobble_count": 497,
+      "plays": 497
+    },
+    {
+      "artist": "Jack Johnson",
+      "artist_norm": "jack johnson",
+      "scrobble_count": 481,
+      "plays": 481
+    },
+    {
+      "artist": "Waldeck",
+      "artist_norm": "waldeck",
+      "scrobble_count": 478,
+      "plays": 478
+    },
+    {
+      "artist": "Arthur H",
+      "artist_norm": "arthur h",
+      "scrobble_count": 475,
+      "plays": 475
+    },
+    {
+      "artist": "Serge Reggiani",
+      "artist_norm": "serge reggiani",
+      "scrobble_count": 474,
+      "plays": 474
+    },
+    {
+      "artist": "Noir D\u00e9sir",
+      "artist_norm": "noir d\u00e9sir",
+      "scrobble_count": 474,
+      "plays": 474
+    },
+    {
+      "artist": "Yves Montand",
+      "artist_norm": "yves montand",
+      "scrobble_count": 457,
+      "plays": 457
+    },
+    {
+      "artist": "Julien Clerc",
+      "artist_norm": "julien clerc",
+      "scrobble_count": 455,
+      "plays": 455
+    },
+    {
+      "artist": "Erik Satie",
+      "artist_norm": "erik satie",
+      "scrobble_count": 454,
+      "plays": 454
+    },
+    {
+      "artist": "Paul Simon",
+      "artist_norm": "paul simon",
+      "scrobble_count": 453,
+      "plays": 453
+    },
+    {
+      "artist": "Henri D\u00e8s",
+      "artist_norm": "henri d\u00e8s",
+      "scrobble_count": 441,
+      "plays": 441
+    },
+    {
+      "artist": "Francis Cabrel",
+      "artist_norm": "francis cabrel",
+      "scrobble_count": 437,
+      "plays": 437
+    },
+    {
+      "artist": "Rodriguez",
+      "artist_norm": "rodriguez",
+      "scrobble_count": 436,
+      "plays": 436
+    },
+    {
+      "artist": "Wax Tailor",
+      "artist_norm": "wax tailor",
+      "scrobble_count": 434,
+      "plays": 434
+    },
+    {
+      "artist": "Gotan Project",
+      "artist_norm": "gotan project",
+      "scrobble_count": 415,
+      "plays": 415
+    },
+    {
+      "artist": "Mister Modo",
+      "artist_norm": "mister modo",
+      "scrobble_count": 414,
+      "plays": 414
+    },
+    {
+      "artist": "Supr\u00eame NTM",
+      "artist_norm": "supr\u00eame ntm",
+      "scrobble_count": 409,
+      "plays": 409
+    },
+    {
+      "artist": "IAM",
+      "artist_norm": "iam",
+      "scrobble_count": 395,
+      "plays": 395
+    }
+  ],
+  "user_id": "Po51XUsRokVKbFQOtxjuhnnJfVD2",
+  "top_tracks_overall": [
+    {
+      "id": "jpaquay_7a4c43f0edf14a3d",
+      "title": "Walk on the Wild Side",
+      "track": "Walk on the Wild Side",
+      "artist": "Lou Reed",
+      "album": "Transformer",
+      "scrobble_count": 190,
+      "play_count": 190,
+      "weather_theme": "low_pressure_front",
+      "bpm_estimate": 126,
+      "energy_estimate": 0.64,
+      "tags": [
+        "classic-rock",
+        "analog-guitar",
+        "vintage-tape",
+        "atmospheric"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_18c31e84d93df069",
+      "title": "Formidable",
+      "track": "Formidable",
+      "artist": "Stromae",
+      "album": "Racine carr\u00e9e",
+      "scrobble_count": 156,
+      "play_count": 156,
+      "weather_theme": "steady_drizzle",
+      "bpm_estimate": 96,
+      "energy_estimate": 0.63,
+      "tags": [
+        "trip-hop",
+        "downtempo-groove",
+        "vinyl-crackle",
+        "nocturnal"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_de0d5b732a6df284",
+      "title": "Via con me",
+      "track": "Via con me",
+      "artist": "Paolo Conte",
+      "album": "I primi tempi",
+      "scrobble_count": 156,
+      "play_count": 156,
+      "weather_theme": "warm_front_haze",
+      "bpm_estimate": 109,
+      "energy_estimate": 0.47,
+      "tags": [
+        "chanson-francaise",
+        "poetic-acoustic",
+        "analog-warmth",
+        "storytelling"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_6aa5eaa64155aeba",
+      "title": "Papaoutai",
+      "track": "Papaoutai",
+      "artist": "Stromae",
+      "album": "Racine carr\u00e9e",
+      "scrobble_count": 143,
+      "play_count": 143,
+      "weather_theme": "petrichor",
+      "bpm_estimate": 110,
+      "energy_estimate": 0.81,
+      "tags": [
+        "trip-hop",
+        "downtempo-groove",
+        "vinyl-crackle",
+        "nocturnal"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_a8a2fb0e1dff396c",
+      "title": "La mauvaise r\u00e9putation",
+      "track": "La mauvaise r\u00e9putation",
+      "artist": "Georges Brassens",
+      "album": "Georges Brassens chante les chansons po\u00e9tiques (et souvent gaillardes) N\u00b01",
+      "scrobble_count": 136,
+      "play_count": 136,
+      "weather_theme": "petrichor",
+      "bpm_estimate": 86,
+      "energy_estimate": 0.56,
+      "tags": [
+        "chanson-francaise",
+        "poetic-acoustic",
+        "analog-warmth",
+        "storytelling"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_57e2a0f8591b58c5",
+      "title": "Je me suis fait tout petit",
+      "track": "Je me suis fait tout petit",
+      "artist": "Georges Brassens",
+      "album": "Les copains d'abord",
+      "scrobble_count": 131,
+      "play_count": 131,
+      "weather_theme": "petrichor",
+      "bpm_estimate": 106,
+      "energy_estimate": 0.56,
+      "tags": [
+        "chanson-francaise",
+        "poetic-acoustic",
+        "analog-warmth",
+        "storytelling"
+      ],
+      "loved": true
+    },
+    {
+      "id": "jpaquay_db1444d2fa5f52e8",
+      "title": "La main verte - LIVE",
+      "track": "La main verte - LIVE",
+      "artist": "Tryo",
+      "album": "Mamagubida",
+      "scrobble_count": 127,
+      "play_count": 127,
+      "weather_theme": "golden_hour_ridge",
+      "bpm_estimate": 102,
+      "energy_estimate": 0.66,
+      "tags": [
+        "reggae-dub",
+        "roots-acoustic",
+        "horizon-breeze",
+        "live-session"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_c5d8536a7144db36",
+      "title": "L'hymne de nos campagnes - LIVE",
+      "track": "L'hymne de nos campagnes - LIVE",
+      "artist": "Tryo",
+      "album": "Mamagubida",
+      "scrobble_count": 121,
+      "play_count": 121,
+      "weather_theme": "warm_front_haze",
+      "bpm_estimate": 102,
+      "energy_estimate": 0.58,
+      "tags": [
+        "reggae-dub",
+        "roots-acoustic",
+        "horizon-breeze",
+        "live-session"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_8502f603264e1f8d",
+      "title": "Get Lucky (feat. Pharrell Williams and Nile Rodgers)",
+      "track": "Get Lucky (feat. Pharrell Williams and Nile Rodgers)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "scrobble_count": 120,
+      "play_count": 120,
+      "weather_theme": "steady_drizzle",
+      "bpm_estimate": 113,
+      "energy_estimate": 0.66,
+      "tags": [
+        "trip-hop",
+        "downtempo-groove",
+        "vinyl-crackle",
+        "nocturnal"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_db5910629bce9601",
+      "title": "I Chase The Devil",
+      "track": "I Chase The Devil",
+      "artist": "Max Romeo",
+      "album": "War Ina Babylon (Expanded Edition)",
+      "scrobble_count": 119,
+      "play_count": 119,
+      "weather_theme": "warm_front_haze",
+      "bpm_estimate": 92,
+      "energy_estimate": 0.58,
+      "tags": [
+        "reggae-dub",
+        "roots-acoustic",
+        "horizon-breeze",
+        "organic"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_98ee3fd4569c110f",
+      "title": "Le gorille",
+      "track": "Le gorille",
+      "artist": "Georges Brassens",
+      "album": "Georges Brassens chante les chansons po\u00e9tiques (et souvent gaillardes) N\u00b01",
+      "scrobble_count": 118,
+      "play_count": 118,
+      "weather_theme": "high_pressure_glass",
+      "bpm_estimate": 104,
+      "energy_estimate": 0.52,
+      "tags": [
+        "chanson-francaise",
+        "poetic-acoustic",
+        "analog-warmth",
+        "storytelling"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_6d231810eee945f0",
+      "title": "50 Ways to Leave Your Lover",
+      "track": "50 Ways to Leave Your Lover",
+      "artist": "Paul Simon",
+      "album": "Still Crazy After All These Years",
+      "scrobble_count": 117,
+      "play_count": 117,
+      "weather_theme": "warm_front_haze",
+      "bpm_estimate": 98,
+      "energy_estimate": 0.64,
+      "tags": [
+        "atmospheric",
+        "indie-eclectic",
+        "warm-front-haze"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_0abf1ab06cb90c40",
+      "title": "Knockin' on Heaven's Door",
+      "track": "Knockin' on Heaven's Door",
+      "artist": "Bob Dylan",
+      "album": "Pat Garrett & Billy the Kid (Soundtrack from the Motion Picture)",
+      "scrobble_count": 115,
+      "play_count": 115,
+      "weather_theme": "low_pressure_front",
+      "bpm_estimate": 114,
+      "energy_estimate": 0.82,
+      "tags": [
+        "classic-rock",
+        "analog-guitar",
+        "vintage-tape",
+        "atmospheric"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_ee1498b85024de48",
+      "title": "Get Free",
+      "track": "Get Free",
+      "artist": "Major Lazer",
+      "album": "Free the Universe",
+      "scrobble_count": 114,
+      "play_count": 114,
+      "weather_theme": "golden_hour_ridge",
+      "bpm_estimate": 106,
+      "energy_estimate": 0.64,
+      "tags": [
+        "atmospheric",
+        "isobaric",
+        "golden-hour-ridge"
+      ],
+      "loved": true
+    },
+    {
+      "id": "jpaquay_1d6d3bf4b093000f",
+      "title": "Miss Chang",
+      "track": "Miss Chang",
+      "artist": "Chinese Man",
+      "album": "Racing With the Sun",
+      "scrobble_count": 113,
+      "play_count": 113,
+      "weather_theme": "steady_drizzle",
+      "bpm_estimate": 112,
+      "energy_estimate": 0.75,
+      "tags": [
+        "trip-hop",
+        "downtempo-groove",
+        "vinyl-crackle",
+        "nocturnal"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_72dc2dd1852ee495",
+      "title": "Alors on danse",
+      "track": "Alors on danse",
+      "artist": "Stromae",
+      "album": "Cheese",
+      "scrobble_count": 111,
+      "play_count": 111,
+      "weather_theme": "steady_drizzle",
+      "bpm_estimate": 113,
+      "energy_estimate": 0.6,
+      "tags": [
+        "trip-hop",
+        "downtempo-groove",
+        "vinyl-crackle",
+        "nocturnal"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_70123940d891a674",
+      "title": "I've Got That Tune",
+      "track": "I've Got That Tune",
+      "artist": "Chinese Man",
+      "album": "Groove Sessions",
+      "scrobble_count": 106,
+      "play_count": 106,
+      "weather_theme": "petrichor",
+      "bpm_estimate": 116,
+      "energy_estimate": 0.75,
+      "tags": [
+        "trip-hop",
+        "downtempo-groove",
+        "vinyl-crackle",
+        "nocturnal"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_78d2184d070c175f",
+      "title": "Hurricane",
+      "track": "Hurricane",
+      "artist": "Bob Dylan",
+      "album": "Desire",
+      "scrobble_count": 101,
+      "play_count": 101,
+      "weather_theme": "clearing_isobar",
+      "bpm_estimate": 115,
+      "energy_estimate": 0.65,
+      "tags": [
+        "classic-rock",
+        "analog-guitar",
+        "vintage-tape",
+        "atmospheric"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_3594470c55d66eae",
+      "title": "Afternoon at Satie's",
+      "track": "Afternoon at Satie's",
+      "artist": "Jesse Cook",
+      "album": "The Rumba Foundation",
+      "scrobble_count": 100,
+      "play_count": 100,
+      "weather_theme": "low_pressure_front",
+      "bpm_estimate": 126,
+      "energy_estimate": 0.44,
+      "tags": [
+        "twilight-groove",
+        "barometric",
+        "low-pressure-front"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_2c5c8bfd4d0e0332",
+      "title": "Down the Road",
+      "track": "Down the Road",
+      "artist": "C2C",
+      "album": "Tetra",
+      "scrobble_count": 100,
+      "play_count": 100,
+      "weather_theme": "low_pressure_front",
+      "bpm_estimate": 127,
+      "energy_estimate": 0.53,
+      "tags": [
+        "vinyl-cut",
+        "isobaric",
+        "low-pressure-front"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_c570345b3985dd1e",
+      "title": "When I Was Your Man",
+      "track": "When I Was Your Man",
+      "artist": "Bruno Mars",
+      "album": "Unorthodox Jukebox",
+      "scrobble_count": 99,
+      "play_count": 99,
+      "weather_theme": "golden_hour_ridge",
+      "bpm_estimate": 93,
+      "energy_estimate": 0.67,
+      "tags": [
+        "analog-drift",
+        "golden-hour-ridge"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_64ac5cf346a11dac",
+      "title": "Racing With the Sun (Deluxe Remix)",
+      "track": "Racing With the Sun (Deluxe Remix)",
+      "artist": "Chinese Man",
+      "album": "Remix With the Sun",
+      "scrobble_count": 98,
+      "play_count": 98,
+      "weather_theme": "low_pressure_front",
+      "bpm_estimate": 99,
+      "energy_estimate": 0.74,
+      "tags": [
+        "trip-hop",
+        "downtempo-groove",
+        "vinyl-crackle",
+        "nocturnal"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_b1da00c72afc013f",
+      "title": "A Horse With No Name",
+      "track": "A Horse With No Name",
+      "artist": "America",
+      "album": "America",
+      "scrobble_count": 98,
+      "play_count": 98,
+      "weather_theme": "petrichor",
+      "bpm_estimate": 121,
+      "energy_estimate": 0.79,
+      "tags": [
+        "isobaric",
+        "atmospheric",
+        "petrichor"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_832051259fa8dc97",
+      "title": "Marcelle - Live \u00e0 Bercy",
+      "track": "Marcelle - Live \u00e0 Bercy",
+      "artist": "Jean-Louis Aubert",
+      "album": "Live = Vivant",
+      "scrobble_count": 98,
+      "play_count": 98,
+      "weather_theme": "high_pressure_glass",
+      "bpm_estimate": 87,
+      "energy_estimate": 0.61,
+      "tags": [
+        "vinyl-cut",
+        "twilight-groove",
+        "high-pressure-glass",
+        "live-session"
+      ],
+      "loved": true
+    },
+    {
+      "id": "jpaquay_4af5e989d385f89a",
+      "title": "Motiv\u00e9s, le chant des partisans",
+      "track": "Motiv\u00e9s, le chant des partisans",
+      "artist": "Motiv\u00e9s",
+      "album": "Motiv\u00e9s! - Chants de lutte",
+      "scrobble_count": 97,
+      "play_count": 97,
+      "weather_theme": "steady_drizzle",
+      "bpm_estimate": 123,
+      "energy_estimate": 0.49,
+      "tags": [
+        "barometric",
+        "steady-drizzle"
+      ],
+      "loved": true
+    },
+    {
+      "id": "jpaquay_f0ec2a07220588c5",
+      "title": "Sous le ciel de Paris",
+      "track": "Sous le ciel de Paris",
+      "artist": "Yves Montand",
+      "album": "Yves Montand",
+      "scrobble_count": 97,
+      "play_count": 97,
+      "weather_theme": "clearing_isobar",
+      "bpm_estimate": 121,
+      "energy_estimate": 0.55,
+      "tags": [
+        "isobaric",
+        "atmospheric",
+        "clearing-isobar"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_d54d3798b3d79641",
+      "title": "Le pornographe",
+      "track": "Le pornographe",
+      "artist": "Georges Brassens",
+      "album": "Georges Brassens (Volume 6)",
+      "scrobble_count": 95,
+      "play_count": 95,
+      "weather_theme": "high_pressure_glass",
+      "bpm_estimate": 96,
+      "energy_estimate": 0.56,
+      "tags": [
+        "chanson-francaise",
+        "poetic-acoustic",
+        "analog-warmth",
+        "storytelling"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_f3ae426d66c1318a",
+      "title": "Jimmy",
+      "track": "Jimmy",
+      "artist": "Moriarty",
+      "album": "Gee whiz but this is a lonesome town",
+      "scrobble_count": 94,
+      "play_count": 94,
+      "weather_theme": "clearing_isobar",
+      "bpm_estimate": 95,
+      "energy_estimate": 0.77,
+      "tags": [
+        "vinyl-cut",
+        "clearing-isobar"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_d46157189b79d6ee",
+      "title": "Le Cin\u00e9ma",
+      "track": "Le Cin\u00e9ma",
+      "artist": "Claude Nougaro",
+      "album": "Grand Angle Sur Nougaro",
+      "scrobble_count": 94,
+      "play_count": 94,
+      "weather_theme": "warm_front_haze",
+      "bpm_estimate": 94,
+      "energy_estimate": 0.56,
+      "tags": [
+        "chanson-francaise",
+        "poetic-acoustic",
+        "analog-warmth",
+        "storytelling"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_2d7c8a7d9ae4c225",
+      "title": "Bella Ciao",
+      "track": "Bella Ciao",
+      "artist": "Yves Montand",
+      "album": "Yves Montand Gold",
+      "scrobble_count": 94,
+      "play_count": 94,
+      "weather_theme": "warm_front_haze",
+      "bpm_estimate": 127,
+      "energy_estimate": 0.77,
+      "tags": [
+        "vinyl-cut",
+        "isobaric",
+        "warm-front-haze"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_d6f1ce1a47525b2c",
+      "title": "Chanson Pour L'Auvergnat",
+      "track": "Chanson Pour L'Auvergnat",
+      "artist": "Georges Brassens",
+      "album": "Georges Brassens sa guitare et les rythmes n\u00b03",
+      "scrobble_count": 91,
+      "play_count": 91,
+      "weather_theme": "warm_front_haze",
+      "bpm_estimate": 106,
+      "energy_estimate": 0.38,
+      "tags": [
+        "chanson-francaise",
+        "poetic-acoustic",
+        "analog-warmth",
+        "storytelling"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_bf02787793002e63",
+      "title": "El Disco Anal",
+      "track": "El Disco Anal",
+      "artist": "Los Amigos Invisibles",
+      "album": "The New Sound of the Venezuelan Gozadera",
+      "scrobble_count": 91,
+      "play_count": 91,
+      "weather_theme": "high_pressure_glass",
+      "bpm_estimate": 121,
+      "energy_estimate": 0.47,
+      "tags": [
+        "isobaric",
+        "deep-listening",
+        "high-pressure-glass"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_b811acb09a15726b",
+      "title": "Trick Me",
+      "track": "Trick Me",
+      "artist": "Kelis",
+      "album": "Tasty",
+      "scrobble_count": 91,
+      "play_count": 91,
+      "weather_theme": "warm_front_haze",
+      "bpm_estimate": 82,
+      "energy_estimate": 0.64,
+      "tags": [
+        "atmospheric",
+        "deep-listening",
+        "warm-front-haze"
+      ],
+      "loved": true
+    },
+    {
+      "id": "jpaquay_3a588fc8feb4f665",
+      "title": "Il n'y a pas d'amour heureux",
+      "track": "Il n'y a pas d'amour heureux",
+      "artist": "Georges Brassens",
+      "album": "Georges Brassens Interpr\u00e8te Ses Derni\u00e8res Compositions N\u00b02",
+      "scrobble_count": 90,
+      "play_count": 90,
+      "weather_theme": "warm_front_haze",
+      "bpm_estimate": 86,
+      "energy_estimate": 0.44,
+      "tags": [
+        "chanson-francaise",
+        "poetic-acoustic",
+        "analog-warmth",
+        "storytelling"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_8a3260cf252f4c90",
+      "title": "Ho Hey",
+      "track": "Ho Hey",
+      "artist": "The Lumineers",
+      "album": "The Lumineers (Deluxe Edition)",
+      "scrobble_count": 90,
+      "play_count": 90,
+      "weather_theme": "high_pressure_glass",
+      "bpm_estimate": 129,
+      "energy_estimate": 0.71,
+      "tags": [
+        "isobaric",
+        "barometric",
+        "high-pressure-glass"
+      ],
+      "loved": true
+    },
+    {
+      "id": "jpaquay_4e3d3487f53f66b7",
+      "title": "Armstrong",
+      "track": "Armstrong",
+      "artist": "Claude Nougaro",
+      "album": "Grand Angle Sur Nougaro",
+      "scrobble_count": 89,
+      "play_count": 89,
+      "weather_theme": "high_pressure_glass",
+      "bpm_estimate": 103,
+      "energy_estimate": 0.47,
+      "tags": [
+        "chanson-francaise",
+        "poetic-acoustic",
+        "analog-warmth",
+        "storytelling"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_861e40ce32691196",
+      "title": "Yo Quiero Ser una Chica Almod\u00f3var",
+      "track": "Yo Quiero Ser una Chica Almod\u00f3var",
+      "artist": "limbotheque",
+      "album": "Yo Quiero Ser una Chica Almod\u00f3var (Original Motion Picture Soundtrack)",
+      "scrobble_count": 88,
+      "play_count": 88,
+      "weather_theme": "clearing_isobar",
+      "bpm_estimate": 96,
+      "energy_estimate": 0.54,
+      "tags": [
+        "deep-listening",
+        "barometric",
+        "clearing-isobar"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_b2f0adcce1a9514b",
+      "title": "Je Suis Sous...",
+      "track": "Je Suis Sous...",
+      "artist": "Claude Nougaro",
+      "album": "Mon Assassin (1964)",
+      "scrobble_count": 87,
+      "play_count": 87,
+      "weather_theme": "warm_front_haze",
+      "bpm_estimate": 104,
+      "energy_estimate": 0.38,
+      "tags": [
+        "chanson-francaise",
+        "poetic-acoustic",
+        "analog-warmth",
+        "storytelling"
+      ],
+      "loved": true
+    },
+    {
+      "id": "jpaquay_3f57ff00e46e55a1",
+      "title": "Sexy Plexi",
+      "track": "Sexy Plexi",
+      "artist": "Jack Johnson",
+      "album": "Brushfire Fairytales (UK edition with 2 bonus tracks)",
+      "scrobble_count": 87,
+      "play_count": 87,
+      "weather_theme": "warm_front_haze",
+      "bpm_estimate": 82,
+      "energy_estimate": 0.4,
+      "tags": [
+        "atmospheric",
+        "warm-front-haze"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_58575591373e29ed",
+      "title": "Jimmy's Gang - Radio Edit",
+      "track": "Jimmy's Gang - Radio Edit",
+      "artist": "Parov Stelar",
+      "album": "Jimmy's Gang",
+      "scrobble_count": 87,
+      "play_count": 87,
+      "weather_theme": "clearing_isobar",
+      "bpm_estimate": 115,
+      "energy_estimate": 0.65,
+      "tags": [
+        "barometric",
+        "indie-eclectic",
+        "clearing-isobar"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_10372edf015a226a",
+      "title": "Get a Move On",
+      "track": "Get a Move On",
+      "artist": "Mr. Scruff",
+      "album": "Keep It Unreal",
+      "scrobble_count": 86,
+      "play_count": 86,
+      "weather_theme": "low_pressure_front",
+      "bpm_estimate": 113,
+      "energy_estimate": 0.55,
+      "tags": [
+        "isobaric",
+        "analog-drift",
+        "low-pressure-front"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_36e7191447fa47bc",
+      "title": "A Pic",
+      "track": "A Pic",
+      "artist": "R.Wan",
+      "album": "Radio Cortex 2",
+      "scrobble_count": 86,
+      "play_count": 86,
+      "weather_theme": "golden_hour_ridge",
+      "bpm_estimate": 118,
+      "energy_estimate": 0.6,
+      "tags": [
+        "twilight-groove",
+        "indie-eclectic",
+        "golden-hour-ridge"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_39ef132d1799fa49",
+      "title": "Somebody That I Used to Know",
+      "track": "Somebody That I Used to Know",
+      "artist": "Gotye",
+      "album": "Making Mirrors",
+      "scrobble_count": 86,
+      "play_count": 86,
+      "weather_theme": "clearing_isobar",
+      "bpm_estimate": 127,
+      "energy_estimate": 0.45,
+      "tags": [
+        "vinyl-cut",
+        "clearing-isobar"
+      ],
+      "loved": true
+    },
+    {
+      "id": "jpaquay_a172369af6196077",
+      "title": "Ma Benz (feat. Lord Kossity)",
+      "track": "Ma Benz (feat. Lord Kossity)",
+      "artist": "Supr\u00eame NTM",
+      "album": "Supr\u00eame NTM",
+      "scrobble_count": 86,
+      "play_count": 86,
+      "weather_theme": "high_pressure_glass",
+      "bpm_estimate": 124,
+      "energy_estimate": 0.58,
+      "tags": [
+        "indie-eclectic",
+        "analog-drift",
+        "high-pressure-glass"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_fcd21873b1f82b39",
+      "title": "Tomber La Chemise",
+      "track": "Tomber La Chemise",
+      "artist": "Zebda",
+      "album": "Essence Ordinaire",
+      "scrobble_count": 85,
+      "play_count": 85,
+      "weather_theme": "low_pressure_front",
+      "bpm_estimate": 101,
+      "energy_estimate": 0.51,
+      "tags": [
+        "analog-drift",
+        "deep-listening",
+        "low-pressure-front"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_20ba3598a3489e3c",
+      "title": "Eat Sleep Rave Repeat (Feat. Beardyman) (Calvin Harris Remix)",
+      "track": "Eat Sleep Rave Repeat (Feat. Beardyman) (Calvin Harris Remix)",
+      "artist": "Fatboy Slim",
+      "album": "Eat Sleep Rave Repeat (feat. Beardyman) [Calvin Harris Mix]",
+      "scrobble_count": 85,
+      "play_count": 85,
+      "weather_theme": "clearing_isobar",
+      "bpm_estimate": 106,
+      "energy_estimate": 0.48,
+      "tags": [
+        "atmospheric",
+        "analog-drift",
+        "clearing-isobar"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_9440d194d24ed521",
+      "title": "Les Pens\u00e9es",
+      "track": "Les Pens\u00e9es",
+      "artist": "The Architect",
+      "album": "Foundations",
+      "scrobble_count": 84,
+      "play_count": 84,
+      "weather_theme": "petrichor",
+      "bpm_estimate": 102,
+      "energy_estimate": 0.44,
+      "tags": [
+        "twilight-groove",
+        "indie-eclectic",
+        "petrichor"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_c488cce34da96831",
+      "title": "Silbo",
+      "track": "Silbo",
+      "artist": "F\u00e9loche",
+      "album": "Silbo",
+      "scrobble_count": 83,
+      "play_count": 83,
+      "weather_theme": "golden_hour_ridge",
+      "bpm_estimate": 101,
+      "energy_estimate": 0.43,
+      "tags": [
+        "analog-drift",
+        "twilight-groove",
+        "golden-hour-ridge"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_a98a7670914b509e",
+      "title": "Lee",
+      "track": "Lee",
+      "artist": "Sporto Kant\u00e8s",
+      "album": "2nd round",
+      "scrobble_count": 82,
+      "play_count": 82,
+      "weather_theme": "petrichor",
+      "bpm_estimate": 82,
+      "energy_estimate": 0.72,
+      "tags": [
+        "atmospheric",
+        "deep-listening",
+        "petrichor"
+      ],
+      "loved": false
+    },
+    {
+      "id": "jpaquay_2e38ac9e6a32a192",
+      "title": "Ain't No Sunshine",
+      "track": "Ain't No Sunshine",
+      "artist": "Ken Boothe",
+      "album": "The Ken Boothe Collection: Eighteen Classic Songs",
+      "scrobble_count": 82,
+      "play_count": 82,
+      "weather_theme": "high_pressure_glass",
+      "bpm_estimate": 112,
+      "energy_estimate": 0.62,
+      "tags": [
+        "deep-listening",
+        "analog-drift",
+        "high-pressure-glass"
+      ],
+      "loved": false
+    }
+  ],
+  "bigquery_dataset": "netdev-firebase:barogroove_analytics",
+  "updated_at": null,
+  "lastfm_user": "jpaquay",
+  "weekday_histogram": {
+    "0": 19680,
+    "5": 30096,
+    "2": 19913,
+    "3": 19863,
+    "4": 20787,
+    "6": 32265,
+    "1": 18113
+  },
+  "yearly_counts": {
+    "2019": 4132,
+    "2017": 12579,
+    "2013": 17059,
+    "2014": 9928,
+    "2025": 18072,
+    "2021": 6463,
+    "2022": 11363,
+    "2015": 11622,
+    "2023": 16429,
+    "2018": 8033,
+    "2012": 2324,
+    "2024": 15136,
+    "2016": 8451,
+    "2020": 4246,
+    "2026": 14880
+  },
+  "avg_energy": 0.59,
+  "first_scrobble_at": null,
+  "avg_bpm": 104.6,
+  "first_scrobble_uts": 1353451617,
+  "user_ids": [
+    "Po51XUsRokVKbFQOtxjuhnnJfVD2",
+    "C78NmuNvGMVE7t1v3gNaU34HAyY2"
+  ],
+  "last_scrobble_at": null,
+  "loved_tracks_count": 38,
+  "last_scrobble_uts": 1789208766
+}

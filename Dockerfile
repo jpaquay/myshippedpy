@@ -28,6 +28,7 @@ RUN uv pip install --system --no-cache -r requirements.txt
 COPY app.py ./
 COPY backend ./backend
 COPY fixtures ./fixtures
+COPY data ./data
 COPY CNAME ./
 
 # Cloud Run runs as an non-root user

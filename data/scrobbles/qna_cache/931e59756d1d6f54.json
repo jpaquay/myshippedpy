@@ -1,0 +1,111 @@
+{
+  "answer_markdown": "Here is the distribution of your scrobbles across different weather themes, showing that \"warm front haze\" and \"petrichor\" are your most frequent listening conditions.",
+  "thoughts": [
+    "Analyzing context \u2014 Retrieved context for 2 tables.",
+    "Running a query \u2014 SELECT weather_theme,\n       COUNT(*) AS scrobble_count\nFROM `netdev-firebase.barogroove_analytics.scrobbles`\nGROUP BY weather_theme\nORDER BY scrobble_count DESC",
+    "Query execution completed \u2014 Query returned 7 rows in 1.79s."
+  ],
+  "sql_query": "SELECT weather_theme,\n       COUNT(*) AS scrobble_count\nFROM `netdev-firebase.barogroove_analytics.scrobbles`\nGROUP BY weather_theme\nORDER BY scrobble_count DESC",
+  "rows": [
+    {
+      "scrobble_count": 25090,
+      "weather_theme": "warm_front_haze"
+    },
+    {
+      "weather_theme": "petrichor",
+      "scrobble_count": 24376
+    },
+    {
+      "weather_theme": "high_pressure_glass",
+      "scrobble_count": 23687
+    },
+    {
+      "weather_theme": "clearing_isobar",
+      "scrobble_count": 22682
+    },
+    {
+      "scrobble_count": 22439,
+      "weather_theme": "low_pressure_front"
+    },
+    {
+      "scrobble_count": 21942,
+      "weather_theme": "golden_hour_ridge"
+    },
+    {
+      "weather_theme": "steady_drizzle",
+      "scrobble_count": 20501
+    }
+  ],
+  "vega_config": {
+    "data": {
+      "values": [
+        {
+          "weather_theme": "warm_front_haze",
+          "scrobble_count": 25090
+        },
+        {
+          "scrobble_count": 24376,
+          "weather_theme": "petrichor"
+        },
+        {
+          "scrobble_count": 23687,
+          "weather_theme": "high_pressure_glass"
+        },
+        {
+          "scrobble_count": 22682,
+          "weather_theme": "clearing_isobar"
+        },
+        {
+          "scrobble_count": 22439,
+          "weather_theme": "low_pressure_front"
+        },
+        {
+          "weather_theme": "golden_hour_ridge",
+          "scrobble_count": 21942
+        },
+        {
+          "weather_theme": "steady_drizzle",
+          "scrobble_count": 20501
+        }
+      ]
+    },
+    "mark": "bar",
+    "encoding": {
+      "x": {
+        "type": "quantitative",
+        "title": "Scrobble Count",
+        "field": "scrobble_count"
+      },
+      "color": {
+        "legend": null,
+        "type": "nominal",
+        "field": "weather_theme"
+      },
+      "y": {
+        "title": "Weather Theme",
+        "type": "nominal",
+        "sort": "-x",
+        "field": "weather_theme"
+      }
+    },
+    "title": "Distribution of Scrobbles across Weather Themes",
+    "config": {
+      "view": {
+        "continuousWidth": 400,
+        "continuousHeight": 300
+      }
+    },
+    "width": 600,
+    "height": 300,
+    "usermeta": {
+      "chart_id": "weather_theme_dist",
+      "data_result_name": "scrobbles_by_weather_theme"
+    }
+  },
+  "suggestions": [
+    "Analyze the top tracks played during the warm front haze weather theme.",
+    "Compare the average energy estimate and BPM across different weather themes.",
+    "Find if there is any correlation between weather themes and specific genres or tags."
+  ],
+  "engine": "bigquery_data_qna_v1beta"
+}
