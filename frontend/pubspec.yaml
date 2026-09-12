@@ -1,0 +1,97 @@
+name: barogroove
+description: >-
+  BAROGROOVE — your sky has a soundtrack. A weather-driven playlist engine.
+  This Flutter app is an A2UI v1.0 renderer pointed at the BAROGROOVE
+  component catalog, plus a thin shell (auth, pairing, navigation).
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  # Dart 3.5 is the floor for the language features used here (records,
+  # patterns, sealed classes). Flutter 3.27 is the floor for Color.withValues,
+  # which replaced the now-deprecated withOpacity and is used in the theme.
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # --- Firebase / auth -------------------------------------------------
+  # VERIFIED (docs, Sept 2026): firebase_auth 6.x is the current major line
+  # and pairs with firebase_core 4.x. The exact patch versions below are
+  # UNVERIFIED — `flutter pub get` will resolve forward within the caret
+  # range. If resolution complains, run `flutter pub upgrade --major-versions`.
+  firebase_core: ^4.1.1
+  firebase_auth: ^6.1.0
+
+  # VERIFIED: google_sign_in 7.x is a breaking redesign — singleton
+  # `GoogleSignIn.instance`, mandatory `initialize()`, `authenticate()` for
+  # interactive sign-in (which throws UnsupportedError on web), and
+  # `attemptLightweightAuthentication()` in place of `signInSilently()`.
+  # On web we deliberately do NOT use this package's interactive path; we use
+  # `FirebaseAuth.signInWithPopup` instead. See lib/auth/auth_service.dart.
+  google_sign_in: ^7.2.0
+
+  # --- Networking / platform ------------------------------------------
+  http: ^1.5.0
+  url_launcher: ^6.3.1
+  shared_preferences: ^2.3.3
+  crypto: ^3.0.6 # PKCE S256 challenge for the Spotify pairing flow.
+
+  # --- State -----------------------------------------------------------
+  # Riverpod is pinned to the 2.x API line on purpose. Riverpod 3.0 exists but
+  # renames/retires several APIs used here (StateNotifierProvider, the
+  # AsyncValue surface); 2.6.x is stable, widely deployed and is what this
+  # codebase is written against. Do not bump to ^3 without a migration pass.
+  flutter_riverpod: ^2.6.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+# ---------------------------------------------------------------------------
+# NOT A DEPENDENCY — READ BEFORE YOU "HELPFULLY" ADD IT
+# ---------------------------------------------------------------------------
+# There IS an official Flutter implementation of A2UI: Google's `genui`
+# package on pub.dev (plus `genui_a2a` / `genui_a2ui` for A2A transport and
+# `genui_catalog` for a stock component set). It is real, published and
+# maintained by the Flutter team, and it implements a2ui.org.
+#
+# We do not depend on it, for three concrete reasons:
+#
+#   1. Catalog ownership. genui requires the CLIENT to declare the `Catalog`
+#      (a CatalogItem per component: name + JSON schema + builder). BAROGROOVE's
+#      whole architectural premise is that the catalog is declared ONCE, in
+#      Python, and served from GET /api/surfaces/catalog. Adopting genui would
+#      mean re-declaring the schemas client-side — exactly the duplication this
+#      project exists to avoid.
+#   2. Transport shape. genui's high-level API is a conversational
+#      Conversation/SurfaceController over a streaming A2A WebSocket. Our
+#      backend serves plain HTTP endpoints that return a *batch* (JSON array)
+#      of A2UI envelopes, with POST /api/surfaces/action for the return path.
+#      We would be using ~10% of the package and fighting the other 90%.
+#   3. API stability. genui is pre-1.0 and its object model is still moving.
+#      We could not compile against it in this environment to verify the exact
+#      symbol names, so taking it as a hard dependency would mean shipping
+#      unverifiable code.
+#
+# What we did instead: lib/a2ui/ is a compact, self-contained A2UI v1.0
+# renderer (~4 files + one widget per catalog component) written directly
+# against the spec. It is small enough to read in one sitting.
+#
+# If genui reaches 1.0 with a server-supplied-catalog story, swapping is a
+# contained job: lib/a2ui/renderer.dart and lib/a2ui/data_model.dart are the
+# only files that would go away.
+#
+#   # genui: ^0.5.0        # UNVERIFIED version — see note above
+#   # genui_catalog: ^0.5.0
+# ---------------------------------------------------------------------------
+
+flutter:
+  uses-material-design: true
+  # No `assets:` block. Nothing in lib/ loads a bundled asset -- the sky dial,
+  # theme chips and palettes are all drawn from code -- and declaring a
+  # directory that does not exist is a build warning for no benefit. Add it
+  # back alongside the first real asset.

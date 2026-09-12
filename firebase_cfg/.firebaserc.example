@@ -1,0 +1,26 @@
+{
+  "$comment": "Copy to .firebaserc and fill in real project ids. .firebaserc is gitignored: it names real infrastructure and does not belong in a public repo. No secrets live here, but project ids are still reconnaissance.",
+  "projects": {
+    "default": "barogroove-dev",
+    "local": "barogroove-dev",
+    "dev": "barogroove-dev",
+    "prod": "barogroove-prod"
+  },
+  "targets": {
+    "barogroove-prod": {
+      "hosting": {
+        "app": [
+          "barogroove-prod"
+        ]
+      }
+    },
+    "barogroove-dev": {
+      "hosting": {
+        "app": [
+          "barogroove-dev"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

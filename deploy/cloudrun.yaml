@@ -1,0 +1,233 @@
+# =============================================================================
+# Barogroove API -- Cloud Run (Knative) service manifest
+#
+#   gcloud run services replace deploy/cloudrun.yaml \
+#     --region europe-west1 --project "$BG_GCP_PROJECT"
+#
+# REGION: europe-west1. Every resource. The manifest itself carries no region
+# field -- Cloud Run takes it from the --region flag -- so the flag is not
+# optional and deploy.sh always passes it.
+#
+# SECRETS: references only. Not one secret VALUE appears in this file, and none
+# ever should. Cloud Run resolves `valueFrom.secretKeyRef` against Secret
+# Manager at instance start, using the service account's
+# roles/secretmanager.secretAccessor grant. If resolution fails the instance
+# does not start -- which is the correct failure mode for a missing credential.
+#
+# Verified against the Cloud Run "Configure secrets for services" docs: for
+# secrets exposed as environment variables, the secret's full resource path
+# must be declared in the `run.googleapis.com/secrets` annotation on the
+# revision template, and `secretKeyRef.name` then refers to that lookup alias
+# while `secretKeyRef.key` is the VERSION (a number, or "latest").
+#
+# Placeholders to substitute (deploy.sh and cloudbuild.yaml both do this):
+#   PROJECT_ID      e.g. barogroove-prod
+#   PROJECT_NUMBER  the numeric project number -- required in secret paths
+#   IMAGE_URL       europe-west1-docker.pkg.dev/PROJECT_ID/barogroove/api:TAG
+# =============================================================================
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: barogroove-api
+  labels:
+    app: barogroove
+    component: api
+  annotations:
+    # Ingress: all. Firebase Hosting reaches the service over the public
+    # endpoint, so internal-only would break the rewrite. The service is
+    # protected by Firebase ID tokens at the application layer, not by network
+    # position -- see firebase/auth.py.
+    run.googleapis.com/ingress: all
+    run.googleapis.com/ingress-status: all
+    run.googleapis.com/description: >-
+      Barogroove weather-driven playlist engine. Your sky has a soundtrack.
+
+spec:
+  template:
+    metadata:
+      annotations:
+        # ---------------------------------------------------------------
+        # Secret lookup table. Alias -> full Secret Manager resource path.
+        # Comma-separated. PROJECT_NUMBER (not PROJECT_ID) is required here.
+        # These are POINTERS. No values.
+        # ---------------------------------------------------------------
+        run.googleapis.com/secrets: >-
+          bg-token-encryption-key:projects/PROJECT_NUMBER/secrets/barogroove-token-encryption-key,bg-firebase-web-api-key:projects/PROJECT_NUMBER/secrets/barogroove-firebase-web-api-key,bg-lastfm-api-key:projects/PROJECT_NUMBER/secrets/barogroove-lastfm-api-key,bg-lastfm-api-secret:projects/PROJECT_NUMBER/secrets/barogroove-lastfm-api-secret,bg-spotify-client-id:projects/PROJECT_NUMBER/secrets/barogroove-spotify-client-id,bg-spotify-client-secret:projects/PROJECT_NUMBER/secrets/barogroove-spotify-client-secret
+
+        # ---------------------------------------------------------------
+        # Scaling
+        # ---------------------------------------------------------------
+        # min-scale 0: this is a personal-scale app with bursty, human-paced
+        # traffic. Scaling to zero costs nothing between sessions.
+        #
+        # THE TRADEOFF, stated plainly: min 0 means the first request after an
+        # idle period pays a cold start. For this container that is roughly
+        # 2-5s -- Python interpreter, FastAPI import graph, and the first lazy
+        # Firestore client construction. A user who opens bg.netdev.be after
+        # lunch waits for that. The fix is min-scale 1, which costs one always-
+        # warm instance (a few euros a month in europe-west1). Flip it if the
+        # cold start ever becomes the thing people complain about; until then,
+        # paying rent on an idle container to save four seconds a day is the
+        # wrong trade. Startup CPU boost below takes some of the edge off.
+        autoscaling.knative.dev/minScale: "0"
+        # max-scale 10: a ceiling, not a target. Bounds the blast radius of a
+        # runaway loop or a scrape against the upstream weather API quota and
+        # against the bill. Raise deliberately, with a quota check.
+        autoscaling.knative.dev/maxScale: "10"
+
+        # ---------------------------------------------------------------
+        # Execution environment
+        # ---------------------------------------------------------------
+        # gen2: faster cold starts for Python, full Linux syscall compat.
+        run.googleapis.com/execution-environment: gen2
+        # CPU is throttled to zero between requests (the default). Correct
+        # here: nothing runs in the background, and it halves the bill.
+        run.googleapis.com/cpu-throttling: "true"
+        # Extra CPU during startup only. Directly attacks the cold start that
+        # min-scale 0 buys us, at no steady-state cost.
+        run.googleapis.com/startup-cpu-boost: "true"
+        # Egress: only what needs a VPC goes through one. Nothing here does --
+        # every upstream (weather, Spotify, Last.fm, Firestore) is public
+        # internet or a Google API. No connector, no NAT, no monthly fee.
+
+    spec:
+      # 80 simultaneous requests per instance. Barogroove is I/O-bound: almost
+      # all wall-clock time is spent awaiting a weather API or Spotify. An
+      # async FastAPI worker handles that concurrency comfortably on one CPU.
+      # Lower this if the forge ever grows a CPU-heavy scoring pass.
+      containerConcurrency: 80
+
+      # 60s. A forge fans out to several upstreams; the internal budget is well
+      # under this. A request still running at 60s is stuck, not slow, and
+      # should be cut loose rather than held open.
+      timeoutSeconds: 60
+
+      # Least privilege. Created by deploy.sh, documented in service-account.md.
+      serviceAccountName: barogroove-api@PROJECT_ID.iam.gserviceaccount.com
+
+      containers:
+        - name: api
+          image: IMAGE_URL
+
+          ports:
+            # MUST be named http1 (or h2c). Cloud Run injects $PORT; the app
+            # must bind it and must bind 0.0.0.0, not 127.0.0.1.
+            - name: http1
+              containerPort: 8080
+
+          resources:
+            limits:
+              # 1 CPU. The workload waits on network far more than it computes.
+              cpu: "1"
+              # 512Mi. Python + FastAPI + pydantic sits near 150-200Mi resident;
+              # this leaves headroom for 80 concurrent request contexts without
+              # paying for a gigabyte. An OOM kill on Cloud Run is a hard 503,
+              # so the headroom is deliberate.
+              memory: 512Mi
+
+          env:
+            # ---- Plain configuration. Not secret, not sensitive. ----
+            - name: BG_ENVIRONMENT
+              value: "prod"
+            - name: BG_PUBLIC_HOST
+              value: "bg.netdev.be"
+            - name: BG_GCP_PROJECT
+              value: "PROJECT_ID"
+            - name: BG_GCP_REGION
+              value: "europe-west1"
+            - name: BG_FIREBASE_PROJECT_ID
+              value: "PROJECT_ID"
+            - name: BG_FIRESTORE_DATABASE
+              value: "(default)"
+            - name: BG_USE_SECRET_MANAGER
+              value: "true"
+            - name: BG_MCP_ENABLED
+              value: "true"
+            # Belt and braces. auth.py refuses dev tokens whenever environment
+            # is not "local", so this flag is already inert here. Setting it
+            # false anyway means an accidental BG_ENVIRONMENT=local in a Cloud
+            # Run env var still does not open the escape hatch. Two locks.
+            - name: BG_AUTH_ALLOW_INSECURE_DEV_TOKENS
+              value: "false"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+
+            # ---- Secrets. REFERENCES ONLY. ----
+            # `name` matches an alias from the annotation above.
+            # `key` is the secret VERSION. Pinned to a number rather than
+            # "latest" per Secret Manager best practice: env-var secrets are
+            # resolved once at instance start, so "latest" gives you a value
+            # that silently changes between revisions and cannot be rolled
+            # back with the revision. deploy.sh rewrites these to the version
+            # it just created.
+            - name: BG_TOKEN_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: bg-token-encryption-key
+                  key: "latest"
+            - name: BG_FIREBASE_WEB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: bg-firebase-web-api-key
+                  key: "latest"
+            - name: BG_LASTFM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: bg-lastfm-api-key
+                  key: "latest"
+            - name: BG_LASTFM_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: bg-lastfm-api-secret
+                  key: "latest"
+            - name: BG_SPOTIFY_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: bg-spotify-client-id
+                  key: "latest"
+            - name: BG_SPOTIFY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: bg-spotify-client-secret
+                  key: "latest"
+
+          # -------------------------------------------------------------
+          # Probes
+          #
+          # Both hit /healthz, which is dependency-free by contract: it does
+          # not touch Firestore, Secret Manager or any upstream. That is the
+          # whole point. A liveness probe that checks Firestore turns a
+          # Firestore blip into a container restart storm, which turns a
+          # degraded app into a dead one. Readiness against dependencies
+          # belongs on /readyz, which Cloud Run does not use.
+          # -------------------------------------------------------------
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            # 0s: start probing immediately. failureThreshold covers the ramp.
+            initialDelaySeconds: 0
+            periodSeconds: 3
+            timeoutSeconds: 3
+            # 3s x 20 = 60s of grace before Cloud Run gives up on the revision.
+            # Generous for a Python cold start with imports and startup boost;
+            # short enough that a genuinely broken image fails the deploy fast.
+            failureThreshold: 20
+
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 30
+            timeoutSeconds: 5
+            # Three consecutive misses, i.e. ~90s wedged, before a restart.
+            # One missed probe under load is noise, not a diagnosis.
+            failureThreshold: 3
+
+  traffic:
+    # All traffic to the newest revision. Barogroove is small enough that
+    # gradual rollout is ceremony; roll back with `gcloud run services
+    # update-traffic --to-revisions=PREVIOUS=100` if a deploy goes wrong.
+    - percent: 100
+      latestRevision: true

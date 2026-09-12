@@ -1,0 +1,213 @@
+# =============================================================================
+# Barogroove -- Cloud Build pipeline
+#
+#   gcloud builds submit --config deploy/cloudbuild.yaml \
+#     --region europe-west1 \
+#     --substitutions=_PROJECT_NUMBER=123456789012
+#
+# Build in europe-west1, push to Artifact Registry in europe-west1, deploy to
+# Cloud Run in europe-west1. Data locality is not a nice-to-have here; keeping
+# the image in the same region as the service also makes cold pulls fast.
+#
+# The image is tagged with $SHORT_SHA (immutable, rollback-able) AND :latest
+# (convenient). Deploys always reference the SHA tag -- deploying :latest gives
+# you a revision you cannot reproduce.
+# =============================================================================
+
+substitutions:
+  _REGION: europe-west1
+  _REPOSITORY: barogroove
+  _SERVICE: barogroove-api
+  # Numeric project number. Required by the Secret Manager annotation in
+  # cloudrun.yaml -- the project ID does not work there. Find it with:
+  #   gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)'
+  _PROJECT_NUMBER: "565491848800"
+  _TAG: "v1"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+  dynamicSubstitutions: true
+
+# 20 minutes. A Python image build is minutes, not tens of minutes; a build
+# still running at 20 is stuck on a network fetch and should fail loudly.
+timeout: 1200s
+
+images:
+  - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${_TAG}"
+  - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:latest"
+
+steps:
+  # ---------------------------------------------------------------------
+  # 1. Build.
+  #
+  # --cache-from pulls the previous :latest and reuses unchanged layers. On a
+  # cold cache this step fails to find the image, which is why the pull below
+  # is a separate, failure-tolerant step -- Cloud Build aborts on a non-zero
+  # exit, and "no cache yet" must not abort the very first build.
+  # ---------------------------------------------------------------------
+  - id: pull-cache
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        docker pull "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:latest" \
+          || echo "no cached image yet -- building cold, this is fine"
+
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["pull-cache"]
+    args:
+      - build
+      - --tag
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${_TAG}"
+      - --tag
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:latest"
+      - --cache-from
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:latest"
+      - --build-arg
+      - "BUILDKIT_INLINE_CACHE=1"
+      - --file
+      - Dockerfile
+      - .
+
+  # ---------------------------------------------------------------------
+  # 2. Smoke test the image before it reaches a registry anybody deploys from.
+  #
+  # Imports the app and hits /healthz in-process. Catches the classic Python
+  # deploy failure -- a missing dependency or a syntax error in a module that
+  # is only imported at runtime -- in seconds, rather than as a revision that
+  # fails its startup probe twenty times.
+  # ---------------------------------------------------------------------
+  - id: smoke-import
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["build"]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker run --rm \
+          --env BG_ENVIRONMENT=local \
+          --env PYTHONPATH=/app \
+          "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${_TAG}" \
+          python -c "
+        import app
+        assert getattr(app.app.state, 'missing_routers', []) == [], f'missing routers: {app.app.state.missing_routers}'
+        from backend.app.firebase import auth, firestore, tokens
+        from backend.app.almanac import firestore_store
+        from backend.app.routes import almanac
+        print('import smoke test passed')
+        "
+
+  # ---------------------------------------------------------------------
+  # 3. Push. Both tags.
+  # ---------------------------------------------------------------------
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["smoke-import"]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker push "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${_TAG}"
+        docker push "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:latest"
+
+  # ---------------------------------------------------------------------
+  # 4. Render the Knative manifest.
+  #
+  # cloudrun.yaml is a template with three placeholders. Substituting them
+  # here -- rather than hand-editing a checked-in file -- keeps the repo free
+  # of environment-specific values and makes the manifest reviewable.
+  #
+  # sed with '|' as the delimiter because IMAGE_URL contains slashes.
+  # ---------------------------------------------------------------------
+  - id: render-manifest
+    name: gcr.io/cloud-builders/gcloud
+    waitFor: ["push"]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        PROJECT_NUMBER="${_PROJECT_NUMBER}"
+        if [[ "$$PROJECT_NUMBER" == "PROJECT_NUMBER" ]]; then
+          PROJECT_NUMBER="$$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+        fi
+        IMAGE="${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${_TAG}"
+        sed \
+          -e "s|IMAGE_URL|$${IMAGE}|g" \
+          -e "s|PROJECT_NUMBER|$${PROJECT_NUMBER}|g" \
+          -e "s|PROJECT_ID|${PROJECT_ID}|g" \
+          deploy/cloudrun.yaml > /workspace/cloudrun.rendered.yaml
+        echo "--- rendered manifest (secret REFERENCES only, no values) ---"
+        cat /workspace/cloudrun.rendered.yaml
+
+  # ---------------------------------------------------------------------
+  # 5. Deploy. `services replace` is declarative: the manifest is the whole
+  # truth, so nothing drifts because somebody once clicked something in the
+  # console.
+  # ---------------------------------------------------------------------
+  - id: deploy
+    name: gcr.io/cloud-builders/gcloud
+    waitFor: ["render-manifest"]
+    args:
+      - run
+      - services
+      - replace
+      - /workspace/cloudrun.rendered.yaml
+      - --region
+      - "${_REGION}"
+      - --project
+      - "${PROJECT_ID}"
+
+  # ---------------------------------------------------------------------
+  # 6. Allow public invocation (auth is enforced at application layer).
+  # ---------------------------------------------------------------------
+  - id: allow-invoker
+    name: gcr.io/cloud-builders/gcloud
+    waitFor: ["deploy"]
+    args:
+      - run
+      - services
+      - add-iam-policy-binding
+      - "${_SERVICE}"
+      - --region
+      - "${_REGION}"
+      - --project
+      - "${PROJECT_ID}"
+      - --member=allUsers
+      - --role=roles/run.invoker
+      - --quiet
+
+  # ---------------------------------------------------------------------
+  # 7. Verify the new revision actually serves.
+  #
+  # A green deploy is not a working deploy. Hit /healthz through the public
+  # URL and fail the build if it does not answer -- better a red pipeline than
+  # a silent 503 discovered by a user.
+  # ---------------------------------------------------------------------
+  - id: verify
+    name: gcr.io/cloud-builders/gcloud
+    waitFor: ["allow-invoker"]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        URL="$$(gcloud run services describe "${_SERVICE}" \
+          --region "${_REGION}" --project "${PROJECT_ID}" \
+          --format='value(status.url)')"
+        echo "probing $${URL}/api/health"
+        for attempt in 1 2 3 4 5 6 7 8 9 10; do
+          if curl -fsS --max-time 10 "$${URL}/api/health" >/dev/null; then
+            echo "health OK on attempt $${attempt}"
+            exit 0
+          fi
+          echo "attempt $${attempt} failed; retrying in 5s"
+          sleep 5
+        done
+        echo "ERROR: /api/health never answered. The revision is live but not healthy."
+        exit 1

@@ -1,0 +1,29 @@
+# BAROGROOVE runtime dependencies.
+#
+# Historical note: the hello-world this repo grew out of shipped a
+# requirements.txt containing exactly two lines — `fastapi` and `buildpack`.
+# `buildpack` is not a Python package. It has been removed, along with the
+# assumption that pinning is optional.
+
+# --- web ---------------------------------------------------------------
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.32,<1.0
+pydantic>=2.9,<3.0
+pydantic-settings>=2.6,<3.0
+httpx>=0.27,<1.0
+python-multipart>=0.0.12
+
+# --- agent surface -----------------------------------------------------
+# MCP server, mounted on the same FastAPI app over streamable HTTP.
+mcp>=1.2,<2.0
+
+# --- google cloud ------------------------------------------------------
+# All imported lazily; the app boots without them in local mode.
+google-cloud-firestore>=2.19,<3.0
+google-cloud-secret-manager>=2.21,<3.0
+firebase-admin>=6.6,<7.0
+
+# --- crypto ------------------------------------------------------------
+# Fernet, for per-user provider tokens encrypted at rest in Firestore.
+cryptography>=43.0
+PyJWT[crypto]>=2.9

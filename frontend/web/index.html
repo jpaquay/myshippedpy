@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+
+  <!-- base href is rewritten by `flutter build web`; leave it alone. -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <title>BAROGROOVE — your sky has a soundtrack</title>
+  <meta name="description"
+        content="A weather-driven playlist engine. BAROGROOVE reads the derivative of your sky — how fast the pressure is moving, not just what it says — and forges a set that explains itself.">
+  <meta name="application-name" content="BAROGROOVE">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="color-scheme" content="light dark">
+
+  <!-- Light mode is the default and the intended register. The dark value
+       exists so a system-dark browser does not flash white chrome. -->
+  <meta name="theme-color" content="#F8FAFC" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0F172A" media="(prefers-color-scheme: dark)">
+
+  <!-- Open Graph / social -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="BAROGROOVE">
+  <meta property="og:title" content="BAROGROOVE — your sky has a soundtrack">
+  <meta property="og:description"
+        content="A weather-driven playlist engine that reads the derivative of your sky and explains every track it picks.">
+  <meta property="og:url" content="https://bg.netdev.be/">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="BAROGROOVE">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png">
+
+  <style>
+    /* Pre-Flutter paint. Whatever the browser shows before the engine boots
+       should already be BAROGROOVE: slate on near-white, quiet type. A white
+       flash followed by a themed app looks broken; this does not. */
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #F8FAFC;
+      color: #0F172A;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      html, body { background: #0F172A; color: #F1F5F9; }
+      #bg-boot .rule { background: #334155 !important; }
+      #bg-boot .bar { background: #0EA5E9 !important; }
+    }
+
+    #bg-boot {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      transition: opacity 220ms ease-out;
+    }
+
+    #bg-boot .wordmark {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 2px;
+    }
+
+    #bg-boot .rule {
+      width: 120px;
+      height: 2px;
+      background: #E2E8F0;
+      overflow: hidden;
+      position: relative;
+    }
+
+    #bg-boot .bar {
+      position: absolute;
+      inset: 0;
+      width: 40%;
+      background: #0284C7;
+      animation: bg-sweep 1.1s ease-in-out infinite;
+    }
+
+    @keyframes bg-sweep {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(250%); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #bg-boot .bar { animation: none; width: 100%; opacity: 0.5; }
+    }
+
+    #bg-boot.hidden { opacity: 0; pointer-events: none; }
+
+    /* No-JS is a real state, not a rounding error. */
+    #bg-nojs {
+      display: none;
+      max-width: 420px;
+      text-align: center;
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 0 24px;
+    }
+    .no-js #bg-boot .rule { display: none; }
+    .no-js #bg-nojs { display: block; }
+  </style>
+</head>
+<body class="no-js">
+  <div id="bg-boot">
+    <div class="wordmark">BAROGROOVE</div>
+    <div class="rule"><div class="bar"></div></div>
+    <div id="bg-nojs">
+      BAROGROOVE needs JavaScript. The interface is streamed from the server
+      and rendered in the browser, which is difficult to do without it.
+    </div>
+  </div>
+
+  <!--
+    ======================================================================
+    FIREBASE WEB CONFIG — PLACEHOLDERS ONLY, NEVER COMMIT REAL VALUES HERE
+    ======================================================================
+
+    The app reads its Firebase config from lib/firebase_options.dart (the
+    Dart side), NOT from this file. This block exists only if you choose to
+    add Firebase JS SDK features that live outside Flutter — analytics,
+    performance monitoring, the auth helper iframe on a custom domain.
+
+    If you do not need those, delete this block. Do not populate it "just in
+    case": an unused config is one more thing to get out of sync.
+
+    To fill it in for real, use Firebase Hosting's auto-configuration
+    instead of hard-coding:
+
+        <script src="/__/firebase/init.js?useEmulator=false"></script>
+
+    Hosting serves the correct values for the site it is serving, so
+    staging and production stop being a copy-paste problem.
+  -->
+  <script>
+    // PLACEHOLDER — replaced at deploy time or removed entirely.
+    window.BAROGROOVE_FIREBASE_WEB_CONFIG = {
+      apiKey:            "REPLACE_ME_WEB_API_KEY",
+      authDomain:        "netdev-firebase.firebaseapp.com",
+      projectId:         "netdev-firebase",
+      storageBucket:     "netdev-firebase.firebasestorage.app",
+      messagingSenderId: "565491848800",
+      appId:             "1:565491848800:web:2b07f52bde4bf69ce29505"
+    };
+  </script>
+
+  <script src="boot.js?v=20260912093757"></script>
+  <script src="flutter_bootstrap.js?v=20260912093757" async></script>
+</body>
+</html>

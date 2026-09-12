@@ -1,0 +1,284 @@
+# Deploy -- push to main, into netdev-firebase / europe-west1.
+#
+# AUTHENTICATION: Workload Identity Federation. No service account JSON key
+# exists for this pipeline, so there is no long-lived credential to leak from
+# GitHub secrets, no rotation to forget, and nothing that keeps working after
+# someone leaves. GitHub mints a short-lived OIDC token, Google exchanges it
+# for an access token good for minutes.
+#
+# The WIF pool MUST carry a repository-scoped attribute condition. Without one,
+# any GitHub repository on the internet can present a valid GitHub OIDC token
+# and impersonate this service account. That is the single most common way a
+# WIF setup is wrong, and it is silent -- everything works, and it also works
+# for everybody else. See .github/WORKLOAD_IDENTITY.md for the bootstrap.
+#
+# WHAT RUNS WHERE
+#   Cloud Build  -> container image + Cloud Run revision (deploy/cloudbuild.yaml)
+#   Firebase CLI -> Firestore rules, indexes, and Hosting for site 'barogroove'
+#
+# ORDER MATTERS: rules go out before the app. A backend writing collections
+# whose rules are not yet live leaves a window where clients can read what they
+# should not.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_hosting:
+        description: "Backend only, leave Hosting untouched"
+        type: boolean
+        default: false
+
+# Never two deploys at once. `cancel-in-progress: false` because a half-finished
+# Cloud Run rollout should be allowed to settle rather than be killed mid-flight.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+# Minimum viable token set. `id-token: write` is what lets us mint the OIDC
+# assertion for WIF; `contents: read` is for the checkout. Nothing else.
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: netdev-firebase
+  REGION: europe-west1
+  SERVICE: barogroove-api
+  REPOSITORY: barogroove
+  HOSTING_SITE: barogroove
+
+jobs:
+  # CI is not re-run here; the branch protection rule on main should require
+  # the CI workflow to have passed. This job is the last cheap gate before we
+  # spend money, and it re-asserts the security invariants specifically.
+  gate:
+    name: Pre-deploy gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
+      - name: Tests
+        env:
+          BG_ENVIRONMENT: local
+          BG_WEATHER_OFFLINE: "1"
+        run: pytest -q
+
+      - name: Refuse to ship an unauthenticated MCP endpoint
+        # The default must survive all the way to the deployed artifact. If
+        # someone flips mcp_require_auth off in config.py, this stops the
+        # deploy rather than discovering it in production.
+        run: |
+          python - <<'PY'
+          import sys
+          from backend.app.config import Settings
+          if Settings().mcp_require_auth is not True:
+              sys.exit("mcp_require_auth defaults to False. Refusing to deploy: "
+                       "/mcp would serve anonymous callers tools that spend real "
+                       "listeners' credentials.")
+          print("mcp_require_auth defaults True.")
+          PY
+
+  backend:
+    name: Backend -- Cloud Build + Cloud Run
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # A GitHub Environment. Add required reviewers on it to make production
+    # deploys need a human approval; the workflow then pauses here.
+    environment:
+      name: production
+      url: https://bg.netdev.be
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          # Both are non-secret identifiers, but they name real infrastructure,
+          # so they live in repo secrets rather than in this file.
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          # Short-lived by default. Do not add create_credentials_file unless
+          # something genuinely needs a file on disk.
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve project number
+        # cloudrun.yaml's Secret Manager annotation needs the numeric project
+        # number; the project ID is not accepted there. Resolved at deploy time
+        # so it cannot drift from whatever PROJECT_ID currently points at.
+        id: project
+        run: |
+          NUMBER="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          if [[ -z "${NUMBER}" ]]; then
+            echo "::error::Could not resolve the project number for ${PROJECT_ID}."
+            exit 1
+          fi
+          echo "number=${NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "Project ${PROJECT_ID} is ${NUMBER}."
+
+      - name: Verify Firestore is in europe-west1
+        # A Firestore location is immutable. If this database is somewhere else,
+        # every write from here on puts EU listener data in the wrong
+        # jurisdiction and no later change can move it. Fail before deploying.
+        run: |
+          LOCATION="$(gcloud firestore databases describe \
+            --database='(default)' --project "${PROJECT_ID}" \
+            --format='value(locationId)' 2>/dev/null || true)"
+          if [[ -z "${LOCATION}" ]]; then
+            echo "::error::No Firestore '(default)' database in ${PROJECT_ID}."
+            echo "::error::Create it in ${REGION} first: ./deploy/deploy.sh"
+            exit 1
+          fi
+          if [[ "${LOCATION}" != "${REGION}" ]]; then
+            echo "::error::Firestore is in '${LOCATION}', expected '${REGION}'."
+            echo "::error::This cannot be changed in place -- it needs a new database"
+            echo "::error::in ${REGION} and a data migration."
+            exit 1
+          fi
+          echo "Firestore '(default)' is in ${LOCATION}."
+
+      - name: Build and deploy
+        run: |
+          gcloud builds submit \
+            --config deploy/cloudbuild.yaml \
+            --project "${PROJECT_ID}" \
+            --region "${REGION}" \
+            --substitutions "_REGION=${REGION},_REPOSITORY=${REPOSITORY},_SERVICE=${SERVICE},_PROJECT_NUMBER=${{ steps.project.outputs.number }}"
+
+      - name: Smoke test the new revision
+        # Deploying without checking is just moving bytes.
+        #
+        # The /mcp assertion tracks `mcp_enabled`, which is currently False:
+        #   disabled -> 404 (not mounted)
+        #   enabled  -> 401 (mounted, and refusing anonymous callers)
+        # A 200 is a failure either way. That is the shape of "the agent surface
+        # is exposed to anyone who can reach the URL", and the tools behind it
+        # write to real listeners' Spotify accounts.
+        run: |
+          BASE="$(gcloud run services describe "${SERVICE}" \
+            --region "${REGION}" --project "${PROJECT_ID}" --format='value(status.url)')"
+          echo "Service at ${BASE}"
+
+          CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "${BASE}/healthz")"
+          [[ "${CODE}" == "200" ]] || { echo "::error::/healthz returned ${CODE}"; exit 1; }
+
+          MCP_ENABLED="$(python -c 'from backend.app.config import Settings; print(Settings().mcp_enabled)')"
+          CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
+            -X POST "${BASE}/mcp" -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}')"
+
+          if [[ "${MCP_ENABLED}" == "True" ]]; then
+            if [[ "${CODE}" != "401" ]]; then
+              echo "::error::MCP is enabled and unauthenticated POST /mcp returned ${CODE}, expected 401."
+              echo "::error::The guard is not in the request path. Roll back."
+              exit 1
+            fi
+            echo "/healthz 200, MCP enabled, unauthenticated /mcp 401. Correct."
+          else
+            if [[ "${CODE}" != "404" ]]; then
+              echo "::error::MCP is disabled but /mcp returned ${CODE}, expected 404."
+              echo "::error::Something is serving that path. Investigate before shipping."
+              exit 1
+            fi
+            echo "/healthz 200, MCP disabled, /mcp 404. Correct."
+          fi
+
+  frontend:
+    name: Frontend -- rules, indexes, Hosting
+    needs: backend
+    if: ${{ !inputs.skip_hosting }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: production
+      url: https://bg.netdev.be
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # Pinned to match ci.yml. A deploy must not build against a different
+          # SDK than the one CI proved green. See the note in ci.yml.
+          flutter-version: 3.47.3
+          channel: stable
+          cache: true
+
+      - name: Build web
+        working-directory: frontend
+        run: |
+          flutter pub get
+          flutter build web --release
+
+      - name: Stage firebase config
+        # firebase.json and the rules live in firebase_cfg/ to keep the repo
+        # root readable; the CLI wants them at the root. .firebaserc is not in
+        # the repo (it names real infrastructure), so it is written here from
+        # the project id.
+        run: |
+          cp firebase_cfg/firebase.json .
+          cp firebase_cfg/firestore.rules .
+          cp firebase_cfg/firestore.indexes.json .
+          printf '{"projects":{"default":"%s"}}\n' "${PROJECT_ID}" > .firebaserc
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools@15
+
+      - name: Deploy rules and indexes
+        # BEFORE hosting. Rules must be live before any client that depends on
+        # them is served.
+        run: |
+          firebase deploy \
+            --only firestore:rules,firestore:indexes \
+            --project "${PROJECT_ID}" \
+            --non-interactive
+
+      - name: Deploy hosting
+        run: |
+          firebase deploy \
+            --only "hosting:${HOSTING_SITE}" \
+            --project "${PROJECT_ID}" \
+            --non-interactive \
+            --message "${GITHUB_SHA::8} via GitHub Actions"
+
+      - name: Verify the live site
+        run: |
+          CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 https://bg.netdev.be/)"
+          [[ "${CODE}" == "200" ]] || { echo "::error::bg.netdev.be returned ${CODE}"; exit 1; }
+
+          # The easter egg doubles as an end-to-end check that Hosting's rewrite
+          # to Cloud Run is wired up: it is served by the backend, not the CDN.
+          BODY="$(curl -s --max-time 30 https://bg.netdev.be/legacy || true)"
+          if [[ "${BODY}" == *"Hello World!!"* ]]; then
+            echo "bg.netdev.be live, and /legacy still remembers where it came from."
+          else
+            echo "::warning::/legacy did not return the expected string; check the Hosting rewrite to Cloud Run."
+          fi
