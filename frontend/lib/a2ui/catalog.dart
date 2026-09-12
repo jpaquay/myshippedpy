@@ -19,6 +19,13 @@ import 'package:flutter/material.dart';
 
 import '../app_theme.dart';
 import 'actions.dart';
+import 'components/almanac_timeline.dart';
+import 'components/genre_corridor.dart';
+import 'components/rationale_card.dart';
+import 'components/sky_dial.dart';
+import 'components/telemetry_inspector.dart';
+import 'components/theme_chips.dart';
+import 'components/track_list.dart';
 import 'data_model.dart';
 import 'messages.dart';
 
@@ -596,3 +603,18 @@ List<Widget> _spaced(List<Widget> children, double gap, Axis axis) {
   }
   return out;
 }
+
+/// The full BAROGROOVE catalog: A2UI primitives plus the domain components
+/// declared by the Python side, including live AI Telemetry Inspector nodes.
+A2uiCatalog buildBarogrooveCatalog() =>
+    A2uiCatalog(basicComponents()).merge(<String, A2uiComponentBuilder>{
+      'SkyDial': (A2uiNode n) => SkyDialComponent(node: n),
+      'ThemeChips': (A2uiNode n) => ThemeChipsComponent(node: n),
+      'GenreCorridor': (A2uiNode n) => GenreCorridorComponent(node: n),
+      'TrackList': (A2uiNode n) => TrackListComponent(node: n),
+      'RationaleCard': (A2uiNode n) => RationaleCardComponent(node: n),
+      'AlmanacTimeline': (A2uiNode n) => AlmanacTimelineComponent(node: n),
+      'TelemetryInspector': (A2uiNode n) => TelemetryInspectorA2uiWidget(node: n),
+      'TelemetryEntry': (A2uiNode n) => TelemetryEntryA2uiWidget(node: n),
+    });
+

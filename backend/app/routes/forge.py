@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from ..container import get_container
 from ..contracts import Coordinates, ForgeRequest, ForgeResult, Playlist, Rationale
@@ -31,6 +31,7 @@ DEMO_SEED = 1958  # the year the Van Doorne barograph in the office was made.
 @router.post("/forge", response_model=ForgeResult)
 async def forge(
     request: ForgeRequest,
+    response: Response = None,  # type: ignore[assignment]
     user_id: str | None = Depends(current_user_id),
 ) -> ForgeResult:
     """Forge a playlist.
@@ -70,6 +71,8 @@ async def forge(
         from .surfaces import record_recent_playlist
 
         record_recent_playlist(result.playlist)
+        if response is not None and getattr(result, "trajectory_id", None):
+            response.headers["X-Trajectory-Id"] = str(result.trajectory_id)
         return result
     except BarogrooveError as exc:
         raise HTTPException(
@@ -86,6 +89,7 @@ async def forge(
 async def forge_demo(
     length: int = 18,
     theme_id: str | None = None,
+    response: Response = None,  # type: ignore[assignment]
     user_id: str | None = Depends(current_user_id),
 ) -> ForgeResult:
     """Zero-argument forge over Brussels. The demo endpoint.
@@ -102,11 +106,14 @@ async def forge_demo(
         sink="m3u",
         seed=DEMO_SEED,
     )
-    return await forge(request, user_id=user_id)
+    return await forge(request, response=response, user_id=user_id)
 
 
 @router.post("/forge/explain", response_model=Rationale)
-async def explain(playlist: Playlist) -> Rationale:
+async def explain(
+    playlist: Playlist,
+    response: Response = None,  # type: ignore[assignment]
+) -> Rationale:
     """Re-explain a playlist that already exists.
 
     Rebuilds the reasoning against the current transfer matrix and rationale
@@ -114,7 +121,10 @@ async def explain(playlist: Playlist) -> Rationale:
     retroactively improves every stored playlist.
     """
     try:
-        return await get_container().forge().explain(playlist)
+        rat = await get_container().forge().explain(playlist)
+        if response is not None and getattr(rat, "trajectory_id", None):
+            response.headers["X-Trajectory-Id"] = str(rat.trajectory_id)
+        return rat
     except BarogrooveError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)

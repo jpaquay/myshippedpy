@@ -65,6 +65,8 @@ __all__ = [
     "FN_OPEN_ALMANAC_ENTRY",
     "FN_REFRESH_SKY",
     "FN_RETRY",
+    "FN_OPEN_TELEMETRY_TRACE",
+    "FN_REFRESH_TELEMETRY",
     "FN_SCROLL_TO_TRACK",
     "FN_FORMAT_SIGNED",
     "SKY_DIM_WEIGHTS",
@@ -201,6 +203,8 @@ FN_EXPLAIN_DIMENSION: Final[str] = "barogroove.explainDimension"
 FN_OPEN_ALMANAC_ENTRY: Final[str] = "barogroove.openAlmanacEntry"
 FN_REFRESH_SKY: Final[str] = "barogroove.refreshSky"
 FN_RETRY: Final[str] = "barogroove.retry"
+FN_OPEN_TELEMETRY_TRACE: Final[str] = "barogroove.openTelemetryTrace"
+FN_REFRESH_TELEMETRY: Final[str] = "barogroove.refreshTelemetry"
 
 # Agent -> renderer direction (callRendererFunction).
 FN_SCROLL_TO_TRACK: Final[str] = "barogroove.scrollToTrack"
@@ -339,6 +343,19 @@ AGENT_FUNCTIONS: Final[dict[str, FunctionDefinition]] = {
         allowed_callers="rendererOnly",
         requires_user_activation=True,
     ),
+    FN_OPEN_TELEMETRY_TRACE: FunctionDefinition(
+        description="Open a detailed trace inspection view for a recorded AI trajectory.",
+        parameters=_obj({"trajectoryId": _STR, "surfaceId": _STR}, ["trajectoryId"]),
+        returns={"type": "object"},
+        allowed_callers="rendererOnly",
+        requires_user_activation=True,
+    ),
+    FN_REFRESH_TELEMETRY: FunctionDefinition(
+        description="Refresh the live AI Observability Telemetry Inspector surface.",
+        parameters=_obj({"surface": _STR, "surfaceId": _STR}),
+        returns={"type": "object"},
+        allowed_callers="rendererOrAgent",
+    ),
 }
 
 RENDERER_FUNCTIONS: Final[dict[str, FunctionDefinition]] = {
@@ -469,6 +486,7 @@ _ALL_FEATURE = [
     "TrackList",
     "RationaleCard",
     "AlmanacTimeline",
+    "TelemetryInspector",
     "Notice",
     "Stack",
 ]
@@ -836,6 +854,50 @@ COMPONENTS: Final[dict[str, dict[str, Any]]] = {
         ],
         actions=[FN_OPEN_ALMANAC_ENTRY],
     ),
+    "TelemetryInspector": _component(
+        "TelemetryInspector",
+        purpose="Real-time AI Observability inspector showing trajectories, token usage, latency, and semantic memories.",
+        properties={
+            "entries": _children("Template ChildList over telemetry trajectory entries."),
+            "title": _dyn("String", "Inspector title."),
+            "subtitle": _dyn("String", "Inspector subtitle."),
+            "totalAiCalls": _dyn("Number", "Total AI calls recorded."),
+            "totalTokens": _dyn("Number", "Total tokens consumed."),
+            "activeSessions": _dyn("Number", "Active user sessions count."),
+            "storedMemories": _dyn("Number", "Stored semantic memories count."),
+            "avgLatencyMs": _dyn("Number", "Average turn latency in ms."),
+            "onRefresh": _action("Refresh telemetry stream.", FN_REFRESH_TELEMETRY),
+        },
+        required=["entries"],
+        bindable=[
+            "title", "subtitle", "totalAiCalls", "totalTokens",
+            "activeSessions", "storedMemories", "avgLatencyMs",
+        ],
+        actions=[FN_REFRESH_TELEMETRY, FN_OPEN_TELEMETRY_TRACE],
+    ),
+    "TelemetryEntry": _component(
+        "TelemetryEntry",
+        purpose="One AI trajectory row in the TelemetryInspector.",
+        properties={
+            "trajectoryId": _dyn("String", "Trajectory identifier."),
+            "surface": _dyn("String", "Originating surface (advisor, dataviz, forge, a2ui, mcp)."),
+            "endpoint": _dyn("String", "Endpoint or tool name."),
+            "executionPath": _dyn("String", "Execution path (vertex-ai, semantic-fallback, deterministic-fallback)."),
+            "latencyMs": _dyn("Number", "Turn latency in ms."),
+            "totalTokens": _dyn("Number", "Total tokens used."),
+            "traceId": _dyn("String", "W3C trace ID."),
+            "createdAt": _dyn("String", "ISO-8601 timestamp."),
+            "status": _dyn("String", "ok | error."),
+            "onOpen": _action("Inspect full trace.", FN_OPEN_TELEMETRY_TRACE),
+        },
+        required=["trajectoryId", "onOpen"],
+        allowed_parents=["TelemetryInspector"],
+        bindable=[
+            "trajectoryId", "surface", "endpoint", "executionPath",
+            "latencyMs", "totalTokens", "traceId", "createdAt", "status",
+        ],
+        actions=[FN_OPEN_TELEMETRY_TRACE],
+    ),
 }
 
 #: Enforce the v1.0 discriminator rule at import time rather than at render time.
@@ -891,6 +953,7 @@ CATALOG: Final[dict[str, Any]] = {
                     "GenreOption",
                     "TrackRow",
                     "AlmanacEntry",
+                    "TelemetryEntry",
                 ],
                 "chromeComponents": ["Stack", "Notice"],
                 "skyDimensions": list(SKY_DIMS),

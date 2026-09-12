@@ -586,7 +586,7 @@ build_and_deploy() {
       --role="roles/run.invoker" \
       --quiet >/dev/null
   fi
-  for iam_user in "jpaquay@gmail.com" "jerome@netdev.be" "jpaquay@gcp.altostrat.com" "jpaquay@google.com" "elena.ruizroman@gmail.com" "arthurpaquay@gmail.com"; do
+  for iam_user in "jpaquay@gmail.com" "jerome@netdev.be" "jpaquay@gcp.altostrat.com" "jpaquay@google.com" "elena.ruizroman@gmail.com" "arthurpaquay@gmail.com" "esperuiz@gmail.com"; do
     if ! printf '%s' "${run_policy}" | grep -q "user:${iam_user}"; then
       info "granting roles/run.invoker to user:${iam_user}"
       run gcloud run services add-iam-policy-binding "${SERVICE}" \
@@ -597,7 +597,7 @@ build_and_deploy() {
         --quiet >/dev/null
     fi
   done
-  ok "invoker bindings set (6 IAM users + Firebase Hosting proxy)"
+  ok "invoker bindings set (7 IAM users + Firebase Hosting proxy)"
 }
 
 # -----------------------------------------------------------------------------
@@ -736,8 +736,8 @@ main() {
 
   if [[ "${BUILD_WEB}" == "true" ]]; then
     step "Parallel Flutter Web Build (background)"
-    info "spawning 'flutter build web --release --no-wasm-dry-run' in background..."
-    (cd "${REPO_ROOT}/frontend" && /usr/local/google/home/jpaquay/flutter/bin/flutter build web --release --no-wasm-dry-run >/tmp/barogroove_flutter_build.log 2>&1) &
+    info "spawning 'flutter build web --release --no-wasm-dry-run --pwa-strategy=none' in background..."
+    (cd "${REPO_ROOT}/frontend" && /usr/local/google/home/jpaquay/flutter/bin/flutter build web --release --no-wasm-dry-run --pwa-strategy=none >/tmp/barogroove_flutter_build.log 2>&1) &
     FLUTTER_BUILD_PID="$!"
     info "Flutter build running concurrently (PID ${FLUTTER_BUILD_PID})"
   fi

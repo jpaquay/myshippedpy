@@ -13,6 +13,7 @@ import '../app_theme.dart';
 import '../config.dart';
 import '../providers.dart';
 import 'shell.dart';
+import 'widgets/telemetry_inspector_panel.dart';
 
 // ============================================================================
 // Self-contained Data Viz Telemetry & QnA JSON Models
@@ -401,6 +402,7 @@ class _DataVizScreenState extends ConsumerState<DataVizScreen>
 
   int? _selectedPressureIndex;
   int _selectedSolarHour = 19; // Default to 19:00 Blue Hour Peak
+  int _activeMode = 0; // 0: Sonic Almanac Analytics, 1: Live AI Telemetry & Trace Inspector
 
   static const List<String> _quickQuestions = <String>[
     'What do I listen to when barometric pressure drops below 1005 hPa?',
@@ -675,87 +677,135 @@ class _DataVizScreenState extends ConsumerState<DataVizScreen>
         builder: (BuildContext context, BoxConstraints constraints) {
           final bool isWide = constraints.maxWidth >= 920;
 
-          return ListView(
-            physics: const BouncingScrollPhysics(
-              parent: AlwaysScrollableScrollPhysics(),
-            ),
-            padding: EdgeInsets.symmetric(
-              horizontal: isWide ? BgSpace.xl : BgSpace.md,
-              vertical: BgSpace.lg,
-            ),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              // 1. Gemini Live 2.5 Data Viz QnA Studio Banner
-              _buildGeminiLiveQnaBanner(context, isWide: isWide),
-              const SizedBox(height: BgSpace.lg),
-
-              // 2. KPI Summary Ribbon
-              _buildSummaryKpiRibbon(context, isWide: isWide),
-              const SizedBox(height: BgSpace.lg),
-
-              // 3. Responsive 2-column or 1-column Dashboard Cards
-              if (isWide) ...<Widget>[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isWide ? BgSpace.xl : BgSpace.md,
+                  vertical: BgSpace.sm,
+                ),
+                child: Row(
                   children: <Widget>[
                     Expanded(
-                      child: _buildPressureVsBpmCard(
-                        context,
-                        isHighlighted: highlighted == 'pressure_vs_bpm',
-                      ),
-                    ),
-                    const SizedBox(width: BgSpace.lg),
-                    Expanded(
-                      child: _buildWeatherAffinityCard(
-                        context,
-                        isHighlighted: highlighted == 'weather_affinity',
+                      child: SegmentedButton<int>(
+                        segments: const <ButtonSegment<int>>[
+                          ButtonSegment<int>(
+                            value: 0,
+                            icon: Icon(Icons.insights_outlined, size: 16),
+                            label: Text('Sonic Almanac Analytics'),
+                          ),
+                          ButtonSegment<int>(
+                            value: 1,
+                            icon: Icon(Icons.radar, size: 16),
+                            label: Text('Live AI Telemetry & Trace Inspector'),
+                          ),
+                        ],
+                        selected: <int>{_activeMode},
+                        onSelectionChanged: (Set<int> selection) {
+                          setState(() => _activeMode = selection.first);
+                        },
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: BgSpace.lg),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Expanded(
-                      child: _buildHourlySolarHeatmapCard(
-                        context,
-                        isHighlighted: highlighted == 'hourly_solar',
-                      ),
+              ),
+              if (_activeMode == 1)
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isWide ? BgSpace.xl : BgSpace.md,
+                      vertical: BgSpace.sm,
                     ),
-                    const SizedBox(width: BgSpace.lg),
-                    Expanded(
-                      child: _buildDecadeSonicDnaCard(
-                        context,
-                        isHighlighted: highlighted == 'decade_dna',
-                      ),
+                    child: const TelemetryInspectorPanel(),
+                  ),
+                )
+              else
+                Expanded(
+                  child: ListView(
+                    physics: const BouncingScrollPhysics(
+                      parent: AlwaysScrollableScrollPhysics(),
                     ),
-                  ],
-                ),
-              ] else ...<Widget>[
-                _buildPressureVsBpmCard(
-                  context,
-                  isHighlighted: highlighted == 'pressure_vs_bpm',
-                ),
-                const SizedBox(height: BgSpace.lg),
-                _buildWeatherAffinityCard(
-                  context,
-                  isHighlighted: highlighted == 'weather_affinity',
-                ),
-                const SizedBox(height: BgSpace.lg),
-                _buildHourlySolarHeatmapCard(
-                  context,
-                  isHighlighted: highlighted == 'hourly_solar',
-                ),
-                const SizedBox(height: BgSpace.lg),
-                _buildDecadeSonicDnaCard(
-                  context,
-                  isHighlighted: highlighted == 'decade_dna',
-                ),
-              ],
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isWide ? BgSpace.xl : BgSpace.md,
+                      vertical: BgSpace.lg,
+                    ),
+                    children: <Widget>[
+                      // 1. Gemini Live 2.5 Data Viz QnA Studio Banner
+                      _buildGeminiLiveQnaBanner(context, isWide: isWide),
+                      const SizedBox(height: BgSpace.lg),
 
-              const SizedBox(height: BgSpace.xxl),
-              const NetdevFooter(),
-              const SizedBox(height: BgSpace.xl),
+                      // 2. KPI Summary Ribbon
+                      _buildSummaryKpiRibbon(context, isWide: isWide),
+                      const SizedBox(height: BgSpace.lg),
+
+                      // 3. Responsive 2-column or 1-column Dashboard Cards
+                      if (isWide) ...<Widget>[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Expanded(
+                              child: _buildPressureVsBpmCard(
+                                context,
+                                isHighlighted: highlighted == 'pressure_vs_bpm',
+                              ),
+                            ),
+                            const SizedBox(width: BgSpace.lg),
+                            Expanded(
+                              child: _buildWeatherAffinityCard(
+                                context,
+                                isHighlighted: highlighted == 'weather_affinity',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: BgSpace.lg),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Expanded(
+                              child: _buildHourlySolarHeatmapCard(
+                                context,
+                                isHighlighted: highlighted == 'hourly_solar',
+                              ),
+                            ),
+                            const SizedBox(width: BgSpace.lg),
+                            Expanded(
+                              child: _buildDecadeSonicDnaCard(
+                                context,
+                                isHighlighted: highlighted == 'decade_dna',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ] else ...<Widget>[
+                        _buildPressureVsBpmCard(
+                          context,
+                          isHighlighted: highlighted == 'pressure_vs_bpm',
+                        ),
+                        const SizedBox(height: BgSpace.lg),
+                        _buildWeatherAffinityCard(
+                          context,
+                          isHighlighted: highlighted == 'weather_affinity',
+                        ),
+                        const SizedBox(height: BgSpace.lg),
+                        _buildHourlySolarHeatmapCard(
+                          context,
+                          isHighlighted: highlighted == 'hourly_solar',
+                        ),
+                        const SizedBox(height: BgSpace.lg),
+                        _buildDecadeSonicDnaCard(
+                          context,
+                          isHighlighted: highlighted == 'decade_dna',
+                        ),
+                      ],
+
+                      const SizedBox(height: BgSpace.xxl),
+                      const NetdevFooter(),
+                      const SizedBox(height: BgSpace.xl),
+                    ],
+                  ),
+                ),
             ],
           );
         },

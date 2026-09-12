@@ -2,7 +2,7 @@
 // Enables Chrome Desktop & Mobile "Install App" / "Save as Chrome App" prompt
 // and provides resilient network-first navigation with offline fallback.
 
-const CACHE_NAME = 'barogroove-pwa-v3';
+const CACHE_NAME = 'barogroove-pwa-v6';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -42,8 +42,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  const isCodeOrDoc =
+    req.url.endsWith('.js') ||
+    req.url.endsWith('.html') ||
+    req.mode === 'navigate';
+
   event.respondWith(
-    fetch(req)
+    fetch(req, isCodeOrDoc ? { cache: 'no-cache' } : undefined)
       .then((res) => {
         if (res && res.status === 200 && res.type === 'basic') {
           const copy = res.clone();

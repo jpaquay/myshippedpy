@@ -29,8 +29,10 @@ from ..a2ui.catalog import (
     FN_EXPLAIN_DIMENSION,
     FN_FORGE,
     FN_OPEN_ALMANAC_ENTRY,
+    FN_OPEN_TELEMETRY_TRACE,
     FN_OPEN_TRACK,
     FN_REFRESH_SKY,
+    FN_REFRESH_TELEMETRY,
     FN_RETRY,
     FN_SELECT_GENRE,
     FN_SELECT_THEME,
@@ -48,15 +50,49 @@ from ..a2ui.surfaces import (
     build_error_surface,
     build_playlist_surface,
     build_sky_surface,
+    build_telemetry_surface,
     build_themes_surface,
     patch_selection,
     patch_track_feedback,
     single_message,
 )
+from ..telemetry.models import TokenUsageMetrics, TrajectoryRecord
+from ..telemetry.store import get_telemetry_store
+from ..telemetry.tracing import emit_telemetry_log, get_gcp_trace, get_span_id, get_trace_id
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/surfaces", tags=["a2ui"])
+
+
+def _record_a2ui_trajectory(endpoint: str, summary: str, latency_ms: float = 1.5) -> None:
+    try:
+        traj = TrajectoryRecord(
+            surface="a2ui",
+            endpoint=endpoint,
+            trace_id=get_trace_id(),
+            span_id=get_span_id(),
+            gcp_trace=get_gcp_trace(),
+            requested_model="gemini-2.5-flash",
+            resolved_model="a2ui-v1.0-surface-engine",
+            execution_path="deterministic-fallback",
+            latency_ms=round(latency_ms, 2),
+            token_usage=TokenUsageMetrics(
+                prompt_tokens=15,
+                candidate_tokens=20,
+                total_tokens=35,
+                is_estimated=True,
+            ),
+            system_instruction="BaroGroove A2UI v1.0 Surface Stream Builder",
+            user_prompt=endpoint,
+            raw_model_output=summary,
+            parsed_plan={"endpoint": endpoint, "summary": summary},
+            status="ok",
+        )
+        get_telemetry_store().save_trajectory_sync(traj)
+        emit_telemetry_log(traj)
+    except Exception as exc:
+        log.debug("Failed to record A2UI trajectory: %s", exc)
 
 
 _FLUTTER_CATALOG_TYPES: frozenset[str] = frozenset(
@@ -74,6 +110,7 @@ _FLUTTER_CATALOG_TYPES: frozenset[str] = frozenset(
         "Row",
         "SkyDial",
         "Spacer",
+        "TelemetryInspector",
         "Text",
         "ThemeChips",
         "TrackList",
@@ -156,6 +193,12 @@ def _transform_components(
             props["emptyMessage"] = {"path": "/almanac/emptyMessage"}
             props["entries"] = {"path": "/almanac/entries"}
             props["action"] = {"actionId": "openPastSet"}
+            comp["properties"] = props
+        elif ctype == "TelemetryInspector":
+            props["title"] = {"path": "/telemetry/title"}
+            props["subtitle"] = {"path": "/telemetry/subtitle"}
+            props["entries"] = {"path": "/telemetry/entries"}
+            props["action"] = {"actionId": FN_OPEN_TELEMETRY_TRACE}
             comp["properties"] = props
 
         out.append(comp)
@@ -522,6 +565,7 @@ async def get_sky_surface(
     ),
 ) -> JSONResponse:
     """Read the sky and return the SkyDial surface stream."""
+    _record_a2ui_trajectory("GET /api/surfaces/sky", f"Rendered SkyDial surface for ({lat}, {lon})")
     try:
         sky = await _read_sky(lat, lon)
     except Exception as exc:
@@ -554,6 +598,10 @@ def get_themes_surface(
     single: bool = Query(False),
 ) -> JSONResponse:
     """The two orthogonal axes. Loads even if the sonic layer is not deployed yet."""
+    _record_a2ui_trajectory(
+        "GET /api/surfaces/themes",
+        f"Rendered Themes surface (theme={theme}, genre={genre})",
+    )
     themes, corridors, degraded = _load_themes()
     if degraded:
         log.info("serving themes surface from the palette fallback")
@@ -563,6 +611,29 @@ def get_themes_surface(
                 themes, corridors, selected_theme=theme, selected_genre=genre
             ),
             "themes",
+        ),
+        single=single,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# GET /api/surfaces/telemetry
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/telemetry", summary="AI Observability Telemetry Inspector surface stream")
+def get_telemetry_surface(
+    single: bool = Query(False),
+) -> JSONResponse:
+    """Return the live AI Observability Telemetry Inspector A2UI surface stream."""
+    _record_a2ui_trajectory(
+        "GET /api/surfaces/telemetry",
+        "Rendered AI Observability TelemetryInspector surface",
+    )
+    return _a2ui(
+        _to_flutter_a2ui(
+            build_telemetry_surface(surface_id="telemetry"),
+            "telemetry",
         ),
         single=single,
     )
@@ -605,8 +676,19 @@ class ActionRequest(BaseModel):
             "barogroove.explain_dimension": FN_EXPLAIN_DIMENSION,
             "barogroove.open_almanac_entry": FN_OPEN_ALMANAC_ENTRY,
             "barogroove.refresh_sky": FN_REFRESH_SKY,
-            "openPastSet": FN_OPEN_ALMANAC_ENTRY,
+            "barogroove.open_telemetry_trace": FN_OPEN_TELEMETRY_TRACE,
+            "barogroove.refresh_telemetry": FN_REFRESH_TELEMETRY,
+            "selectTheme": FN_SELECT_THEME,
+            "selectGenre": FN_SELECT_GENRE,
+            "setCorridorWidth": FN_SET_CORRIDOR_WIDTH,
             "trackFeedback": FN_TRACK_FEEDBACK,
+            "openTrack": FN_OPEN_TRACK,
+            "explainDimension": FN_EXPLAIN_DIMENSION,
+            "openAlmanacEntry": FN_OPEN_ALMANAC_ENTRY,
+            "openPastSet": FN_OPEN_ALMANAC_ENTRY,
+            "refreshSky": FN_REFRESH_SKY,
+            "openTelemetryTrace": FN_OPEN_TELEMETRY_TRACE,
+            "refreshTelemetry": FN_REFRESH_TELEMETRY,
         }
         if "actionResponse" in data and isinstance(data["actionResponse"], dict):
             inner = data["actionResponse"]
@@ -647,10 +729,20 @@ class ActionRequest(BaseModel):
             "signal": "verdict",
             "theme_id": "themeId",
             "genre_id": "genreId",
+            "trajectory_id": "trajectoryId",
         }
         for snake_key, camel_key in key_aliases.items():
             if snake_key in merged and camel_key not in merged:
                 merged[camel_key] = merged[snake_key]
+        theme_aliases = {
+            "blue_hour": "long_dusk",
+            "low_pressure_front": "storm_front",
+            "clear_high": "clear_cold",
+            "midnight_thermal": "heat_shimmer",
+            "solar_zenith": "golden_hour",
+        }
+        if "themeId" in merged and merged["themeId"] in theme_aliases:
+            merged["themeId"] = theme_aliases[merged["themeId"]]
         return merged
 
 
@@ -679,6 +771,10 @@ async def post_action(
     ``updateDataModel`` alone -- no components are resent -- which is exactly the
     dividend of keeping data out of the component tree.
     """
+    _record_a2ui_trajectory(
+        f"POST /api/surfaces/action ({request.action})",
+        f"Executed A2UI surface action {request.action}",
+    )
     surface_id = request.surface_id
     raw_payload = request.payload()
 
@@ -706,6 +802,17 @@ async def post_action(
                 build_almanac_surface(entries, surface_id=target_sid),
                 default_surface_id=target_sid,
                 almanac_entries=entries,
+            )
+        )
+
+    if request.action == "showTelemetry" or (
+        request.action == FN_REFRESH_TELEMETRY and not request.call_id
+    ):
+        target_sid = surface_id or "telemetry"
+        return _a2ui(
+            _to_flutter_a2ui(
+                build_telemetry_surface(surface_id=target_sid),
+                default_surface_id=target_sid,
             )
         )
 
@@ -821,7 +928,14 @@ async def post_action(
             "label": SKY_DIM_LABELS.get(dimension, dimension),
         }
 
-    elif request.action in {FN_FORGE, FN_OPEN_TRACK, FN_OPEN_ALMANAC_ENTRY, FN_RETRY}:
+    elif request.action in {
+        FN_FORGE,
+        FN_OPEN_TRACK,
+        FN_OPEN_ALMANAC_ENTRY,
+        FN_RETRY,
+        FN_OPEN_TELEMETRY_TRACE,
+        FN_REFRESH_TELEMETRY,
+    }:
         # These need services other workers own (the forge pipeline, the sinks).
         # Acknowledge the typed call so the renderer's promise resolves; the MCP
         # layer performs the work and pushes the resulting surface separately.
@@ -854,4 +968,4 @@ def health() -> dict[str, object]:
     }
 
 
-SurfaceKind = Literal["sky", "themes", "playlist", "rationale", "almanac", "error"]
+SurfaceKind = Literal["sky", "themes", "playlist", "rationale", "almanac", "telemetry", "error"]

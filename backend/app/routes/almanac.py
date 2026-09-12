@@ -432,6 +432,47 @@ async def post_feedback(
     except Exception:
         logger.exception("feedback write failed for %s", user.uid)
         return FeedbackResponse(recorded=False, detail="almanac unavailable")
+
+    try:
+        from ..telemetry.memory_extractor import extract_memory_from_feedback
+
+        artist = ""
+        title = ""
+        theme_id = ""
+        genre_id = ""
+        try:
+            pl_list = await store.history(user.uid, limit=25)
+            for pl in pl_list:
+                pl_id = getattr(pl, "id", None) or (pl.get("id") if isinstance(pl, dict) else None)
+                if str(pl_id) == str(body.playlist_id):
+                    theme_id = getattr(pl, "theme_id", "") or (pl.get("theme_id", "") if isinstance(pl, dict) else "")
+                    genre_id = getattr(pl, "genre_id", "") or (pl.get("genre_id", "") if isinstance(pl, dict) else "")
+                    tracks = getattr(pl, "tracks", []) or (pl.get("tracks", []) if isinstance(pl, dict) else [])
+                    for st in tracks:
+                        tr = getattr(st, "track", st)
+                        t_key = getattr(tr, "key", None) or (tr.get("key") if isinstance(tr, dict) else None)
+                        if str(t_key) == str(body.track_key):
+                            title = getattr(tr, "title", "") or (tr.get("title", "") if isinstance(tr, dict) else "")
+                            art_obj = getattr(tr, "artist", None) or (tr.get("artist") if isinstance(tr, dict) else None)
+                            artist = getattr(art_obj, "name", str(art_obj or "")) if art_obj else ""
+                            break
+                    break
+        except Exception:
+            pass
+
+        extract_memory_from_feedback(
+            user_id=user.uid,
+            playlist_id=body.playlist_id,
+            track_key=body.track_key,
+            signal=body.signal,
+            artist=artist,
+            title=title,
+            theme_id=theme_id,
+            genre_id=genre_id,
+        )
+    except Exception:
+        logger.debug("telemetry memory extraction from feedback skipped", exc_info=True)
+
     return FeedbackResponse(recorded=True)
 
 

@@ -20,7 +20,7 @@ import datetime as _dt
 import math
 from typing import Any, Literal, Protocol, Sequence, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 __all__ = [
     "SKY_DIMS",
@@ -353,6 +353,7 @@ class SonicVector(BaseModel):
     def as_dict(self) -> dict[str, float]:
         return {dim: getattr(self, dim) for dim in SONIC_DIMS}
 
+    @computed_field
     @property
     def tempo_bpm(self) -> float:
         """Denormalised tempo, because humans say '94 BPM', not '0.28'."""
@@ -538,6 +539,7 @@ class Rationale(BaseModel):
     taste_note: str = ""
     confidence: float = Field(0.5, ge=0.0, le=1.0)
     degraded: list[str] = Field(default_factory=list, description="Which upstreams were down, in plain words.")
+    trajectory_id: str | None = None
 
 
 class Playlist(BaseModel):
@@ -575,6 +577,8 @@ class ForgeRequest(BaseModel):
     genre_id: str = "any"
     length: int = Field(18, ge=4, le=60)
     user_id: str | None = None
+    session_id: str | None = None
+    conversation_id: str | None = None
     lastfm_user: str | None = None
     sink: "SinkKind" = "auto"
     at: _dt.datetime | None = Field(None, description="Override 'now' — used by fixtures and the Almanac.")
@@ -632,6 +636,12 @@ class ForgeResult(BaseModel):
     playlist: Playlist
     degraded: list[str] = Field(default_factory=list)
     elapsed_ms: int = 0
+    trajectory_id: str | None = None
+    session_id: str | None = None
+    conversation_id: str | None = None
+    user_id: str | None = None
+    latency_ms: float | None = None
+    token_usage: dict[str, Any] | None = None
 
 
 SinkKind = Literal["auto", "spotify", "m3u", "none"]

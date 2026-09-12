@@ -21,6 +21,7 @@ import 'dataviz_screen.dart';
 import 'home_screen.dart';
 import 'playlist_screen.dart';
 import 'settings_screen.dart';
+import 'widgets/telemetry_inspector_panel.dart';
 
 /// The five destinations.
 enum BgDestination {
@@ -89,11 +90,13 @@ class AppShellState extends ConsumerState<AppShell> {
         actions: <Widget>[
           _PwaInstallButton(bridge: _pwaBridge, compact: isMobile),
           const SizedBox(width: BgSpace.xs),
+          const _TelemetryInspectorAppBarButton(),
+          const SizedBox(width: BgSpace.xs),
           const _HealthPip(),
           const SizedBox(width: BgSpace.sm),
-          const _AccountMenu(),
-          const SizedBox(width: BgSpace.xs),
           const _ThemeModeSwitchButton(),
+          const SizedBox(width: BgSpace.sm),
+          const _AccountMenu(),
           const SizedBox(width: BgSpace.sm),
         ],
       ),
@@ -105,6 +108,30 @@ class AppShellState extends ConsumerState<AppShell> {
               onDestinationSelected: (int i) =>
                   go(BgDestination.values[i]),
               labelType: NavigationRailLabelType.all,
+              trailing: Expanded(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: BgSpace.lg),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        const _ThemeModeSwitchButton(),
+                        const SizedBox(height: 6),
+                        Text(
+                          'THEME',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.0,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               destinations: <NavigationRailDestination>[
                 for (final BgDestination d in BgDestination.values)
                   NavigationRailDestination(
@@ -189,36 +216,36 @@ class _PwaInstallButton extends StatelessWidget {
     final ColorScheme colors = Theme.of(context).colorScheme;
     final bool ready = bridge.isInstallable;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: OutlinedButton.icon(
-        onPressed: () async {
-          HapticFeedback.lightImpact();
-          if (ready) {
-            await bridge.triggerInstall();
-          } else {
-            _showInstallInstructions(context);
-          }
-        },
-        icon: Icon(
-          ready ? Icons.install_desktop_rounded : Icons.download_rounded,
-          size: 15,
-          color: colors.primary,
-        ),
-        label: Text(
-          compact ? 'APP' : 'INSTALL APP',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.6,
-            color: colors.primary,
+    return Tooltip(
+      message: ready
+          ? 'Install BaroGroove App (1-Click Chrome App)'
+          : 'Install BaroGroove as Desktop/Mobile App',
+      child: Material(
+        color: colors.primary.withValues(alpha: ready ? 0.14 : 0.08),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: colors.primary.withValues(alpha: ready ? 0.65 : 0.3),
+            width: 1.2,
           ),
         ),
-        style: OutlinedButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12),
-          side: BorderSide(
-            color: colors.primary.withValues(alpha: ready ? 0.75 : 0.35),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () async {
+            HapticFeedback.lightImpact();
+            if (ready) {
+              await bridge.triggerInstall();
+            } else {
+              _showInstallInstructions(context);
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            child: Icon(
+              ready ? Icons.install_desktop_rounded : Icons.download_for_offline_rounded,
+              size: 17,
+              color: colors.primary,
+            ),
           ),
         ),
       ),
@@ -418,6 +445,72 @@ class _FloatingMiniPlayerBar extends StatelessWidget {
   }
 }
 
+void _showTelemetryInspectorModal(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (BuildContext ctx) => Dialog(
+      insetPadding: const EdgeInsets.all(BgSpace.lg),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1120, maxHeight: 780),
+        child: const TelemetryInspectorPanel(isModal: true),
+      ),
+    ),
+  );
+}
+
+class _TelemetryInspectorAppBarButton extends ConsumerWidget {
+  const _TelemetryInspectorAppBarButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final health = ref.watch(healthProvider).valueOrNull;
+    final int totalCalls = health?.telemetry?.totalCalls ?? 0;
+
+    return Tooltip(
+      message: 'Live AI Telemetry & Trace Inspector ($totalCalls calls)',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => _showTelemetryInspectorModal(context),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: BgSpace.sm,
+            vertical: BgSpace.xs,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Icon(Icons.radar, size: 18),
+              if (totalCalls > 0) ...<Widget>[
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: BgPalette.sky700.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: BgPalette.sky700.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: Text(
+                    '$totalCalls',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 10,
+                        ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A small dot reporting backend health. Green is silent; anything else is
 /// tappable and says what is wrong. We do not hide a degraded backend.
 class _HealthPip extends ConsumerWidget {
@@ -434,18 +527,19 @@ class _HealthPip extends ConsumerWidget {
         child: CircularProgressIndicator(strokeWidth: 1.6),
       ),
       error: (Object e, StackTrace _) => _pip(context, BgPalette.danger,
-          'Backend unreachable', <String>['$e'], ref),
-      data: (health) {
-        if (health.ok && health.degraded.isEmpty) {
+          'Backend unreachable', <String>['$e'], ref, null),
+      data: (healthData) {
+        if (healthData.ok && healthData.degraded.isEmpty) {
           return _pip(context, BgPalette.ok, 'All systems nominal',
-              const <String>[], ref);
+              const <String>[], ref, healthData);
         }
         return _pip(
           context,
-          health.degraded.isEmpty ? BgPalette.warn : BgPalette.warn,
-          health.ok ? 'Running degraded' : 'Backend unhealthy',
-          health.degraded,
+          healthData.degraded.isEmpty ? BgPalette.warn : BgPalette.warn,
+          healthData.ok ? 'Running degraded' : 'Backend unhealthy',
+          healthData.degraded,
           ref,
+          healthData,
         );
       },
     );
@@ -457,14 +551,16 @@ class _HealthPip extends ConsumerWidget {
     String label,
     List<String> details,
     WidgetRef ref,
+    HealthStatus? healthStatus,
   ) {
+    final TelemetrySummaryModel? telemetry = healthStatus?.telemetry;
     return Tooltip(
       message: label,
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: () => showDialog<void>(
           context: context,
-          builder: (BuildContext context) => AlertDialog(
+          builder: (BuildContext dialogContext) => AlertDialog(
             title: Text(label),
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -477,18 +573,43 @@ class _HealthPip extends ConsumerWidget {
                   const SizedBox(height: BgSpace.md),
                   for (final String d in details) Text('· $d'),
                 ],
+                if (telemetry != null) ...<Widget>[
+                  const SizedBox(height: BgSpace.md),
+                  const Divider(),
+                  const SizedBox(height: BgSpace.xs),
+                  Text(
+                    'LIVE AI TELEMETRY SUMMARY',
+                    style: Theme.of(dialogContext).textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                        ),
+                  ),
+                  const SizedBox(height: BgSpace.xs),
+                  Text('Total AI Calls: ${telemetry.totalCalls}'),
+                  Text('Token Usage: ${telemetry.totalTokens}'),
+                  Text('Active Sessions: ${telemetry.activeSessions}'),
+                  Text('Stored Memories: ${telemetry.storedMemories}'),
+                ],
               ],
             ),
             actions: <Widget>[
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  _showTelemetryInspectorModal(context);
+                },
+                icon: const Icon(Icons.radar, size: 16),
+                label: const Text('Open Telemetry Inspector'),
+              ),
               TextButton(
                 onPressed: () {
                   ref.invalidate(healthProvider);
-                  Navigator.of(context).pop();
+                  Navigator.of(dialogContext).pop();
                 },
                 child: const Text('Re-check'),
               ),
               TextButton(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () => Navigator.of(dialogContext).pop(),
                 child: const Text('Close'),
               ),
             ],
@@ -567,7 +688,7 @@ class _AccountMenu extends ConsumerWidget {
   }
 }
 
-/// Top-right AppBar switch between Dark and Light mode.
+/// Top-right AppBar & NavigationRail switch between Dark and Light mode.
 class _ThemeModeSwitchButton extends ConsumerWidget {
   const _ThemeModeSwitchButton();
 
@@ -577,18 +698,81 @@ class _ThemeModeSwitchButton extends ConsumerWidget {
     final bool isDark = mode == ThemeMode.dark ||
         (mode == ThemeMode.system &&
             Theme.of(context).brightness == Brightness.dark);
+    final ColorScheme colors = Theme.of(context).colorScheme;
 
     return Tooltip(
-      message: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
-      child: IconButton(
-        onPressed: () {
-          HapticFeedback.selectionClick();
-          ref.read(themeModeProvider.notifier).state =
-              isDark ? ThemeMode.light : ThemeMode.dark;
-        },
-        icon: Icon(
-          isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-          size: 20,
+      message: isDark
+          ? 'Dark Theme active • Click for Light Theme'
+          : 'Light Theme active • Click for Dark Theme',
+      child: Material(
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.55),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: colors.outlineVariant.withValues(alpha: 0.7),
+            width: 1.1,
+          ),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            ref.read(themeModeProvider.notifier).state =
+                isDark ? ThemeMode.light : ThemeMode.dark;
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(3.0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                // Light / Sun segment
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: !isDark
+                        ? const Color(0xFFF59E0B).withValues(alpha: 0.22)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(16),
+                    border: !isDark
+                        ? Border.all(color: const Color(0xFFF59E0B), width: 1.1)
+                        : null,
+                  ),
+                  child: Icon(
+                    Icons.wb_sunny_rounded,
+                    size: 15,
+                    color: !isDark
+                        ? const Color(0xFFF59E0B)
+                        : colors.onSurfaceVariant.withValues(alpha: 0.55),
+                  ),
+                ),
+                const SizedBox(width: 2),
+                // Dark / Moon segment
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? colors.primary.withValues(alpha: 0.22)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(16),
+                    border: isDark
+                        ? Border.all(color: colors.primary, width: 1.1)
+                        : null,
+                  ),
+                  child: Icon(
+                    Icons.nightlight_round,
+                    size: 15,
+                    color: isDark
+                        ? colors.primary
+                        : colors.onSurfaceVariant.withValues(alpha: 0.55),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

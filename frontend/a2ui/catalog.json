@@ -79,6 +79,7 @@
         "TrackList",
         "RationaleCard",
         "AlmanacTimeline",
+        "TelemetryInspector",
         "Notice",
         "Stack",
         "ThemeChip",
@@ -1042,6 +1043,167 @@
           }
         }
       }
+    },
+    "TelemetryInspector": {
+      "type": "object",
+      "title": "TelemetryInspector",
+      "description": "Real-time AI Observability inspector showing trajectories, token usage, latency, and semantic memories.",
+      "properties": {
+        "component": {
+          "const": "TelemetryInspector",
+          "description": "Discriminator: always 'TelemetryInspector'."
+        },
+        "entries": {
+          "$ref": "common_types.json#/$defs/ChildList",
+          "description": "Template ChildList over telemetry trajectory entries."
+        },
+        "title": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Inspector title."
+        },
+        "subtitle": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Inspector subtitle."
+        },
+        "totalAiCalls": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "Total AI calls recorded."
+        },
+        "totalTokens": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "Total tokens consumed."
+        },
+        "activeSessions": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "Active user sessions count."
+        },
+        "storedMemories": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "Stored semantic memories count."
+        },
+        "avgLatencyMs": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "Average turn latency in ms."
+        },
+        "onRefresh": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Refresh telemetry stream. Dispatches `barogroove.refreshTelemetry`.",
+          "x-a2ui-function": "barogroove.refreshTelemetry"
+        }
+      },
+      "required": [
+        "component",
+        "entries"
+      ],
+      "additionalProperties": false,
+      "allowedParents": [
+        "Surface",
+        "Stack"
+      ],
+      "metadata": {
+        "extensions": {
+          "barogroove": {
+            "purpose": "Real-time AI Observability inspector showing trajectories, token usage, latency, and semantic memories.",
+            "bindable": [
+              "title",
+              "subtitle",
+              "totalAiCalls",
+              "totalTokens",
+              "activeSessions",
+              "storedMemories",
+              "avgLatencyMs"
+            ],
+            "functions": [
+              "barogroove.refreshTelemetry",
+              "barogroove.openTelemetryTrace"
+            ],
+            "design": ""
+          }
+        }
+      }
+    },
+    "TelemetryEntry": {
+      "type": "object",
+      "title": "TelemetryEntry",
+      "description": "One AI trajectory row in the TelemetryInspector.",
+      "properties": {
+        "component": {
+          "const": "TelemetryEntry",
+          "description": "Discriminator: always 'TelemetryEntry'."
+        },
+        "trajectoryId": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Trajectory identifier."
+        },
+        "surface": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Originating surface (advisor, dataviz, forge, a2ui, mcp)."
+        },
+        "endpoint": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Endpoint or tool name."
+        },
+        "executionPath": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Execution path (vertex-ai, semantic-fallback, deterministic-fallback)."
+        },
+        "latencyMs": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "Turn latency in ms."
+        },
+        "totalTokens": {
+          "$ref": "common_types.json#/$defs/DynamicNumber",
+          "description": "Total tokens used."
+        },
+        "traceId": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "W3C trace ID."
+        },
+        "createdAt": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "ISO-8601 timestamp."
+        },
+        "status": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "ok | error."
+        },
+        "onOpen": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Inspect full trace. Dispatches `barogroove.openTelemetryTrace`.",
+          "x-a2ui-function": "barogroove.openTelemetryTrace"
+        }
+      },
+      "required": [
+        "component",
+        "trajectoryId",
+        "onOpen"
+      ],
+      "additionalProperties": false,
+      "allowedParents": [
+        "TelemetryInspector"
+      ],
+      "metadata": {
+        "extensions": {
+          "barogroove": {
+            "purpose": "One AI trajectory row in the TelemetryInspector.",
+            "bindable": [
+              "trajectoryId",
+              "surface",
+              "endpoint",
+              "executionPath",
+              "latencyMs",
+              "totalTokens",
+              "traceId",
+              "createdAt",
+              "status"
+            ],
+            "functions": [
+              "barogroove.openTelemetryTrace"
+            ],
+            "design": ""
+          }
+        }
+      }
     }
   },
   "functions": {
@@ -1297,6 +1459,49 @@
       "allowedCallers": "rendererOnly",
       "requiresUserActivation": true
     },
+    "barogroove.openTelemetryTrace": {
+      "description": "Open a detailed trace inspection view for a recorded AI trajectory.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "trajectoryId": {
+            "type": "string"
+          },
+          "surfaceId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "trajectoryId"
+        ]
+      },
+      "returns": {
+        "type": "object"
+      },
+      "allowedCallers": "rendererOnly",
+      "requiresUserActivation": true
+    },
+    "barogroove.refreshTelemetry": {
+      "description": "Refresh the live AI Observability Telemetry Inspector surface.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "surface": {
+            "type": "string"
+          },
+          "surfaceId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "returns": {
+        "type": "object"
+      },
+      "allowedCallers": "rendererOrAgent",
+      "requiresUserActivation": false
+    },
     "barogroove.scrollToTrack": {
       "description": "Agent -> renderer: bring a track into view (used when the agent answers 'why is #7 there?' and wants the row highlighted).",
       "parameters": {
@@ -1496,7 +1701,8 @@
           "ThemeChip",
           "GenreOption",
           "TrackRow",
-          "AlmanacEntry"
+          "AlmanacEntry",
+          "TelemetryEntry"
         ],
         "chromeComponents": [
           "Stack",
@@ -1841,8 +2047,10 @@
           "barogroove.explainDimension",
           "barogroove.forge",
           "barogroove.openAlmanacEntry",
+          "barogroove.openTelemetryTrace",
           "barogroove.openTrack",
           "barogroove.refreshSky",
+          "barogroove.refreshTelemetry",
           "barogroove.retry",
           "barogroove.selectGenre",
           "barogroove.selectTheme",

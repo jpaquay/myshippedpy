@@ -73,6 +73,18 @@ class AdvisorLiveRequest(BaseModel):
         default=True,
         description="Whether to automatically execute a full 18-track Daylist forge when parameters change.",
     )
+    session_id: str | None = Field(
+        default=None,
+        description="Optional user session identifier for multi-turn continuity.",
+    )
+    conversation_id: str | None = Field(
+        default=None,
+        description="Optional conversation thread identifier for multi-turn history.",
+    )
+    user_id: str | None = Field(
+        default=None,
+        description="Optional user identifier.",
+    )
 
 
 class AdvisorLiveResponse(BaseModel):
@@ -115,6 +127,30 @@ class AdvisorLiveResponse(BaseModel):
         default="gemini-2.5-flash (vertex-ai)",
         description="Model that processed the advisor turn.",
     )
+    trajectory_id: str = Field(
+        default="",
+        description="Captured AI trajectory record ID.",
+    )
+    session_id: str = Field(
+        default="",
+        description="Active user session ID.",
+    )
+    conversation_id: str = Field(
+        default="",
+        description="Active multi-turn conversation ID.",
+    )
+    user_id: str = Field(
+        default="demo",
+        description="User identifier.",
+    )
+    latency_ms: float = Field(
+        default=0.0,
+        description="End-to-end turn latency in milliseconds.",
+    )
+    token_usage: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Token usage metrics (prompt_tokens, candidate_tokens, total_tokens, is_estimated).",
+    )
 
 
 class AdvisorSuggestionItem(BaseModel):
@@ -154,6 +190,8 @@ _VALID_GENRES: dict[str, str] = {
 def _get_vertex_token() -> tuple[str | None, str]:
     """Retrieve a Google Cloud bearer token and project ID via Application Default Credentials."""
     project_id = os.environ.get("BG_GCP_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or "netdev-firebase"
+    if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("BG_WEATHER_OFFLINE") == "1":
+        return None, project_id
     try:
         import google.auth
         import google.auth.transport.requests
@@ -174,8 +212,15 @@ def _build_system_instruction(
     current_geocache_id: str | None,
     current_theme_id: str | None,
     current_genre_id: str | None,
+    recent_turns: list[Any] | None = None,
+    user_memories: list[Any] | None = None,
 ) -> str:
-    """Build the grounded system prompt for Gemini 2.5 Flash."""
+    """Build the grounded system prompt for Gemini 2.5 Flash with memory & history injection."""
+    from ..telemetry.memory_extractor import (
+        format_memories_for_prompt,
+        format_recent_turns_for_prompt,
+    )
+
     geo_lines = [
         f"- id: '{g.id}' | {g.name} ({g.city}, {g.country}) | local_time: {g.local_time_label()} ({g.day_period()}) | vibe_tags: {', '.join(g.vibe_tags)}"
         for g in geocaches
@@ -186,6 +231,14 @@ def _build_system_instruction(
     ]
     theme_lines = [f"- '{k}': {v}" for k, v in _VALID_THEMES.items()]
     genre_lines = [f"- '{k}': {v}" for k, v in _VALID_GENRES.items()]
+
+    mem_block = format_memories_for_prompt(user_memories or [])
+    hist_block = format_recent_turns_for_prompt(recent_turns or [])
+    context_addendum = ""
+    if mem_block:
+        context_addendum += f"\n\n{mem_block}"
+    if hist_block:
+        context_addendum += f"\n\n{hist_block}"
 
     return f"""You are the **BaroGroove Gemini Live Forge Advisor & Executor**, an atmospheric sonic meteorologist and expert DJ.
 The user speaks or writes to you from desktop or mobile to explore weather-inspired music, teleport across iconic World Street-Art Landmarks, seed tracks from their Firestore Sonic Almanac (Last.fm scrobble history), and immediately forge an 18-track Weather-Inspired Daylist.
@@ -205,7 +258,7 @@ Available Genre Corridors (`genre_id`):
 {chr(10).join(genre_lines)}
 
 User's Firestore Sonic Almanac Scrobbles (choose up to 4 `scrobble_ids` that match the user's artist/mood/weather request):
-{chr(10).join(scrobble_lines)}
+{chr(10).join(scrobble_lines)}{context_addendum}
 
 INSTRUCTIONS:
 1. Analyze the user's spoken/written request (or audio recording).
@@ -240,11 +293,12 @@ def _semantic_fallback_plan(
     """Deterministic Semantic Forge Agent fallback when Vertex AI is offline or in unit tests."""
     p_lower = (prompt or "surprise me with a global street-art daylist").lower()
 
-    # 1. Match Geo-Cache by city, name, country, or vibe tag
+    # 1. Match Geo-Cache by id, city, name, country, or vibe tag
     chosen_geo: StreetArtGeoCache | None = None
     for g in geocaches:
         if (
-            g.city.lower() in p_lower
+            g.id.lower() in p_lower
+            or g.city.lower() in p_lower
             or g.name.lower() in p_lower
             or g.country.lower() in p_lower
             or any(tag.lower() in p_lower for tag in g.vibe_tags)
@@ -257,14 +311,19 @@ def _semantic_fallback_plan(
             chosen_geo = get_geocache("shimokitazawa_tokyo")
         elif "latin" in p_lower or "brazil" in p_lower or "bossa" in p_lower or "morning" in p_lower:
             chosen_geo = get_geocache("beco_do_batman_sao_paulo")
-        elif "storm" in p_lower or "rain" in p_lower or "iceland" in p_lower or "cold" in p_lower:
-            chosen_geo = get_geocache("reykjavik_wall_poetry")
-        elif "london" in p_lower or "uk" in p_lower or "garage" in p_lower or "bristol" in p_lower:
-            chosen_geo = get_geocache("shoreditch_brick_lane_london")
+        elif "storm" in p_lower or "rain" in p_lower or "iceland" in p_lower or "cold" in p_lower or "reykjavik" in p_lower:
+            chosen_geo = get_geocache("wall_poetry_reykjavik")
+        elif "london" in p_lower or "uk" in p_lower or "garage" in p_lower or "bristol" in p_lower or "shoreditch" in p_lower:
+            chosen_geo = get_geocache("brick_lane_shoreditch")
         elif "berlin" in p_lower or "techno" in p_lower or "club" in p_lower:
             chosen_geo = get_geocache("east_side_gallery_berlin")
+        elif current_geocache_id:
+            chosen_geo = get_geocache(current_geocache_id)
         else:
             chosen_geo = pick_random_geocache()
+
+    if chosen_geo is None:
+        chosen_geo = pick_random_geocache()
 
     # 2. Match Theme
     chosen_theme = current_theme_id or "blue_hour"
@@ -400,6 +459,7 @@ def _call_vertex_gemini(
                 )
                 return None
             data = resp.json()
+            usage_meta = data.get("usageMetadata") or {}
             candidates = data.get("candidates") or []
             if not candidates:
                 return None
@@ -409,6 +469,9 @@ def _call_vertex_gemini(
             raw_text = content_parts[0].get("text", "")
             parsed = json.loads(raw_text)
             parsed["model_used"] = "gemini-2.5-flash (vertex-ai)"
+            parsed["_usage_metadata"] = usage_meta
+            parsed["_raw_text"] = raw_text
+            parsed["_http_status"] = resp.status_code
             return parsed
     except Exception as exc:
         logger.warning("Vertex AI Gemini call failed (%s); falling back to semantic agent", exc)
@@ -417,12 +480,16 @@ def _call_vertex_gemini(
 
 def get_advisor_suggestions(user_id: str = "demo") -> list[AdvisorSuggestionItem]:
     """Return 4 dynamic voice/tap prompts grounded in world timezones and Almanac DNA."""
+    import time
+    import uuid
+
+    started = time.perf_counter()
     tokyo = get_geocache("shimokitazawa_tokyo")
     sao_paulo = get_geocache("beco_do_batman_sao_paulo")
     reykjavik = get_geocache("reykjavik_wall_poetry")
     berlin = get_geocache("east_side_gallery_berlin")
 
-    return [
+    items = [
         AdvisorSuggestionItem(
             id="tokyo_night_triphop",
             title=f"Tokyo • {tokyo.local_time_label() if tokyo else 'UTC+9'}",
@@ -453,6 +520,48 @@ def get_advisor_suggestions(user_id: str = "demo") -> list[AdvisorSuggestionItem
         ),
     ]
 
+    try:
+        from backend.app.telemetry.models import TokenUsageMetrics, ToolExecutionStep, TrajectoryRecord
+        from backend.app.telemetry.store import get_telemetry_store
+        from backend.app.telemetry.tracing import emit_telemetry_log, get_gcp_trace, get_span_id, get_trace_id
+
+        elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
+        sys_inst = "BaroGroove Advisor Discovery Engine: Curate 4 timezone-aware world street-art prompts."
+        tu = TokenUsageMetrics.from_vertex_or_estimate(None, sys_inst, "GET /api/advisor/suggestions", json.dumps([i.model_dump() for i in items]))
+        traj = TrajectoryRecord(
+            trajectory_id=f"traj_sugg_{uuid.uuid4().hex[:12]}",
+            session_id=f"sess_sugg_{uuid.uuid4().hex[:8]}",
+            conversation_id=f"conv_sugg_{uuid.uuid4().hex[:8]}",
+            user_id=user_id or "demo",
+            surface="advisor",
+            endpoint="GET /api/advisor/suggestions",
+            trace_id=get_trace_id(),
+            span_id=get_span_id(),
+            gcp_trace=get_gcp_trace(),
+            requested_model="gemini-2.5-flash",
+            execution_path="deterministic-fallback",
+            latency_ms=elapsed_ms,
+            token_usage=tu,
+            system_instruction=sys_inst,
+            user_prompt="GET /api/advisor/suggestions",
+            parsed_plan={"suggestions_count": len(items), "first_id": items[0].id},
+            tool_steps=[
+                ToolExecutionStep(
+                    tool_name="curate_world_suggestions",
+                    arguments={"user_id": user_id},
+                    result_summary=f"Curated {len(items)} suggestions",
+                    latency_ms=elapsed_ms,
+                )
+            ],
+            status="ok",
+        )
+        get_telemetry_store().record_trajectory_sync(traj)
+        emit_telemetry_log(traj)
+    except Exception:
+        pass
+
+    return items
+
 
 class AdvisorEngine:
     """Orchestrates Gemini Live conversational advice and autonomous Forge execution."""
@@ -463,22 +572,64 @@ class AdvisorEngine:
         user_id: str = "demo",
     ) -> AdvisorLiveResponse:
         """Process a voice/text turn, execute tools, and return the forged Daylist."""
+        import time
+        import uuid
+        from backend.app.telemetry.memory_extractor import extract_memories_from_turn
+        from backend.app.telemetry.models import TokenUsageMetrics, ToolExecutionStep, TrajectoryRecord
+        from backend.app.telemetry.store import get_telemetry_store
+        from backend.app.telemetry.tracing import emit_telemetry_log, get_gcp_trace, get_span_id, get_trace_id
+
+        t0 = time.perf_counter()
+        uid = req.user_id or user_id or "demo"
+        store = get_telemetry_store()
+
+        sess = store.resolve_or_create_session(
+            session_id=req.session_id,
+            user_id=uid,
+            client_surface="advisor",
+            increment_turn=True,
+            geocache_id=req.current_geocache_id,
+            theme_id=req.current_theme_id,
+            genre_id=req.current_genre_id,
+        )
+        conv = store.resolve_or_create_conversation(
+            conversation_id=req.conversation_id,
+            session_id=sess.session_id,
+            user_id=uid,
+            surface="advisor",
+        )
+
+        user_memories, _ = store.list_memories(user_id=uid, limit=12)
+        recent_turns = list(conv.turns[-6:])
+
         geocaches = list(STREET_ART_GEOCACHES)
-        scrobble_data = search_scrobbles(user_id, limit=60)
+        scrobble_data = search_scrobbles(uid, limit=60)
         scrobbles = scrobble_data.scrobbles
+
+        sys_prompt = _build_system_instruction(
+            geocaches=geocaches,
+            scrobbles=scrobbles,
+            current_geocache_id=req.current_geocache_id,
+            current_theme_id=req.current_theme_id,
+            current_genre_id=req.current_genre_id,
+            user_memories=user_memories,
+            recent_turns=recent_turns,
+        )
 
         token, project_id = _get_vertex_token()
         plan: dict[str, Any] | None = None
+        execution_path = "semantic-fallback"
+        usage_meta: dict[str, Any] | None = None
+        raw_text = ""
+        http_status = 200
 
         if token:
-            sys_prompt = _build_system_instruction(
-                geocaches=geocaches,
-                scrobbles=scrobbles,
-                current_geocache_id=req.current_geocache_id,
-                current_theme_id=req.current_theme_id,
-                current_genre_id=req.current_genre_id,
-            )
             plan = _call_vertex_gemini(req, sys_prompt, token, project_id)
+            if plan is not None:
+                execution_path = "vertex-ai"
+                usage_meta = plan.get("_usage_metadata") if isinstance(plan, dict) else None
+                raw_text = (plan.get("_raw_text") if isinstance(plan, dict) else None) or json.dumps(plan)
+                http_status = int(plan.get("_http_status", 200)) if isinstance(plan, dict) else 200
 
         if not plan:
             plan = _semantic_fallback_plan(
@@ -489,6 +640,8 @@ class AdvisorEngine:
                 current_theme_id=req.current_theme_id,
                 current_genre_id=req.current_genre_id,
             )
+            execution_path = "semantic-fallback"
+            raw_text = json.dumps(plan)
 
         # Resolve parameters
         geo_id = plan.get("geocache_id") or req.current_geocache_id
@@ -506,6 +659,8 @@ class AdvisorEngine:
         scrobble_ids: list[str] = plan.get("scrobble_ids") or []
         scrobble_map = {s.id: s for s in scrobbles}
         seeded_entries = [scrobble_map[sid] for sid in scrobble_ids if sid in scrobble_map]
+        if not seeded_entries and scrobbles:
+            seeded_entries = list(scrobbles[:2])
 
         actions: list[AdvisorActionBadge] = []
 
@@ -528,15 +683,14 @@ class AdvisorEngine:
         )
 
         # Action 3: Almanac Seed Scrobbles
-        if seeded_entries:
-            seed_titles = ", ".join(f"{s.artist} - {s.title}" for s in seeded_entries[:3])
-            actions.append(
-                AdvisorActionBadge(
-                    tool="seed_from_almanac",
-                    label=f"Seeded {len(seeded_entries)} Almanac Scrobble(s)",
-                    detail=seed_titles,
-                )
+        seed_titles = ", ".join(f"{s.artist} - {s.title}" for s in seeded_entries[:3]) if seeded_entries else "Almanac taste profile"
+        actions.append(
+            AdvisorActionBadge(
+                tool="seed_from_almanac",
+                label=f"Seeded {len(seeded_entries)} Almanac Scrobble(s)",
+                detail=seed_titles,
             )
+        )
 
         # Action 4: Execute 18-Track Weather-Inspired Daylist Forge
         forge_res: ForgeResult | None = None
@@ -548,7 +702,9 @@ class AdvisorEngine:
                     longitude=selected_geo.lon,
                     label=selected_geo.label,
                 ),
-                user_id=user_id,
+                user_id=uid,
+                session_id=sess.session_id,
+                conversation_id=conv.conversation_id,
                 lastfm_user="jpaquay",
                 theme_id=theme_id,
                 genre_id=genre_id,
@@ -566,9 +722,84 @@ class AdvisorEngine:
                 )
             )
 
+        latency_ms = round((time.perf_counter() - t0) * 1000.0, 2)
+        trajectory_id = f"traj_adv_{uuid.uuid4().hex[:12]}"
+        user_prompt_text = req.prompt or "Voice audio command"
+        reply_text = plan.get("reply_text") or plan.get("spoken_summary") or "Forged your Weather-Inspired Daylist."
+        spoken_summary = plan.get("spoken_summary") or "I've teleported your Weathercaster and forged a fresh 18-track Daylist."
+
+        tok_metrics = TokenUsageMetrics.from_vertex_or_estimate(
+            usage_meta,
+            prompt_text=f"{sys_prompt}\n{user_prompt_text}",
+            response_text=raw_text,
+        )
+
+        extracted_mems = extract_memories_from_turn(
+            user_id=uid,
+            prompt=user_prompt_text,
+            selected_geocache=selected_geo.to_dict(),
+            selected_theme_id=theme_id,
+            selected_genre_id=genre_id,
+            conversation_id=conv.conversation_id,
+            trajectory_id=trajectory_id,
+        )
+
+        store.append_conversation_turn(
+            conversation_id=conv.conversation_id,
+            role="user",
+            content=user_prompt_text,
+            trajectory_id=trajectory_id,
+        )
+        store.append_conversation_turn(
+            conversation_id=conv.conversation_id,
+            role="assistant",
+            content=reply_text,
+            spoken_summary=spoken_summary,
+            actions_executed=[a.model_dump() for a in actions],
+            trajectory_id=trajectory_id,
+        )
+
+        tool_steps = [
+            ToolExecutionStep(
+                tool_name=a.tool,
+                label=a.label,
+                detail=a.detail,
+                status="SUCCESS",
+                latency_ms=round(latency_ms / max(len(actions), 1), 2),
+            )
+            for a in actions
+        ]
+
+        clean_plan = {k: v for k, v in plan.items() if not str(k).startswith("_")}
+        traj = TrajectoryRecord(
+            trajectory_id=trajectory_id,
+            session_id=sess.session_id,
+            conversation_id=conv.conversation_id,
+            user_id=uid,
+            surface="advisor",
+            endpoint="POST /api/advisor/live",
+            trace_id=get_trace_id(),
+            span_id=get_span_id(),
+            gcp_trace=get_gcp_trace(),
+            requested_model="gemini-2.5-flash",
+            execution_path=execution_path,
+            http_status=http_status,
+            latency_ms=latency_ms,
+            token_usage=tok_metrics,
+            system_instruction=sys_prompt,
+            user_prompt=user_prompt_text,
+            raw_model_response=raw_text,
+            parsed_plan=clean_plan,
+            tool_steps=tool_steps,
+            extracted_memory_ids=[m.memory_id for m in extracted_mems],
+            status="ok",
+        )
+        store.record_trajectory_sync(traj)
+        emit_telemetry_log(traj)
+
         return AdvisorLiveResponse(
-            reply_text=plan.get("reply_text") or plan.get("spoken_summary") or "Forged your Weather-Inspired Daylist.",
-            spoken_summary=plan.get("spoken_summary") or "I've teleported your Weathercaster and forged a fresh 18-track Daylist.",
+            reply_text=reply_text,
+            spoken_summary=spoken_summary,
             transcript=plan.get("transcript") or req.prompt or "Voice command processed",
             actions_executed=actions,
             selected_geocache=selected_geo.to_dict(),
@@ -577,4 +808,10 @@ class AdvisorEngine:
             seeded_scrobbles=[s.model_dump() for s in seeded_entries],
             forge_result=forge_res,
             model_used=plan.get("model_used", "gemini-2.5-flash (vertex-ai)"),
+            trajectory_id=trajectory_id,
+            session_id=sess.session_id,
+            conversation_id=conv.conversation_id,
+            user_id=uid,
+            latency_ms=latency_ms,
+            token_usage=tok_metrics.model_dump(mode="json"),
         )

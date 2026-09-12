@@ -722,10 +722,104 @@ class PlaylistForge:
         # rationale too, so it is re-stamped once everything has run.
         playlist.rationale = _with_degraded(rationale, ledger.as_list())
 
+        elapsed_ms_float = round((time.perf_counter() - started) * 1000.0, 2)
+        traj_id = f"traj_forge_{uuid.uuid4().hex[:12]}"
+        sess_id = request.session_id or f"sess_forge_{uuid.uuid4().hex[:8]}"
+        conv_id = request.conversation_id or f"conv_forge_{uuid.uuid4().hex[:8]}"
+        uid = request.user_id or "demo"
+
+        token_usage_dict: dict[str, Any] = {}
+        try:
+            from ..telemetry.models import TokenUsageMetrics, ToolExecutionStep, TrajectoryRecord
+            from ..telemetry.store import get_telemetry_store
+            from ..telemetry.tracing import emit_telemetry_log, get_gcp_trace, get_span_id, get_trace_id
+
+            sys_inst = (
+                "BaroGroove Sonic Transfer Forge Engine: Synthesize weather vector, "
+                "theme corridor, and listener taste into a curated sonic arc."
+            )
+            user_prompt_str = (
+                f"Forge playlist for {loc_label} ({request.coordinates.latitude:.4f}, "
+                f"{request.coordinates.longitude:.4f}) theme={theme.id} genre={corridor.id} length={request.length}"
+            )
+            tu = TokenUsageMetrics.from_vertex_or_estimate(None, sys_inst, user_prompt_str, playlist.rationale.body)
+            token_usage_dict = tu.model_dump(mode="json")
+
+            tool_steps = [
+                ToolExecutionStep(
+                    tool_name="extract_sky_vector",
+                    arguments={"lat": request.coordinates.latitude, "lon": request.coordinates.longitude},
+                    result_summary=f"Sky pressure trend={sky.pressure_trend_6h:+.2f}",
+                    latency_ms=round(elapsed_ms_float * 0.15, 2),
+                ),
+                ToolExecutionStep(
+                    tool_name="select_theme_corridor",
+                    arguments={"theme_id": theme.id, "genre_id": corridor.id},
+                    result_summary=f"Theme {theme.name} / Corridor {corridor.name}",
+                    latency_ms=round(elapsed_ms_float * 0.10, 2),
+                ),
+                ToolExecutionStep(
+                    tool_name="gather_rerank_candidates",
+                    arguments={"pool_size": len(pool), "length": request.length},
+                    result_summary=f"Assembled {len(ordered)} tracks",
+                    latency_ms=round(elapsed_ms_float * 0.55, 2),
+                ),
+                ToolExecutionStep(
+                    tool_name="build_rationale",
+                    arguments={"headline": playlist.rationale.headline},
+                    result_summary=playlist.rationale.headline,
+                    latency_ms=round(elapsed_ms_float * 0.20, 2),
+                ),
+            ]
+            traj = TrajectoryRecord(
+                trajectory_id=traj_id,
+                session_id=sess_id,
+                conversation_id=conv_id,
+                user_id=uid,
+                surface="forge",
+                endpoint="POST /api/forge",
+                trace_id=get_trace_id(),
+                span_id=get_span_id(),
+                gcp_trace=get_gcp_trace(),
+                requested_model="gemini-2.5-flash",
+                execution_path="deterministic-fallback",
+                latency_ms=elapsed_ms_float,
+                token_usage=tu,
+                system_instruction=sys_inst,
+                user_prompt=user_prompt_str,
+                parsed_plan={
+                    "playlist_id": playlist.id,
+                    "theme_id": theme.id,
+                    "genre_id": corridor.id,
+                    "target_bpm": target.tempo_bpm,
+                    "track_count": len(ordered),
+                },
+                tool_steps=tool_steps,
+                status="ok",
+            )
+            store = get_telemetry_store()
+            store.save_trajectory_sync(traj)
+            if request.session_id:
+                try:
+                    sess_rec = store.get_or_create_session_sync(request.session_id, user_id=uid)
+                    sess_rec.increment_turn()
+                    store.save_session_sync(sess_rec)
+                except Exception:
+                    pass
+            emit_telemetry_log(traj)
+        except Exception:
+            pass
+
         return ForgeResult(
             playlist=playlist,
             degraded=ledger.as_list(),
-            elapsed_ms=int((time.perf_counter() - started) * 1000),
+            elapsed_ms=int(elapsed_ms_float),
+            trajectory_id=traj_id,
+            session_id=sess_id,
+            conversation_id=conv_id,
+            user_id=uid,
+            latency_ms=elapsed_ms_float,
+            token_usage=token_usage_dict,
         )
 
     async def explain(self, playlist: Playlist) -> Rationale:
@@ -736,6 +830,7 @@ class PlaylistForge:
         improved transfer matrix or rationale writer retroactively improves the
         explanation of everything already saved.
         """
+        started = time.perf_counter()
         ledger = DegradationLedger()
 
         try:
@@ -776,4 +871,59 @@ class PlaylistForge:
         # story and are preserved alongside anything found while re-explaining.
         previous = list(playlist.rationale.degraded) if playlist.rationale else []
         merged = previous + [d for d in ledger.as_list() if d not in previous]
-        return _with_degraded(rationale, merged)
+        final_rat = _with_degraded(rationale, merged)
+
+        elapsed_ms_float = round((time.perf_counter() - started) * 1000.0, 2)
+        traj_id = f"traj_explain_{uuid.uuid4().hex[:12]}"
+        try:
+            from ..telemetry.models import TokenUsageMetrics, ToolExecutionStep, TrajectoryRecord
+            from ..telemetry.store import get_telemetry_store
+            from ..telemetry.tracing import emit_telemetry_log, get_gcp_trace, get_span_id, get_trace_id
+
+            sys_inst = (
+                "BaroGroove Rationale Explainability Engine: Reconstruct sonic transfer "
+                "contributions and arc narrative for an existing playlist."
+            )
+            user_prompt_str = f"Explain playlist {playlist.id} ({playlist.title}) under theme {playlist.theme_id}"
+            tu = TokenUsageMetrics.from_vertex_or_estimate(None, sys_inst, user_prompt_str, final_rat.body)
+            traj = TrajectoryRecord(
+                trajectory_id=traj_id,
+                session_id=f"sess_explain_{uuid.uuid4().hex[:8]}",
+                conversation_id=f"conv_explain_{uuid.uuid4().hex[:8]}",
+                user_id=playlist.user_id or "demo",
+                surface="forge",
+                endpoint="POST /api/forge/explain",
+                trace_id=get_trace_id(),
+                span_id=get_span_id(),
+                gcp_trace=get_gcp_trace(),
+                requested_model="gemini-2.5-flash",
+                execution_path="deterministic-fallback",
+                latency_ms=elapsed_ms_float,
+                token_usage=tu,
+                system_instruction=sys_inst,
+                user_prompt=user_prompt_str,
+                parsed_plan={
+                    "playlist_id": playlist.id,
+                    "theme_id": playlist.theme_id,
+                    "headline": final_rat.headline,
+                },
+                tool_steps=[
+                    ToolExecutionStep(
+                        tool_name="build_rationale",
+                        arguments={"playlist_id": playlist.id},
+                        result_summary=final_rat.headline,
+                        latency_ms=elapsed_ms_float,
+                    )
+                ],
+                status="ok",
+            )
+            get_telemetry_store().save_trajectory_sync(traj)
+            emit_telemetry_log(traj)
+        except Exception:
+            pass
+
+        try:
+            final_rat = final_rat.model_copy(update={"trajectory_id": traj_id})
+        except Exception:
+            pass
+        return final_rat

@@ -354,9 +354,18 @@ async def _guard(
     their own code derived from the class name, so ``ThemeNotFound`` surfaces as
     ``theme_not_found`` rather than as a generic failure.
     """
+    import time
+    import uuid
+
+    started = time.perf_counter()
+    status_str = "ok"
+    err_msg: str | None = None
     try:
-        return await body()
+        result = await body()
+        return result
     except Exception as exc:  # noqa: BLE001 - the boundary. Nothing propagates past here.
+        status_str = "error"
+        err_msg = str(exc)
         code = "tool_failed"
         with contextlib.suppress(Exception):
             from ..errors import BarogrooveError
@@ -375,6 +384,47 @@ async def _guard(
             error=ToolError(code=code, message=message, detail=type(exc).__name__),
         )
         return _pack(payload, headline=f"BAROGROOVE could not complete {tool_name}.")
+    finally:
+        with contextlib.suppress(Exception):
+            from ..telemetry.models import TokenUsageMetrics, ToolExecutionStep, TrajectoryRecord
+            from ..telemetry.store import get_telemetry_store
+            from ..telemetry.tracing import emit_telemetry_log, get_gcp_trace, get_span_id, get_trace_id
+
+            elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
+            sys_inst = f"BaroGroove MCP Server Tool Dispatcher: Execute tool '{tool_name}'."
+            user_prompt_str = f"MCP tool call: {tool_name}"
+            tu = TokenUsageMetrics.from_vertex_or_estimate(None, sys_inst, user_prompt_str, headline)
+            traj = TrajectoryRecord(
+                trajectory_id=f"traj_mcp_{uuid.uuid4().hex[:12]}",
+                session_id=f"sess_mcp_{uuid.uuid4().hex[:8]}",
+                conversation_id=f"conv_mcp_{uuid.uuid4().hex[:8]}",
+                user_id="demo",
+                surface="mcp",
+                endpoint=f"MCP {tool_name}",
+                trace_id=get_trace_id(),
+                span_id=get_span_id(),
+                gcp_trace=get_gcp_trace(),
+                requested_model="gemini-2.5-flash",
+                execution_path="deterministic-fallback",
+                latency_ms=elapsed_ms,
+                token_usage=tu,
+                system_instruction=sys_inst,
+                user_prompt=user_prompt_str,
+                parsed_plan={"tool_name": tool_name, "headline": headline},
+                tool_steps=[
+                    ToolExecutionStep(
+                        tool_name=tool_name,
+                        arguments={"tool": tool_name},
+                        result_summary=headline,
+                        status=status_str,
+                        latency_ms=elapsed_ms,
+                    )
+                ],
+                status=status_str,
+                error_message=err_msg,
+            )
+            get_telemetry_store().save_trajectory_sync(traj)
+            emit_telemetry_log(traj)
 
 
 # ======================================================================================

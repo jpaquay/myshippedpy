@@ -101,6 +101,9 @@ class DataVizQnARequest(BaseModel):
 
     question: str = Field(..., description="Natural language or voice-transcribed question about the user's sonic telemetry.")
     voice_mode: bool = Field(default=True, description="Whether the user asked via voice orb / expects spoken TTS summary.")
+    session_id: str | None = Field(default=None, description="Optional user session ID for multi-turn continuity.")
+    conversation_id: str | None = Field(default=None, description="Optional conversation thread ID.")
+    user_id: str | None = Field(default=None, description="Optional user identifier.")
 
 
 class MatchingScrobbleItem(BaseModel):
@@ -133,6 +136,15 @@ class DataVizQnAResponse(BaseModel):
     model_used: str = Field(
         default="gemini-2.5-flash (vertex-ai)",
         description="Model that generated the data storytelling insight.",
+    )
+    trajectory_id: str = Field(default="", description="Captured AI trajectory record ID.")
+    session_id: str = Field(default="", description="Active user session ID.")
+    conversation_id: str = Field(default="", description="Active multi-turn conversation ID.")
+    user_id: str = Field(default="demo", description="User identifier.")
+    latency_ms: float = Field(default=0.0, description="Turn latency in milliseconds.")
+    token_usage: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Token usage metrics (prompt_tokens, candidate_tokens, total_tokens, is_estimated).",
     )
 
 
@@ -389,12 +401,30 @@ def _build_decade_sonic_dna() -> list[DecadeSonicDnaItem]:
     ]
 
 
-def _build_qna_system_prompt(dashboard: DataVizDashboardResponse, scrobbles: list[ScrobbleEntry]) -> str:
+def _build_qna_system_prompt(
+    dashboard: DataVizDashboardResponse,
+    scrobbles: list[ScrobbleEntry],
+    recent_turns: list[Any] | None = None,
+    user_memories: list[Any] | None = None,
+) -> str:
     """Builds the system prompt for Gemini 2.5 Flash Data Viz QnA."""
+    from ..telemetry.memory_extractor import (
+        format_memories_for_prompt,
+        format_recent_turns_for_prompt,
+    )
+
     scrobble_lines = [
         f"- id: '{s.id}' | artist: '{s.artist}' | track: '{s.title}' | album: '{s.album or 'Single'}' | theme: {s.weather_theme} ({s.bpm_estimate} BPM)"
         for s in scrobbles[:30]
     ]
+    mem_block = format_memories_for_prompt(user_memories or [])
+    hist_block = format_recent_turns_for_prompt(recent_turns or [])
+    context_addendum = ""
+    if mem_block:
+        context_addendum += f"\n\n{mem_block}"
+    if hist_block:
+        context_addendum += f"\n\n{hist_block}"
+
     return f"""You are the **BaroGroove Gemini Live 2.5 Data Viz QnA Agent**, an charismatic sonic data scientist and atmospheric DJ.
 The user is viewing their 15-year Sonic Almanac Dashboard ({dashboard.summary_stats.total_scrobbles_analyzed:,} scrobbles analyzed, avg {dashboard.summary_stats.avg_bpm} BPM, pressure sensitivity index {dashboard.summary_stats.pressure_sensitivity_index}).
 
@@ -420,7 +450,7 @@ Key Dashboard Facts:
    - 1970s is #3 (18.5%, 29,732 plays — Georges Brassens, Serge Gainsbourg, Jacques Brel).
 
 Available Almanac Scrobbles to reference in `matching_scrobbles` (choose up to 4):
-{chr(10).join(scrobble_lines)}
+{chr(10).join(scrobble_lines)}{context_addendum}
 
 INSTRUCTIONS:
 Return ONLY valid JSON matching this exact schema:
@@ -438,9 +468,14 @@ def _deterministic_qna_fallback(
     question: str,
     dashboard: DataVizDashboardResponse,
     scrobbles: list[ScrobbleEntry],
+    recent_turns: list[Any] | None = None,
+    user_memories: list[Any] | None = None,
 ) -> DataVizQnAResponse:
     """Intelligent deterministic QnA fallback when Vertex AI is unavailable or in test environments."""
     q_lower = (question or "").lower()
+    if recent_turns and len(q_lower) < 35:
+        prev_q = " ".join(getattr(t, "content", "") for t in recent_turns[-2:]).lower()
+        q_lower = f"{q_lower} {prev_q}"
 
     # Map scrobble helpers
     def _pick_tracks(keywords: list[str], fallback_slice: slice) -> list[MatchingScrobbleItem]:
@@ -593,6 +628,7 @@ def _call_vertex_gemini_qna(
                 logger.warning("Vertex AI DataViz QnA status %s: %s", resp.status_code, resp.text[:250])
                 return None
             data = resp.json()
+            usage_meta = data.get("usageMetadata") or {}
             candidates = data.get("candidates") or []
             if not candidates:
                 return None
@@ -600,7 +636,11 @@ def _call_vertex_gemini_qna(
             if not parts:
                 return None
             raw_text = parts[0].get("text", "")
-            return json.loads(raw_text)
+            parsed = json.loads(raw_text)
+            parsed["_usage_metadata"] = usage_meta
+            parsed["_raw_text"] = raw_text
+            parsed["_http_status"] = resp.status_code
+            return parsed
     except Exception as exc:
         logger.warning("Vertex AI DataViz QnA call failed (%s); using deterministic fallback", exc)
         return None
@@ -637,61 +677,199 @@ class DataVizEngine:
         user_id: str = "jpaquay",
     ) -> DataVizQnAResponse:
         """Answers a natural-language or voice question about the user's Sonic Almanac telemetry."""
-        dashboard = self.get_dashboard(user_id=user_id)
-        scrobble_res = search_scrobbles(user_id=user_id, limit=100)
+        import time
+        import uuid
+        from ..telemetry import (
+            TokenUsageMetrics,
+            ToolExecutionStep,
+            TrajectoryRecord,
+            emit_telemetry_log,
+            extract_memories_from_turn,
+            get_current_trace_context,
+            get_telemetry_store,
+        )
+
+        t0 = time.perf_counter()
+        uid = req.user_id or user_id or "demo"
+        store = get_telemetry_store()
+
+        sess = store.resolve_or_create_session(
+            session_id=req.session_id,
+            user_id=uid,
+            client_surface="web-flutter",
+            increment_turn=True,
+        )
+        conv = store.resolve_or_create_conversation(
+            conversation_id=req.conversation_id,
+            session_id=sess.session_id,
+            user_id=uid,
+            surface="dataviz",
+        )
+        recent_turns = list(conv.turns[-6:])
+        user_memories, _ = store.list_memories(user_id=uid, limit=10)
+
+        dashboard = self.get_dashboard(user_id=uid)
+        scrobble_res = search_scrobbles(user_id=uid, limit=100)
         scrobbles = scrobble_res.scrobbles
         scrobble_map = {s.id: s for s in scrobbles}
 
+        sys_prompt = _build_qna_system_prompt(
+            dashboard,
+            scrobbles,
+            recent_turns=recent_turns,
+            user_memories=user_memories,
+        )
+
         token, project_id = _get_vertex_token()
+        vertex_plan: dict[str, Any] | None = None
+        usage_meta: dict[str, Any] = {}
+        raw_text = ""
+        http_status = 200
+        execution_path = "deterministic-fallback"
+
         if token:
-            sys_prompt = _build_qna_system_prompt(dashboard, scrobbles)
-            vertex_plan = _call_vertex_gemini_qna(req.question, sys_prompt, token, project_id)
+            res_call = _call_vertex_gemini_qna(
+                req.question, sys_prompt, token, project_id
+            )
+            if isinstance(res_call, tuple):
+                vertex_plan, usage_meta, raw_text, http_status = res_call
+            elif isinstance(res_call, dict):
+                vertex_plan = dict(res_call)
+                usage_meta = vertex_plan.pop("_usage_metadata", None) or vertex_plan.get("usageMetadata") or {}
+                raw_text = vertex_plan.pop("_raw_text", None) or json.dumps(vertex_plan)
+                http_status = vertex_plan.pop("_http_status", 200)
             if vertex_plan:
-                section = str(vertex_plan.get("highlight_section") or "pressure_vs_bpm")
-                if section not in VALID_HIGHLIGHT_SECTIONS:
-                    section = "pressure_vs_bpm"
+                execution_path = "vertex-ai"
 
-                matched_ids = vertex_plan.get("matching_scrobble_ids") or []
-                matched_items: list[MatchingScrobbleItem] = []
-                for sid in matched_ids:
-                    if sid in scrobble_map:
-                        s = scrobble_map[sid]
-                        matched_items.append(
-                            MatchingScrobbleItem(
-                                id=s.id,
-                                artist=s.artist,
-                                track=s.title,
-                                album=s.album or "Almanac Single",
-                            )
+        if vertex_plan:
+            section = str(vertex_plan.get("highlight_section") or "pressure_vs_bpm")
+            if section not in VALID_HIGHLIGHT_SECTIONS:
+                section = "pressure_vs_bpm"
+
+            matched_ids = vertex_plan.get("matching_scrobble_ids") or []
+            matched_items: list[MatchingScrobbleItem] = []
+            for sid in matched_ids:
+                if sid in scrobble_map:
+                    s = scrobble_map[sid]
+                    matched_items.append(
+                        MatchingScrobbleItem(
+                            id=s.id,
+                            artist=s.artist,
+                            track=s.title,
+                            album=s.album or "Almanac Single",
                         )
-                if not matched_items:
-                    for s in scrobbles[:4]:
-                        matched_items.append(
-                            MatchingScrobbleItem(
-                                id=s.id,
-                                artist=s.artist,
-                                track=s.title,
-                                album=s.album or "Almanac Single",
-                            )
+                    )
+            if not matched_items:
+                for s in scrobbles[:4]:
+                    matched_items.append(
+                        MatchingScrobbleItem(
+                            id=s.id,
+                            artist=s.artist,
+                            track=s.title,
+                            album=s.album or "Almanac Single",
                         )
-                if not matched_items:
-                    matched_items = list(_DEFAULT_CURATED_SCROBBLES[:4])
+                    )
+            if not matched_items:
+                matched_items = list(_DEFAULT_CURATED_SCROBBLES[:4])
 
-                followups = list(vertex_plan.get("suggested_followups") or [])[:3]
-                while len(followups) < 3:
-                    followups.append("What do I listen to when barometric pressure drops below 1005 hPa?")
+            followups = list(vertex_plan.get("suggested_followups") or [])[:3]
+            while len(followups) < 3:
+                followups.append("What do I listen to when barometric pressure drops below 1005 hPa?")
 
-                return DataVizQnAResponse(
-                    answer_text=str(vertex_plan.get("answer_text") or ""),
-                    spoken_summary=str(vertex_plan.get("spoken_summary") or ""),
-                    highlight_section=section,
-                    key_metric_badge=str(vertex_plan.get("key_metric_badge") or "Sonic Telemetry Insight"),
-                    suggested_followups=followups,
-                    matching_scrobbles=matched_items[:4],
-                    model_used="gemini-2.5-flash (vertex-ai)",
+            res = DataVizQnAResponse(
+                answer_text=str(vertex_plan.get("answer_text") or ""),
+                spoken_summary=str(vertex_plan.get("spoken_summary") or ""),
+                highlight_section=section,
+                key_metric_badge=str(vertex_plan.get("key_metric_badge") or "Sonic Telemetry Insight"),
+                suggested_followups=followups,
+                matching_scrobbles=matched_items[:4],
+                model_used="gemini-2.5-flash (vertex-ai)",
+            )
+        else:
+            res = _deterministic_qna_fallback(
+                req.question,
+                dashboard,
+                scrobbles,
+                recent_turns=recent_turns,
+                user_memories=user_memories,
+            )
+            raw_text = res.model_dump_json()
+            http_status = 200
+            execution_path = "deterministic-fallback"
+
+        latency_ms = round((time.perf_counter() - t0) * 1000.0, 2)
+        tok_metrics = TokenUsageMetrics.from_vertex_or_estimate(
+            usage_meta,
+            prompt_text=f"{sys_prompt}\n{req.question}",
+            response_text=raw_text,
+        )
+        trajectory_id = f"traj_{uuid.uuid4().hex[:12]}"
+        t_id, s_id = get_current_trace_context()
+
+        extracted_mems = extract_memories_from_turn(
+            user_id=uid,
+            prompt=req.question,
+            conversation_id=conv.conversation_id,
+            trajectory_id=trajectory_id,
+        )
+
+        store.append_conversation_turn(
+            conversation_id=conv.conversation_id,
+            role="user",
+            content=req.question,
+            trajectory_id=trajectory_id,
+        )
+        store.append_conversation_turn(
+            conversation_id=conv.conversation_id,
+            role="assistant",
+            content=res.answer_text,
+            spoken_summary=res.spoken_summary,
+            actions_executed=[{"tool": "highlight_section", "section": res.highlight_section, "badge": res.key_metric_badge}],
+            trajectory_id=trajectory_id,
+        )
+
+        traj = TrajectoryRecord(
+            trajectory_id=trajectory_id,
+            session_id=sess.session_id,
+            conversation_id=conv.conversation_id,
+            user_id=uid,
+            surface="dataviz",
+            endpoint="POST /api/dataviz/qna",
+            latency_ms=latency_ms,
+            trace_id=t_id,
+            span_id=s_id,
+            requested_model="gemini-2.5-flash",
+            execution_path=execution_path,
+            http_status=http_status,
+            token_usage=tok_metrics,
+            system_instruction=sys_prompt,
+            user_prompt=req.question,
+            raw_model_response=raw_text,
+            parsed_plan={
+                "highlight_section": res.highlight_section,
+                "key_metric_badge": res.key_metric_badge,
+            },
+            tool_steps=[
+                ToolExecutionStep(
+                    tool_name="highlight_section",
+                    label=f"Highlight Section: {res.highlight_section}",
+                    detail=res.key_metric_badge,
+                    status="SUCCESS",
+                    latency_ms=latency_ms,
                 )
+            ],
+            extracted_memory_ids=[m.memory_id for m in extracted_mems],
+        )
+        store.record_trajectory_sync(traj)
+        emit_telemetry_log(traj)
 
-        return _deterministic_qna_fallback(req.question, dashboard, scrobbles)
+        res.trajectory_id = trajectory_id
+        res.session_id = sess.session_id
+        res.conversation_id = conv.conversation_id
+        res.user_id = uid
+        res.latency_ms = latency_ms
+        res.token_usage = tok_metrics.model_dump(mode="json")
+        return res
 
 
 _ENGINE = DataVizEngine()

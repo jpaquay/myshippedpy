@@ -148,6 +148,15 @@ class Container:
             )
         return self._cache["forge"]
 
+    # -- telemetry ----------------------------------------------------------
+
+    def telemetry(self) -> Any:
+        from .telemetry.store import get_telemetry_store
+
+        if "telemetry" not in self._cache:
+            self._cache["telemetry"] = get_telemetry_store(self.settings)
+        return self._cache["telemetry"]
+
 
 _CONTAINER: Container | None = None
 
@@ -163,3 +172,9 @@ def reset_container() -> None:
     """Tests call this between cases."""
     global _CONTAINER
     _CONTAINER = None
+    try:
+        from .telemetry.store import reset_telemetry_store
+
+        reset_telemetry_store()
+    except Exception:
+        pass

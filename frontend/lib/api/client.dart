@@ -440,6 +440,129 @@ class BarogrooveApi {
   }
 
   // =========================================================================
+  // AI Observability & Telemetry (`/api/telemetry/*` & `/api/surfaces/telemetry`)
+  // =========================================================================
+
+  Future<ApiResult<TelemetrySummaryModel>> telemetrySummary() =>
+      _getJson('/api/telemetry/summary', TelemetrySummaryModel.fromJson);
+
+  Future<ApiResult<List<TrajectoryRecordModel>>> telemetryTrajectories({
+    String? userId,
+    String? surface,
+    String? sessionId,
+    String? modelPath,
+  }) =>
+      _getJsonList(
+        '/api/telemetry/trajectories',
+        TrajectoryRecordModel.fromJson,
+        query: <String, String>{
+          if (userId != null && userId.isNotEmpty) 'user_id': userId,
+          if (surface != null && surface.isNotEmpty && surface != 'All')
+            'surface': surface,
+          if (sessionId != null && sessionId.isNotEmpty)
+            'session_id': sessionId,
+          if (modelPath != null && modelPath.isNotEmpty && modelPath != 'All')
+            'model_path': modelPath,
+        },
+      );
+
+  Future<ApiResult<TrajectoryRecordModel>> telemetryTrajectoryDetail(
+    String id,
+  ) =>
+      _getJson('/api/telemetry/trajectories/$id', TrajectoryRecordModel.fromJson);
+
+  Future<ApiResult<List<SessionRecordModel>>> telemetrySessions({
+    String? userId,
+    String? surface,
+  }) =>
+      _getJsonList(
+        '/api/telemetry/sessions',
+        SessionRecordModel.fromJson,
+        query: <String, String>{
+          if (userId != null && userId.isNotEmpty) 'user_id': userId,
+          if (surface != null && surface.isNotEmpty && surface != 'All')
+            'surface': surface,
+        },
+      );
+
+  Future<ApiResult<List<ConversationRecordModel>>> telemetryConversations({
+    String? userId,
+    String? sessionId,
+  }) =>
+      _getJsonList(
+        '/api/telemetry/conversations',
+        ConversationRecordModel.fromJson,
+        query: <String, String>{
+          if (userId != null && userId.isNotEmpty) 'user_id': userId,
+          if (sessionId != null && sessionId.isNotEmpty)
+            'session_id': sessionId,
+        },
+      );
+
+  Future<ApiResult<ConversationRecordModel>> telemetryConversationDetail(
+    String id,
+  ) =>
+      _getJson(
+        '/api/telemetry/conversations/$id',
+        ConversationRecordModel.fromJson,
+      );
+
+  Future<ApiResult<List<MemoryRecordModel>>> telemetryMemories({
+    String? userId,
+    String? tag,
+    String? search,
+  }) =>
+      _getJsonList(
+        '/api/telemetry/memories',
+        MemoryRecordModel.fromJson,
+        query: <String, String>{
+          if (userId != null && userId.isNotEmpty) 'user_id': userId,
+          if (tag != null && tag.isNotEmpty) 'tag': tag,
+          if (search != null && search.isNotEmpty) ...<String, String>{
+            'search': search,
+            'q': search,
+          },
+        },
+      );
+
+  Future<ApiResult<MemoryRecordModel>> createTelemetryMemory({
+    required String content,
+    String category = 'musical_preference',
+    String subject = 'user:preference',
+    List<String> tags = const <String>[],
+  }) =>
+      _postJson(
+        '/api/telemetry/memories',
+        <String, Object?>{
+          'content': content,
+          'category': category,
+          'subject': subject,
+          'tags': tags,
+        },
+        MemoryRecordModel.fromJson,
+      );
+
+  Future<ApiResult<bool>> deleteTelemetryMemory(String memoryId) async {
+    final ApiResult<http.Response> res =
+        await _delete('/api/telemetry/memories/$memoryId');
+    return res.when(
+      ok: (http.Response r) {
+        try {
+          final JsonMap? root = asJsonMap(jsonDecode(r.body));
+          final bool deleted = asBoolOrNull(root?['deleted']) ?? true;
+          return ApiOk<bool>(deleted);
+        } catch (_) {
+          return const ApiOk<bool>(true);
+        }
+      },
+      failed: (ApiFailure<http.Response> f) => f.cast<bool>(),
+    );
+  }
+
+  Future<ApiResult<List<A2uiMessage>>> telemetrySurface() =>
+      _getMessages('/api/surfaces/telemetry');
+
+  // =========================================================================
   // Transport
   // =========================================================================
 
@@ -471,6 +594,10 @@ class BarogrooveApi {
           final List<Object?>? items = asJsonList(parsed) ??
               asJsonList(asJsonMap(parsed)?['items']) ??
               asJsonList(asJsonMap(parsed)?['results']) ??
+              asJsonList(asJsonMap(parsed)?['trajectories']) ??
+              asJsonList(asJsonMap(parsed)?['sessions']) ??
+              asJsonList(asJsonMap(parsed)?['conversations']) ??
+              asJsonList(asJsonMap(parsed)?['memories']) ??
               asJsonList(asJsonMap(parsed)?['themes']) ??
               asJsonList(asJsonMap(parsed)?['genres']) ??
               asJsonList(asJsonMap(parsed)?['scenarios']) ??
@@ -552,6 +679,21 @@ class BarogrooveApi {
         retryable: true,
         perform: (Uri uri, Map<String, String> headers) =>
             _client.get(uri, headers: headers),
+      );
+
+  /// DELETE request.
+  Future<ApiResult<http.Response>> _delete(
+    String path, {
+    Map<String, String>? query,
+    Duration? timeout,
+  }) =>
+      _send(
+        path: path,
+        query: query,
+        timeout: timeout,
+        retryable: false,
+        perform: (Uri uri, Map<String, String> headers) =>
+            _client.delete(uri, headers: headers),
       );
 
   /// POST. Retried only on a timeout or a 5xx, and only because the BAROGROOVE

@@ -24,6 +24,7 @@ class HealthStatus {
     required this.status,
     required this.capabilities,
     required this.degraded,
+    this.telemetry,
   });
 
   final String status;
@@ -33,6 +34,9 @@ class HealthStatus {
 
   /// Things currently not working. Surfaced verbatim in the UI.
   final List<String> degraded;
+
+  /// Live AI telemetry summary counters reported by `/api/health`.
+  final TelemetrySummaryModel? telemetry;
 
   bool get ok => status == 'ok' || status == 'healthy';
 
@@ -46,13 +50,17 @@ class HealthStatus {
 
   factory HealthStatus.fromJson(JsonMap json) {
     final JsonMap caps = asJsonMap(json['capabilities']) ?? const <String, Object?>{};
+    final JsonMap? rawTelemetry = asJsonMap(json['telemetry']);
+    final String status = asStringOrNull(json['status']) ??
+        (asBoolOrNull(json['ok']) == true ? 'ok' : 'unknown');
     return HealthStatus(
-      status: asStringOrNull(json['status']) ?? 'unknown',
+      status: status,
       capabilities: <String, bool>{
         for (final MapEntry<String, Object?> e in caps.entries)
           e.key: asBoolOrNull(e.value) ?? false,
       },
       degraded: asStringList(json['degraded']),
+      telemetry: rawTelemetry != null ? TelemetrySummaryModel.fromJson(rawTelemetry) : null,
     );
   }
 }
@@ -1252,6 +1260,8 @@ class AdvisorLiveRequest {
     this.currentThemeId,
     this.currentGenreId,
     this.autoForge = true,
+    this.sessionId,
+    this.conversationId,
   });
 
   final String? prompt;
@@ -1261,6 +1271,8 @@ class AdvisorLiveRequest {
   final String? currentThemeId;
   final String? currentGenreId;
   final bool autoForge;
+  final String? sessionId;
+  final String? conversationId;
 
   JsonMap toJson() => <String, Object?>{
         if (prompt != null) 'prompt': prompt,
@@ -1270,6 +1282,8 @@ class AdvisorLiveRequest {
         if (currentThemeId != null) 'current_theme_id': currentThemeId,
         if (currentGenreId != null) 'current_genre_id': currentGenreId,
         'auto_forge': autoForge,
+        if (sessionId != null) 'session_id': sessionId,
+        if (conversationId != null) 'conversation_id': conversationId,
       };
 }
 
@@ -1285,6 +1299,10 @@ class AdvisorLiveResponse {
     required this.seededScrobbles,
     required this.forgeResult,
     required this.modelUsed,
+    this.trajectoryId,
+    this.sessionId,
+    this.conversationId,
+    this.latencyMs,
   });
 
   final String replyText;
@@ -1297,6 +1315,10 @@ class AdvisorLiveResponse {
   final List<ScrobbleEntry> seededScrobbles;
   final ForgeResult? forgeResult;
   final String modelUsed;
+  final String? trajectoryId;
+  final String? sessionId;
+  final String? conversationId;
+  final double? latencyMs;
 
   factory AdvisorLiveResponse.fromJson(JsonMap json) => AdvisorLiveResponse(
         replyText: asStringOrNull(json['reply_text']) ?? '',
@@ -1319,6 +1341,10 @@ class AdvisorLiveResponse {
             ? ForgeResult.fromJson(asJsonMap(json['forge_result'])!)
             : null,
         modelUsed: asStringOrNull(json['model_used']) ?? 'gemini-2.5-flash',
+        trajectoryId: asStringOrNull(json['trajectory_id']),
+        sessionId: asStringOrNull(json['session_id']),
+        conversationId: asStringOrNull(json['conversation_id']),
+        latencyMs: asDoubleOrNull(json['latency_ms']),
       );
 }
 
@@ -1518,5 +1544,609 @@ class DataQnAResponse {
         estimatedCostUsd: asDoubleOrNull(json['estimated_cost_usd']) ?? 0.0,
       );
 }
+
+// ===========================================================================
+// DataViz QnA Models (`/api/dataviz/qna`)
+// ===========================================================================
+
+class DataVizQnARequest {
+  const DataVizQnARequest({
+    required this.question,
+    this.voiceMode = true,
+    this.sessionId,
+    this.conversationId,
+  });
+
+  final String question;
+  final bool voiceMode;
+  final String? sessionId;
+  final String? conversationId;
+
+  JsonMap toJson() => <String, Object?>{
+        'question': question,
+        'voice_mode': voiceMode,
+        if (sessionId != null) 'session_id': sessionId,
+        if (conversationId != null) 'conversation_id': conversationId,
+      };
+}
+
+class DataVizMatchingScrobble {
+  const DataVizMatchingScrobble({
+    required this.id,
+    required this.artist,
+    required this.track,
+    required this.album,
+  });
+
+  final String id;
+  final String artist;
+  final String track;
+  final String album;
+
+  factory DataVizMatchingScrobble.fromJson(Map<String, dynamic> json) =>
+      DataVizMatchingScrobble(
+        id: asStringOrNull(json['id']) ?? 'scrobble_id',
+        artist: asStringOrNull(json['artist']) ?? 'Massive Attack',
+        track: asStringOrNull(json['track']) ??
+            asStringOrNull(json['title']) ??
+            'Teardrop',
+        album: asStringOrNull(json['album']) ?? 'Mezzanine',
+      );
+}
+
+class DataVizQnAResponse {
+  const DataVizQnAResponse({
+    required this.answerText,
+    required this.spokenSummary,
+    required this.highlightSection,
+    required this.keyMetricBadge,
+    required this.suggestedFollowups,
+    required this.matchingScrobbles,
+    required this.modelUsed,
+    this.trajectoryId,
+    this.sessionId,
+    this.conversationId,
+    this.latencyMs,
+  });
+
+  final String answerText;
+  final String spokenSummary;
+  final String highlightSection;
+  final String keyMetricBadge;
+  final List<String> suggestedFollowups;
+  final List<DataVizMatchingScrobble> matchingScrobbles;
+  final String modelUsed;
+  final String? trajectoryId;
+  final String? sessionId;
+  final String? conversationId;
+  final double? latencyMs;
+
+  factory DataVizQnAResponse.fromJson(Map<String, dynamic> json) {
+    final List<Object?> rawScrobbles =
+        asJsonList(json['matching_scrobbles']) ?? const <Object?>[];
+    return DataVizQnAResponse(
+      answerText: asStringOrNull(json['answer_text']) ?? '',
+      spokenSummary: asStringOrNull(json['spoken_summary']) ?? '',
+      highlightSection:
+          asStringOrNull(json['highlight_section']) ?? 'pressure_vs_bpm',
+      keyMetricBadge:
+          asStringOrNull(json['key_metric_badge']) ?? 'Sonic Insight',
+      suggestedFollowups: asStringList(json['suggested_followups']),
+      matchingScrobbles: <DataVizMatchingScrobble>[
+        for (final Object? item in rawScrobbles)
+          if (asJsonMap(item) case final JsonMap m)
+            DataVizMatchingScrobble.fromJson(m),
+      ],
+      modelUsed: asStringOrNull(json['model_used']) ?? 'gemini-2.5-flash',
+      trajectoryId: asStringOrNull(json['trajectory_id']),
+      sessionId: asStringOrNull(json['session_id']),
+      conversationId: asStringOrNull(json['conversation_id']),
+      latencyMs: asDoubleOrNull(json['latency_ms']),
+    );
+  }
+}
+
+// ===========================================================================
+// AI Observability & Telemetry Models (`/api/telemetry/*`)
+// ===========================================================================
+
+class TokenUsageModel {
+  const TokenUsageModel({
+    required this.promptTokens,
+    required this.candidateTokens,
+    required this.totalTokens,
+    this.isEstimated = false,
+  });
+
+  final int promptTokens;
+  final int candidateTokens;
+  final int totalTokens;
+  final bool isEstimated;
+
+  static const TokenUsageModel empty = TokenUsageModel(
+    promptTokens: 0,
+    candidateTokens: 0,
+    totalTokens: 0,
+    isEstimated: false,
+  );
+
+  factory TokenUsageModel.fromJson(Map<String, dynamic> json) {
+    final int prompt = (asDoubleOrNull(json['prompt_tokens']) ?? 0).round();
+    final int candidate = (asDoubleOrNull(json['candidate_tokens']) ??
+            asDoubleOrNull(json['candidates_tokens']) ??
+            0)
+        .round();
+    final int total =
+        (asDoubleOrNull(json['total_tokens']) ?? (prompt + candidate)).round();
+    return TokenUsageModel(
+      promptTokens: prompt,
+      candidateTokens: candidate,
+      totalTokens: total,
+      isEstimated: asBoolOrNull(json['is_estimated']) ?? false,
+    );
+  }
+
+  JsonMap toJson() => <String, Object?>{
+        'prompt_tokens': promptTokens,
+        'candidate_tokens': candidateTokens,
+        'total_tokens': totalTokens,
+        'is_estimated': isEstimated,
+      };
+}
+
+class ToolStepModel {
+  const ToolStepModel({
+    required this.stepId,
+    required this.toolName,
+    required this.label,
+    required this.detail,
+    this.status = 'ok',
+    this.latencyMs = 0.0,
+    this.inputArgs = const <String, dynamic>{},
+    this.outputSummary = '',
+  });
+
+  final String stepId;
+  final String toolName;
+  final String label;
+  final String detail;
+  final String status;
+  final double latencyMs;
+  final Map<String, dynamic> inputArgs;
+  final String outputSummary;
+
+  String get name => toolName;
+
+  factory ToolStepModel.fromJson(Map<String, dynamic> json) {
+    final String tool = asStringOrNull(json['tool_name']) ??
+        asStringOrNull(json['tool']) ??
+        asStringOrNull(json['name']) ??
+        'tool';
+    return ToolStepModel(
+      stepId: asStringOrNull(json['step_id']) ?? tool,
+      toolName: tool,
+      label: asStringOrNull(json['label']) ?? tool,
+      detail: asStringOrNull(json['detail']) ?? '',
+      status: asStringOrNull(json['status']) ?? 'ok',
+      latencyMs: asDoubleOrNull(json['latency_ms']) ?? 0.0,
+      inputArgs: asJsonMap(json['input_args']) ??
+          asJsonMap(json['args']) ??
+          const <String, dynamic>{},
+      outputSummary: asStringOrNull(json['output_summary']) ??
+          asStringOrNull(json['result_summary']) ??
+          '',
+    );
+  }
+
+  JsonMap toJson() => <String, Object?>{
+        'step_id': stepId,
+        'tool_name': toolName,
+        'label': label,
+        'detail': detail,
+        'status': status,
+        'latency_ms': latencyMs,
+        'input_args': inputArgs,
+        'output_summary': outputSummary,
+      };
+}
+
+class TrajectoryRecordModel {
+  const TrajectoryRecordModel({
+    required this.trajectoryId,
+    required this.sessionId,
+    required this.conversationId,
+    required this.userId,
+    required this.surface,
+    required this.endpoint,
+    required this.createdAt,
+    required this.latencyMs,
+    required this.traceId,
+    required this.spanId,
+    required this.gcpTrace,
+    required this.requestedModel,
+    required this.executionPath,
+    required this.httpStatus,
+    this.errorState,
+    required this.tokenUsage,
+    required this.systemInstruction,
+    required this.userPrompt,
+    required this.multimodalMetadata,
+    required this.rawModelResponse,
+    required this.parsedPlan,
+    required this.toolSteps,
+    required this.extractedMemoryIds,
+  });
+
+  final String trajectoryId;
+  final String sessionId;
+  final String conversationId;
+  final String userId;
+  final String surface;
+  final String endpoint;
+  final String createdAt;
+  final double latencyMs;
+  final String traceId;
+  final String spanId;
+  final String gcpTrace;
+  final String requestedModel;
+  final String executionPath;
+  final int httpStatus;
+  final String? errorState;
+  final TokenUsageModel tokenUsage;
+  final String systemInstruction;
+  final String userPrompt;
+  final Map<String, dynamic> multimodalMetadata;
+  final String rawModelResponse;
+  final Map<String, dynamic> parsedPlan;
+  final List<ToolStepModel> toolSteps;
+  final List<String> extractedMemoryIds;
+
+  String get gcpTracePath => gcpTrace;
+  TokenUsageModel get tokens => tokenUsage;
+
+  factory TrajectoryRecordModel.fromJson(Map<String, dynamic> json) {
+    final List<Object?> rawTools = asJsonList(json['tool_steps']) ??
+        asJsonList(json['actions_executed']) ??
+        const <Object?>[];
+    return TrajectoryRecordModel(
+      trajectoryId: asStringOrNull(json['trajectory_id']) ?? '',
+      sessionId: asStringOrNull(json['session_id']) ?? '',
+      conversationId: asStringOrNull(json['conversation_id']) ?? '',
+      userId: asStringOrNull(json['user_id']) ?? 'demo',
+      surface: asStringOrNull(json['surface']) ?? 'advisor',
+      endpoint: asStringOrNull(json['endpoint']) ??
+          asStringOrNull(json['operation']) ??
+          '',
+      createdAt: asStringOrNull(json['created_at']) ??
+          asStringOrNull(json['timestamp_utc']) ??
+          '',
+      latencyMs: asDoubleOrNull(json['latency_ms']) ?? 0.0,
+      traceId: asStringOrNull(json['trace_id']) ?? '',
+      spanId: asStringOrNull(json['span_id']) ?? '',
+      gcpTrace: asStringOrNull(json['gcp_trace']) ??
+          asStringOrNull(json['gcp_trace_path']) ??
+          asStringOrNull(json['logging.googleapis.com/trace']) ??
+          '',
+      requestedModel: asStringOrNull(json['requested_model']) ??
+          asStringOrNull(json['model']) ??
+          'gemini-2.5-flash',
+      executionPath: asStringOrNull(json['execution_path']) ??
+          asStringOrNull(json['model_path']) ??
+          'vertex-ai',
+      httpStatus: (asDoubleOrNull(json['http_status']) ?? 200).round(),
+      errorState: asStringOrNull(json['error_state']),
+      tokenUsage: TokenUsageModel.fromJson(
+        asJsonMap(json['token_usage']) ??
+            asJsonMap(json['tokens']) ??
+            const <String, dynamic>{},
+      ),
+      systemInstruction: asStringOrNull(json['system_instruction']) ?? '',
+      userPrompt: asStringOrNull(json['user_prompt']) ??
+          asStringOrNull(json['prompt']) ??
+          '',
+      multimodalMetadata:
+          asJsonMap(json['multimodal_metadata']) ?? const <String, dynamic>{},
+      rawModelResponse: asStringOrNull(json['raw_model_response']) ??
+          asStringOrNull(json['output']) ??
+          '',
+      parsedPlan: asJsonMap(json['parsed_plan']) ?? const <String, dynamic>{},
+      toolSteps: <ToolStepModel>[
+        for (final Object? item in rawTools)
+          if (asJsonMap(item) case final JsonMap m) ToolStepModel.fromJson(m),
+      ],
+      extractedMemoryIds: asStringList(json['extracted_memory_ids']),
+    );
+  }
+}
+
+class SessionRecordModel {
+  const SessionRecordModel({
+    required this.sessionId,
+    required this.userId,
+    required this.clientSurface,
+    required this.startedAt,
+    required this.lastActiveAt,
+    required this.turnCount,
+    this.activeGeocacheId,
+    this.activeThemeId,
+    this.activeGenreId,
+    required this.conversationIds,
+    required this.trajectoryIds,
+  });
+
+  final String sessionId;
+  final String userId;
+  final String clientSurface;
+  final String startedAt;
+  final String lastActiveAt;
+  final int turnCount;
+  final String? activeGeocacheId;
+  final String? activeThemeId;
+  final String? activeGenreId;
+  final List<String> conversationIds;
+  final List<String> trajectoryIds;
+
+  factory SessionRecordModel.fromJson(Map<String, dynamic> json) =>
+      SessionRecordModel(
+        sessionId: asStringOrNull(json['session_id']) ?? '',
+        userId: asStringOrNull(json['user_id']) ?? 'demo',
+        clientSurface: asStringOrNull(json['client_surface']) ??
+            asStringOrNull(json['surface']) ??
+            'web-flutter',
+        startedAt: asStringOrNull(json['started_at']) ?? '',
+        lastActiveAt: asStringOrNull(json['last_active_at']) ?? '',
+        turnCount: (asDoubleOrNull(json['turn_count']) ?? 0).round(),
+        activeGeocacheId: asStringOrNull(json['active_geocache_id']),
+        activeThemeId: asStringOrNull(json['active_theme_id']),
+        activeGenreId: asStringOrNull(json['active_genre_id']),
+        conversationIds: asStringList(json['conversation_ids']),
+        trajectoryIds: asStringList(json['trajectory_ids']),
+      );
+}
+
+class ConversationTurnModel {
+  const ConversationTurnModel({
+    required this.turnId,
+    required this.turnIndex,
+    required this.role,
+    required this.timestamp,
+    required this.content,
+    this.audioTranscript,
+    this.spokenSummary,
+    required this.actionsExecuted,
+    this.trajectoryId,
+  });
+
+  final String turnId;
+  final int turnIndex;
+  final String role;
+  final String timestamp;
+  final String content;
+  final String? audioTranscript;
+  final String? spokenSummary;
+  final List<String> actionsExecuted;
+  final String? trajectoryId;
+
+  factory ConversationTurnModel.fromJson(Map<String, dynamic> json) {
+    final List<Object?>? rawActions = asJsonList(json['actions_executed']);
+    final List<String> actions = <String>[];
+    if (rawActions != null) {
+      for (final Object? item in rawActions) {
+        if (item is String) {
+          actions.add(item);
+        } else if (asJsonMap(item) case final JsonMap m) {
+          final String label =
+              asStringOrNull(m['label']) ?? asStringOrNull(m['tool']) ?? '';
+          if (label.isNotEmpty) actions.add(label);
+        }
+      }
+    }
+    return ConversationTurnModel(
+      turnId: asStringOrNull(json['turn_id']) ?? '',
+      turnIndex: (asDoubleOrNull(json['turn_index']) ?? 0).round(),
+      role: asStringOrNull(json['role']) ?? 'user',
+      timestamp: asStringOrNull(json['timestamp']) ??
+          asStringOrNull(json['created_at']) ??
+          '',
+      content: asStringOrNull(json['content']) ?? '',
+      audioTranscript: asStringOrNull(json['audio_transcript']),
+      spokenSummary: asStringOrNull(json['spoken_summary']),
+      actionsExecuted: actions,
+      trajectoryId: asStringOrNull(json['trajectory_id']),
+    );
+  }
+}
+
+class ConversationRecordModel {
+  const ConversationRecordModel({
+    required this.conversationId,
+    required this.sessionId,
+    required this.userId,
+    required this.surface,
+    required this.title,
+    required this.summary,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.turns,
+  });
+
+  final String conversationId;
+  final String sessionId;
+  final String userId;
+  final String surface;
+  final String title;
+  final String summary;
+  final String createdAt;
+  final String updatedAt;
+  final List<ConversationTurnModel> turns;
+
+  factory ConversationRecordModel.fromJson(Map<String, dynamic> json) {
+    final List<Object?> rawTurns =
+        asJsonList(json['turns']) ?? const <Object?>[];
+    return ConversationRecordModel(
+      conversationId: asStringOrNull(json['conversation_id']) ?? '',
+      sessionId: asStringOrNull(json['session_id']) ?? '',
+      userId: asStringOrNull(json['user_id']) ?? 'demo',
+      surface: asStringOrNull(json['surface']) ?? 'advisor',
+      title: asStringOrNull(json['title']) ?? 'AI Conversation Thread',
+      summary: asStringOrNull(json['summary']) ?? '',
+      createdAt: asStringOrNull(json['created_at']) ?? '',
+      updatedAt: asStringOrNull(json['updated_at']) ?? '',
+      turns: <ConversationTurnModel>[
+        for (final Object? item in rawTurns)
+          if (asJsonMap(item) case final JsonMap m)
+            ConversationTurnModel.fromJson(m),
+      ],
+    );
+  }
+}
+
+class MemoryRecordModel {
+  const MemoryRecordModel({
+    required this.memoryId,
+    required this.userId,
+    this.conversationId,
+    this.trajectoryId,
+    required this.sourceType,
+    required this.category,
+    required this.subject,
+    required this.content,
+    required this.sentiment,
+    required this.confidence,
+    required this.tags,
+    required this.createdAt,
+    required this.lastReinforcedAt,
+    required this.reinforcementCount,
+  });
+
+  final String memoryId;
+  final String userId;
+  final String? conversationId;
+  final String? trajectoryId;
+  final String sourceType;
+  final String category;
+  final String subject;
+  final String content;
+  final String sentiment;
+  final double confidence;
+  final List<String> tags;
+  final String createdAt;
+  final String lastReinforcedAt;
+  final int reinforcementCount;
+
+  factory MemoryRecordModel.fromJson(Map<String, dynamic> json) =>
+      MemoryRecordModel(
+        memoryId: asStringOrNull(json['memory_id']) ??
+            asStringOrNull(json['id']) ??
+            '',
+        userId: asStringOrNull(json['user_id']) ?? 'demo',
+        conversationId: asStringOrNull(json['conversation_id']),
+        trajectoryId: asStringOrNull(json['trajectory_id']),
+        sourceType: asStringOrNull(json['source_type']) ?? 'conversation',
+        category: asStringOrNull(json['category']) ?? 'musical_preference',
+        subject: asStringOrNull(json['subject']) ?? 'user:preference',
+        content: asStringOrNull(json['content']) ?? '',
+        sentiment: asStringOrNull(json['sentiment']) ?? 'positive',
+        confidence: asDoubleOrNull(json['confidence']) ?? 0.9,
+        tags: asStringList(json['tags']),
+        createdAt: asStringOrNull(json['created_at']) ?? '',
+        lastReinforcedAt: asStringOrNull(json['last_reinforced_at']) ??
+            asStringOrNull(json['created_at']) ??
+            '',
+        reinforcementCount:
+            (asDoubleOrNull(json['reinforcement_count']) ?? 1).round(),
+      );
+}
+
+class TelemetrySummaryModel {
+  const TelemetrySummaryModel({
+    required this.totalAiCalls,
+    required this.tokenUsage,
+    required this.activeSessions,
+    required this.totalSessions,
+    required this.totalConversations,
+    required this.storedMemories,
+    required this.avgLatencyMs,
+    required this.trajectoryCountsBySurface,
+    required this.trajectoryCountsByPath,
+    required this.errorCount,
+  });
+
+  final int totalAiCalls;
+  final TokenUsageModel tokenUsage;
+  final int activeSessions;
+  final int totalSessions;
+  final int totalConversations;
+  final int storedMemories;
+  final double avgLatencyMs;
+  final Map<String, int> trajectoryCountsBySurface;
+  final Map<String, int> trajectoryCountsByPath;
+  final int errorCount;
+
+  int get totalCalls => totalAiCalls;
+  int get totalTokens => tokenUsage.totalTokens;
+  int get totalInputTokens => tokenUsage.promptTokens;
+  int get totalOutputTokens => tokenUsage.candidateTokens;
+  Map<String, int> get bySurface => trajectoryCountsBySurface;
+
+  static const TelemetrySummaryModel empty = TelemetrySummaryModel(
+    totalAiCalls: 0,
+    tokenUsage: TokenUsageModel.empty,
+    activeSessions: 0,
+    totalSessions: 0,
+    totalConversations: 0,
+    storedMemories: 0,
+    avgLatencyMs: 0.0,
+    trajectoryCountsBySurface: <String, int>{},
+    trajectoryCountsByPath: <String, int>{},
+    errorCount: 0,
+  );
+
+  factory TelemetrySummaryModel.fromJson(Map<String, dynamic> json) {
+    final JsonMap? rawSurfaces =
+        asJsonMap(json['trajectory_counts_by_surface']) ??
+            asJsonMap(json['by_surface']);
+    final Map<String, int> surfaces = <String, int>{};
+    if (rawSurfaces != null) {
+      for (final MapEntry<String, Object?> e in rawSurfaces.entries) {
+        surfaces[e.key] = (asDoubleOrNull(e.value) ?? 0).round();
+      }
+    }
+    final JsonMap? rawPaths = asJsonMap(json['trajectory_counts_by_path']);
+    final Map<String, int> paths = <String, int>{};
+    if (rawPaths != null) {
+      for (final MapEntry<String, Object?> e in rawPaths.entries) {
+        paths[e.key] = (asDoubleOrNull(e.value) ?? 0).round();
+      }
+    }
+    final JsonMap? tokenMap = asJsonMap(json['token_usage']);
+    final TokenUsageModel tokens = tokenMap != null
+        ? TokenUsageModel.fromJson(tokenMap)
+        : TokenUsageModel(
+            promptTokens:
+                (asDoubleOrNull(json['total_input_tokens']) ?? 0).round(),
+            candidateTokens:
+                (asDoubleOrNull(json['total_output_tokens']) ?? 0).round(),
+            totalTokens: (asDoubleOrNull(json['total_tokens']) ?? 0).round(),
+          );
+    return TelemetrySummaryModel(
+      totalAiCalls: (asDoubleOrNull(json['total_ai_calls']) ??
+              asDoubleOrNull(json['total_calls']) ??
+              0)
+          .round(),
+      tokenUsage: tokens,
+      activeSessions: (asDoubleOrNull(json['active_sessions']) ?? 0).round(),
+      totalSessions: (asDoubleOrNull(json['total_sessions']) ?? 0).round(),
+      totalConversations:
+          (asDoubleOrNull(json['total_conversations']) ?? 0).round(),
+      storedMemories: (asDoubleOrNull(json['stored_memories']) ?? 0).round(),
+      avgLatencyMs: asDoubleOrNull(json['avg_latency_ms']) ?? 0.0,
+      trajectoryCountsBySurface: surfaces,
+      trajectoryCountsByPath: paths,
+      errorCount: (asDoubleOrNull(json['error_count']) ?? 0).round(),
+    );
+  }
+}
+
 
 

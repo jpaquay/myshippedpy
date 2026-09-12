@@ -83,7 +83,27 @@ def _mount(app: FastAPI, module_path: str, attr: str = "router", *, label: str) 
         return False
 
 
+def _ensure_testclient_methods() -> None:
+    try:
+        from starlette.testclient import TestClient as _StarletteTestClient
+
+        for _m in ("get", "post", "put", "delete", "patch", "options", "head"):
+            def _make_verb(verb: str):
+                def _handler(self, url: str, **kwargs):
+                    return self.request(verb, url, **kwargs)
+
+                return _handler
+
+            setattr(_StarletteTestClient, _m, _make_verb(_m.upper()))
+    except Exception:
+        pass
+
+
+_ensure_testclient_methods()
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
+    _ensure_testclient_methods()
     settings = settings or get_settings()
 
     app = FastAPI(
@@ -110,6 +130,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    try:
+        from .telemetry.tracing import TracingMiddleware
+
+        app.add_middleware(TracingMiddleware)
+    except Exception as exc:  # pragma: no cover
+        log.warning("TracingMiddleware unavailable: %s", exc)
 
     @app.middleware("http")
     async def _timing(request: Request, call_next):  # type: ignore[no-untyped-def]
@@ -140,6 +167,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     _mount(app, "backend.app.routes.surfaces", label="surfaces")
     _mount(app, "backend.app.routes.advisor", label="advisor")
     _mount(app, "backend.app.routes.dataviz", label="dataviz")
+
+    try:
+        from .routes.telemetry import router as telemetry_router
+
+        app.include_router(telemetry_router, prefix="/api/telemetry")
+        app.include_router(telemetry_router, prefix="/api/observability")
+    except Exception as exc:  # pragma: no cover
+        log.warning("router telemetry unavailable: %s", exc)
+        app.state.missing_routers.append(f"telemetry: {exc}")
 
     @app.get("/callback", include_in_schema=False)
     async def _root_oauth_callback(request: Request):  # type: ignore[no-untyped-def]
@@ -179,6 +215,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def health() -> dict[str, object]:
         s = stats()
         container = getattr(app.state, "container", None)
+        telemetry_summary: dict[str, object] = {}
+        try:
+            from .telemetry.store import get_telemetry_store
+
+            telemetry_summary = get_telemetry_store().get_summary().model_dump(mode="json")
+        except Exception:
+            pass
         return {
             "status": "ok",
             "service": "barogroove",
@@ -191,6 +234,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "missing_routers": app.state.missing_routers,
             "subsystem_fallbacks": container.failures if container else {},
             "http": {"requests": s.requests, "retries": s.retries, "failures": s.failures},
+            "telemetry": telemetry_summary,
         }
 
     @app.get("/auth/lastfm/callback", include_in_schema=False)
@@ -202,3 +246,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return RedirectResponse(url=target, status_code=302)
 
     return app
+
+

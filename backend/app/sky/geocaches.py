@@ -262,13 +262,34 @@ STREET_ART_GEOCACHES: tuple[StreetArtGeoCache, ...] = (
 _BY_ID: dict[str, StreetArtGeoCache] = {g.id: g for g in STREET_ART_GEOCACHES}
 
 
+_ALIASES: dict[str, str] = {
+    "reykjavik_wall_poetry": "wall_poetry_reykjavik",
+    "shoreditch_brick_lane_london": "brick_lane_shoreditch",
+    "brick_lane_london": "brick_lane_shoreditch",
+    "tokyo": "shimokitazawa_tokyo",
+    "sao_paulo": "beco_do_batman_sao_paulo",
+    "berlin": "east_side_gallery_berlin",
+    "reykjavik": "wall_poetry_reykjavik",
+    "london": "brick_lane_shoreditch",
+    "brussels": "parcours_bd_brussels",
+}
+
+
 def get_geocache(geocache_id: str | None) -> StreetArtGeoCache | None:
-    """Lookup a street-art landmark by ID, or pick one pseudo-randomly if 'random'."""
+    """Lookup a street-art landmark by ID, alias, or city match."""
     if not geocache_id:
         return None
-    if geocache_id.strip().lower() == "random":
+    norm = geocache_id.strip().lower()
+    if norm == "random":
         return random.choice(STREET_ART_GEOCACHES)
-    return _BY_ID.get(geocache_id.strip().lower())
+    if norm in _BY_ID:
+        return _BY_ID[norm]
+    if norm in _ALIASES and _ALIASES[norm] in _BY_ID:
+        return _BY_ID[_ALIASES[norm]]
+    for g in STREET_ART_GEOCACHES:
+        if norm in g.id.lower() or norm in g.city.lower() or norm in g.name.lower():
+            return g
+    return None
 
 
 def pick_random_geocache(exclude_id: str | None = None) -> StreetArtGeoCache:

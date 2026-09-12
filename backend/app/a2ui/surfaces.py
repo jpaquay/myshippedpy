@@ -58,8 +58,10 @@ from .catalog import (
     FN_EXPLAIN_DIMENSION,
     FN_FORGE,
     FN_OPEN_ALMANAC_ENTRY,
+    FN_OPEN_TELEMETRY_TRACE,
     FN_OPEN_TRACK,
     FN_REFRESH_SKY,
+    FN_REFRESH_TELEMETRY,
     FN_RETRY,
     FN_SELECT_GENRE,
     FN_SELECT_THEME,
@@ -92,6 +94,7 @@ __all__ = [
     "build_playlist_surface",
     "build_rationale_surface",
     "build_almanac_surface",
+    "build_telemetry_surface",
     "build_error_surface",
     "patch_selection",
     "patch_track_feedback",
@@ -109,6 +112,7 @@ SURFACE_KINDS: Final[tuple[str, ...]] = (
     "playlist",
     "rationale",
     "almanac",
+    "telemetry",
     "error",
 )
 
@@ -949,6 +953,114 @@ def build_almanac_surface(
             "emptyMessage": "No forges yet. Read the sky and make the first one.",
             "entryCount": len(items),
             "entries": items,
+        }
+    }
+    return _assemble(sid, components, data)
+
+
+# --------------------------------------------------------------------------- #
+# 5b. Telemetry -- AI Observability Inspector
+# --------------------------------------------------------------------------- #
+
+
+def build_telemetry_surface(
+    trajectories: Sequence[Any] | None = None,
+    summary: Any | None = None,
+    *,
+    surface_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """The AI Observability Telemetry Inspector surface."""
+    sid = surface_id or new_surface_id("telemetry")
+
+    if trajectories is None or summary is None:
+        try:
+            from ..telemetry.store import get_telemetry_store
+
+            store = get_telemetry_store()
+            if trajectories is None:
+                trajectories, _ = store.list_trajectories(limit=30)
+            if summary is None:
+                summary = store.get_summary()
+        except Exception:
+            trajectories = trajectories or []
+            summary = summary or {}
+
+    entries: list[dict[str, Any]] = []
+    for t in trajectories or []:
+        t_dict = t.model_dump(mode="json") if hasattr(t, "model_dump") else (dict(t) if isinstance(t, dict) else {})
+        tu = t_dict.get("token_usage") or {}
+        entries.append(
+            {
+                "trajectoryId": str(t_dict.get("trajectory_id", "")),
+                "surface": str(t_dict.get("surface", "advisor")),
+                "endpoint": str(t_dict.get("endpoint", "")),
+                "executionPath": str(t_dict.get("execution_path", "deterministic-fallback")),
+                "latencyMs": float(t_dict.get("latency_ms", 0.0)),
+                "totalTokens": int(tu.get("total_tokens", 0) if isinstance(tu, dict) else 0),
+                "traceId": str(t_dict.get("trace_id", "")),
+                "createdAt": str(t_dict.get("created_at", "")),
+                "status": str(t_dict.get("status", "ok")),
+            }
+        )
+
+    sum_dict = summary.model_dump(mode="json") if hasattr(summary, "model_dump") else (dict(summary) if isinstance(summary, dict) else {})
+    tu_sum = sum_dict.get("token_usage") or {}
+
+    components = [
+        _root(["telemetryInspector"]),
+        Component(
+            id="telemetryInspector",
+            component="TelemetryInspector",
+            properties={
+                "title": bind("/telemetry/title"),
+                "subtitle": bind("/telemetry/subtitle"),
+                "totalAiCalls": bind("/telemetry/totalAiCalls"),
+                "totalTokens": bind("/telemetry/totalTokens"),
+                "activeSessions": bind("/telemetry/activeSessions"),
+                "storedMemories": bind("/telemetry/storedMemories"),
+                "avgLatencyMs": bind("/telemetry/avgLatencyMs"),
+                "onRefresh": Action(
+                    action=FN_REFRESH_TELEMETRY,
+                    context={"surfaceId": bind("/telemetry/surfaceId")},
+                ),
+                "entries": ChildTemplate(
+                    component_id="telemetryEntry", data_binding="/telemetry/entries"
+                ),
+            },
+        ),
+        Component(
+            id="telemetryEntry",
+            component="TelemetryEntry",
+            accessibility={"label": bind("/endpoint"), "description": bind("/executionPath")},
+            properties={
+                "trajectoryId": bind("/trajectoryId"),
+                "surface": bind("/surface"),
+                "endpoint": bind("/endpoint"),
+                "executionPath": bind("/executionPath"),
+                "latencyMs": bind("/latencyMs"),
+                "totalTokens": bind("/totalTokens"),
+                "traceId": bind("/traceId"),
+                "createdAt": bind("/createdAt"),
+                "status": bind("/status"),
+                "onOpen": Action(
+                    action=FN_OPEN_TELEMETRY_TRACE,
+                    context={"trajectoryId": bind("/trajectoryId")},
+                ),
+            },
+        ),
+    ]
+
+    data = {
+        "telemetry": {
+            "surfaceId": sid,
+            "title": "AI Observability & Telemetry Inspector",
+            "subtitle": "Live Vertex AI Gemini 2.5 Flash & Multi-Surface Trace Stream",
+            "totalAiCalls": int(sum_dict.get("total_ai_calls", len(entries))),
+            "totalTokens": int(tu_sum.get("total_tokens", 0) if isinstance(tu_sum, dict) else 0),
+            "activeSessions": int(sum_dict.get("active_sessions", 0)),
+            "storedMemories": int(sum_dict.get("stored_memories", 0)),
+            "avgLatencyMs": float(sum_dict.get("avg_latency_ms", 0.0)),
+            "entries": entries,
         }
     }
     return _assemble(sid, components, data)

@@ -371,7 +371,7 @@ def _ensure_catalog_and_indexes() -> list[dict[str, Any]]:
     global _CATALOG_DICTS_CACHE, _CATALOG_INDEX_BY_NORM, _ARTIST_PLAYS_INDEX
     global _ARTIST_YEARLY_INDEX, _ARTIST_HOURLY_INDEX
 
-    if _CATALOG_DICTS_CACHE and _CATALOG_INDEX_BY_NORM:
+    if _CATALOG_DICTS_CACHE and len(_CATALOG_DICTS_CACHE) > 50 and _CATALOG_INDEX_BY_NORM:
         return _CATALOG_DICTS_CACHE
 
     candidates = [

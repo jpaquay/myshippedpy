@@ -82,6 +82,7 @@ ALLOWED_IAM_USERS: Final[frozenset[str]] = frozenset({
     "jpaquay@google.com",
     "elena.ruizroman@gmail.com",
     "arthurpaquay@gmail.com",
+    "esperuiz@gmail.com",
 })
 
 
