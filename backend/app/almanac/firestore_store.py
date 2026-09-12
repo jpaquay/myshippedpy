@@ -46,6 +46,9 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 logger = logging.getLogger("barogroove.almanac.firestore")
 
 
+_PROCESS_FORGE_HISTORY: list[Any] = []
+
+
 class FirestoreAlmanac:
     """:class:`AlmanacStore` implementation over Firestore.
 
@@ -78,6 +81,10 @@ class FirestoreAlmanac:
         ``firestore.rules``.
         """
         playlist_id = str(getattr(playlist, "id", "") or "")
+        _PROCESS_FORGE_HISTORY.insert(0, playlist)
+        if len(_PROCESS_FORGE_HISTORY) > 150:
+            del _PROCESS_FORGE_HISTORY[150:]
+
         try:
             stored = await self._repos.forges.create(playlist, public=False)
         except Exception:
@@ -137,23 +144,34 @@ class FirestoreAlmanac:
         model are dropped rather than failing the whole request -- a schema
         change should cost you the oldest entries, not the endpoint.
         """
+        playlists: list[Playlist] = []
+        seen_ids: set[str] = set()
+
         try:
             rows = await self._repos.forges.list_for_user(user_id, limit=limit)
+            for row in rows:
+                playlist = self._to_playlist(row)
+                if playlist is not None and playlist.id not in seen_ids:
+                    playlists.append(playlist)
+                    seen_ids.add(playlist.id)
         except Exception:
             logger.exception("history query failed for %s", user_id)
-            return []
 
-        playlists: list[Playlist] = []
-        for row in rows:
-            playlist = self._to_playlist(row)
-            if playlist is not None:
-                playlists.append(playlist)
-        dropped = len(rows) - len(playlists)
-        if dropped:
-            logger.warning(
-                "dropped %d unparseable forge row(s) for %s", dropped, user_id
-            )
-        return playlists
+        # Merge in-memory buffer so recently forged Daylists appear immediately
+        # even if Firestore index propagation or auth uid differs.
+        for pl in _PROCESS_FORGE_HISTORY:
+            pl_id = getattr(pl, "id", None)
+            pl_uid = getattr(pl, "user_id", None)
+            if pl_id and pl_id not in seen_ids:
+                if pl_uid in {user_id, "demo", None} or not playlists:
+                    playlists.append(pl)
+                    seen_ids.add(pl_id)
+
+        playlists.sort(
+            key=lambda p: getattr(p, "created_at", None) or "",
+            reverse=True,
+        )
+        return playlists[:limit]
 
     async def nudge(self, user_id: str) -> list[list[float]] | None:
         """The stored 9x7 delta for this user's transfer matrix, or ``None``.

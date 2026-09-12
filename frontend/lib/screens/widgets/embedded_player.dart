@@ -61,6 +61,8 @@ class _EmbeddedPlayerDeckState extends ConsumerState<EmbeddedPlayerDeck> {
           spotifyUri: first.track.spotifyUri,
           lastfmUrl: first.track.lastfmUrl,
           playlistExternalUrl: widget.playlist.sink?.externalUrl,
+          index: 0,
+          total: widget.playlist.tracks.length,
         );
         ref.read(activePlayerTrackProvider.notifier).state = initial;
         _fetchTrackPreview(initial, autoPlay: false);
@@ -341,6 +343,53 @@ class _EmbeddedPlayerDeckState extends ConsumerState<EmbeddedPlayerDeck> {
                 Wrap(
                   spacing: BgSpace.xs,
                   children: <Widget>[
+                    IconButton(
+                      tooltip: 'Previous track in Daylist',
+                      onPressed: active.index > 0
+                          ? () {
+                              final int prevIdx = active.index - 1;
+                              final ScoredTrack st =
+                                  widget.playlist.tracks[prevIdx];
+                              ref
+                                  .read(activePlayerTrackProvider.notifier)
+                                  .state = ActivePlayerTrack(
+                                title: st.track.title,
+                                artist: st.track.artist,
+                                album: st.track.album,
+                                spotifyUri: st.track.spotifyUri,
+                                playlistExternalUrl:
+                                    widget.playlist.sink?.externalUrl,
+                                index: prevIdx,
+                                total: widget.playlist.tracks.length,
+                              );
+                            }
+                          : null,
+                      icon: const Icon(Icons.skip_previous_rounded, size: 20),
+                    ),
+                    IconButton(
+                      tooltip: 'Next track in Daylist',
+                      onPressed:
+                          active.index + 1 < widget.playlist.tracks.length
+                              ? () {
+                                  final int nextIdx = active.index + 1;
+                                  final ScoredTrack st =
+                                      widget.playlist.tracks[nextIdx];
+                                  ref
+                                      .read(activePlayerTrackProvider.notifier)
+                                      .state = ActivePlayerTrack(
+                                    title: st.track.title,
+                                    artist: st.track.artist,
+                                    album: st.track.album,
+                                    spotifyUri: st.track.spotifyUri,
+                                    playlistExternalUrl:
+                                        widget.playlist.sink?.externalUrl,
+                                    index: nextIdx,
+                                    total: widget.playlist.tracks.length,
+                                  );
+                                }
+                              : null,
+                      icon: const Icon(Icons.skip_next_rounded, size: 20),
+                    ),
                     TextButton.icon(
                       onPressed: () => launchUrl(
                         Uri.parse(spotifySearchUrl),
@@ -362,6 +411,130 @@ class _EmbeddedPlayerDeckState extends ConsumerState<EmbeddedPlayerDeck> {
               ],
             ),
           ),
+
+          // Interactive Daylist Queue Ribbon (all tracks in the Daylist)
+          if (widget.playlist.tracks.length > 1) ...<Widget>[
+            const SizedBox(height: BgSpace.md),
+            Row(
+              children: <Widget>[
+                Icon(
+                  Icons.queue_music_rounded,
+                  size: 14,
+                  color: colors.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'DAYLIST SEQUENCE (${widget.playlist.tracks.length} TRACKS — TAP ANY TRACK TO PLAY)',
+                  style: text.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                    letterSpacing: 0.7,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: BgSpace.xs),
+            SizedBox(
+              height: 54,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: widget.playlist.tracks.length,
+                separatorBuilder: (_, __) => const SizedBox(width: BgSpace.xs),
+                itemBuilder: (BuildContext context, int idx) {
+                  final ScoredTrack st = widget.playlist.tracks[idx];
+                  final bool isCurrent = idx == active.index;
+                  final String numStr = (idx + 1).toString().padLeft(2, '0');
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () {
+                      ref.read(activePlayerTrackProvider.notifier).state =
+                          ActivePlayerTrack(
+                        title: st.track.title,
+                        artist: st.track.artist,
+                        album: st.track.album,
+                        spotifyUri: st.track.spotifyUri,
+                        playlistExternalUrl: widget.playlist.sink?.externalUrl,
+                        index: idx,
+                        total: widget.playlist.tracks.length,
+                      );
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      width: 195,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isCurrent
+                            ? colors.primary
+                            : colors.surface.withValues(alpha: 0.8),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isCurrent
+                              ? colors.primary
+                              : colors.outlineVariant,
+                        ),
+                      ),
+                      child: Row(
+                        children: <Widget>[
+                          Text(
+                            numStr,
+                            style: text.labelSmall?.copyWith(
+                              color: isCurrent
+                                  ? colors.onPrimary
+                                  : colors.primary,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: <Widget>[
+                                Text(
+                                  st.track.title,
+                                  style: text.labelMedium?.copyWith(
+                                    color: isCurrent
+                                        ? colors.onPrimary
+                                        : colors.onSurface,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  st.track.artist,
+                                  style: text.labelSmall?.copyWith(
+                                    color: isCurrent
+                                        ? colors.onPrimary.withValues(alpha: 0.8)
+                                        : colors.onSurfaceVariant,
+                                    fontSize: 10,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (isCurrent)
+                            Icon(
+                              _isPlayingAudio
+                                  ? Icons.equalizer_rounded
+                                  : Icons.play_arrow_rounded,
+                              size: 16,
+                              color: colors.onPrimary,
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ],
       ),
     );

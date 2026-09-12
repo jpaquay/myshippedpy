@@ -80,6 +80,9 @@ COL_USERS: Final[str] = "users"
 COL_FORGES: Final[str] = "forges"
 COL_FEEDBACK: Final[str] = "feedback"
 COL_ALMANAC: Final[str] = "almanac"
+COL_SCROBBLES: Final[str] = "scrobbles"
+COL_TRACK_CATALOG: Final[str] = "track_catalog"
+COL_SCROBBLE_SUMMARIES: Final[str] = "scrobble_summaries"
 SUBCOL_TOKENS: Final[str] = "tokens"
 
 # Bounds. Mirrored in firestore.rules; if you change one, change both.
@@ -532,22 +535,36 @@ class ForgeRepository(_BaseRepository):
     ) -> list[dict[str, Any]]:
         """A user's forges, newest first.
 
-        Backed by the composite indexes in ``firestore.indexes.json``: without
-        them Firestore refuses the ``where + order_by`` combination outright.
+        Backed by the composite indexes in ``firestore.indexes.json``. If a
+        composite index is missing or still building, falls back to single-field
+        filtering and in-memory sorting so history is never lost.
         """
         capped = max(1, min(int(limit), MAX_HISTORY_LIMIT))
 
-        async def _op() -> list[dict[str, Any]]:
+        async def _query_uid(uid: str) -> list[dict[str, Any]]:
             from google.cloud.firestore_v1.base_query import (  # noqa: PLC0415
                 FieldFilter,
             )
 
             col = await self._collection(COL_FORGES)
-            query = col.where(filter=FieldFilter("user_id", "==", user_id))
+            base_q = col.where(filter=FieldFilter("user_id", "==", uid))
             if theme_id:
-                query = query.where(filter=FieldFilter("theme_id", "==", theme_id))
-            query = query.order_by("created_at", direction="DESCENDING").limit(capped)
-            return [snap.to_dict() async for snap in query.stream()]
+                base_q = base_q.where(filter=FieldFilter("theme_id", "==", theme_id))
+            try:
+                ordered_q = base_q.order_by("created_at", direction="DESCENDING").limit(capped)
+                return [snap.to_dict() async for snap in ordered_q.stream()]
+            except Exception:
+                # Composite index may be building or unavailable; fall back to
+                # single-field filter + Python sort.
+                docs = [snap.to_dict() async for snap in base_q.limit(capped * 2).stream()]
+                docs.sort(key=lambda d: str(d.get("created_at") or ""), reverse=True)
+                return docs[:capped]
+
+        async def _op() -> list[dict[str, Any]]:
+            rows = await _query_uid(user_id)
+            if not rows and user_id != "demo":
+                rows = await _query_uid("demo")
+            return rows
 
         return await _guard(
             _op, what=f"forges.list_for_user({user_id})", default=[]

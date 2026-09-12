@@ -12,7 +12,9 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api/client.dart';
 import '../api/models.dart';
@@ -35,8 +37,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   PairingProvider? _connecting;
   Completer<void>? _cancel;
   String? _pairingMessage;
+  String _spotifyRedirectUri = 'https://bg.netdev.be/api/pair/spotify/callback';
+  final TextEditingController _lastfmUserCtrl =
+      TextEditingController(text: 'jpaquay');
+  final TextEditingController _spotifyManualCtrl = TextEditingController();
+  bool _showSpotifyManual = false;
+  bool _linkingUsername = false;
+  bool _exchangingManual = false;
 
-  Future<void> _connect(PairingProvider provider) async {
+  @override
+  void dispose() {
+    _lastfmUserCtrl.dispose();
+    _spotifyManualCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _connect(
+    PairingProvider provider, {
+    String? redirectUri,
+  }) async {
     final Completer<void> cancel = Completer<void>();
     setState(() {
       _connecting = provider;
@@ -46,7 +65,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     final PairingAttempt attempt = await ref
         .read(pairingServiceProvider)
-        .connect(provider, cancelled: cancel.future);
+        .connect(
+          provider,
+          redirectUri: redirectUri,
+          cancelled: cancel.future,
+        );
 
     if (!mounted) return;
 
@@ -55,6 +78,57 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _connecting = null;
       _cancel = null;
       _pairingMessage = attempt.ok ? null : attempt.message;
+    });
+  }
+
+  Future<void> _connectLastfmByUsername() async {
+    final String user = _lastfmUserCtrl.text.trim();
+    if (user.isEmpty) return;
+    setState(() {
+      _linkingUsername = true;
+      _pairingMessage = null;
+    });
+    final PairingAttempt attempt = await ref
+        .read(pairingServiceProvider)
+        .connectLastfmUsername(user);
+    if (!mounted) return;
+    ref.invalidate(pairingStatusProvider);
+    setState(() {
+      _linkingUsername = false;
+      _pairingMessage = attempt.ok ? null : attempt.message;
+    });
+    if (attempt.ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Last.fm connected as $user'),
+          backgroundColor: BgPalette.ok,
+        ),
+      );
+    }
+  }
+
+  Future<void> _completeSpotifyManual() async {
+    final String input = _spotifyManualCtrl.text.trim();
+    if (input.isEmpty) return;
+    setState(() {
+      _exchangingManual = true;
+      _pairingMessage = null;
+    });
+    final PairingAttempt attempt = await ref
+        .read(pairingServiceProvider)
+        .manualSpotifyExchange(
+          input,
+          redirectUri: _spotifyRedirectUri,
+        );
+    if (!mounted) return;
+    ref.invalidate(pairingStatusProvider);
+    setState(() {
+      _exchangingManual = false;
+      _pairingMessage = attempt.ok ? null : attempt.message;
+      if (attempt.ok) {
+        _spotifyManualCtrl.clear();
+        _showSpotifyManual = false;
+      }
     });
   }
 
@@ -188,10 +262,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       connected: status.spotify,
                       account: status.spotifyAccount,
                       busy: _connecting == PairingProvider.spotify,
-                      onConnect: () => _connect(PairingProvider.spotify),
+                      onConnect: () => _connect(
+                        PairingProvider.spotify,
+                        redirectUri: _spotifyRedirectUri,
+                      ),
                       onDisconnect: () =>
                           _disconnect(PairingProvider.spotify),
                       onCancel: () => _cancel?.complete(),
+                      extraChild: status.spotify
+                          ? null
+                          : _SpotifySetupBox(
+                              redirectUri: _spotifyRedirectUri,
+                              onRedirectChanged: (String uri) =>
+                                  setState(() => _spotifyRedirectUri = uri),
+                              showManual: _showSpotifyManual,
+                              onToggleManual: () => setState(
+                                () => _showSpotifyManual = !_showSpotifyManual,
+                              ),
+                              manualController: _spotifyManualCtrl,
+                              exchangingManual: _exchangingManual,
+                              onCompleteManual: _completeSpotifyManual,
+                            ),
                     ),
                     const SizedBox(height: BgSpace.md),
                     _PairingCard(
@@ -202,6 +293,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       onConnect: () => _connect(PairingProvider.lastfm),
                       onDisconnect: () => _disconnect(PairingProvider.lastfm),
                       onCancel: () => _cancel?.complete(),
+                      extraChild: status.lastfm
+                          ? null
+                          : _LastfmQuickLinkBox(
+                              controller: _lastfmUserCtrl,
+                              busy: _linkingUsername,
+                              onLinkUsername: _connectLastfmByUsername,
+                            ),
                     ),
                   ],
                 ),
@@ -276,6 +374,7 @@ class _PairingCard extends StatelessWidget {
     required this.onDisconnect,
     required this.onCancel,
     this.account,
+    this.extraChild,
   });
 
   final PairingProvider provider;
@@ -285,6 +384,7 @@ class _PairingCard extends StatelessWidget {
   final VoidCallback onConnect;
   final VoidCallback onDisconnect;
   final VoidCallback onCancel;
+  final Widget? extraChild;
 
   @override
   Widget build(BuildContext context) {
@@ -346,7 +446,11 @@ class _PairingCard extends StatelessWidget {
                 else
                   FilledButton(
                     onPressed: onConnect,
-                    child: const Text('Connect'),
+                    child: Text(
+                      provider == PairingProvider.spotify
+                          ? 'Authorize Spotify'
+                          : 'Web OAuth',
+                    ),
                   ),
               ],
             ),
@@ -359,6 +463,10 @@ class _PairingCard extends StatelessWidget {
                 style: text.bodySmall?.copyWith(color: BgPalette.gold600),
               ),
             ],
+            if (extraChild != null) ...<Widget>[
+              const SizedBox(height: BgSpace.md),
+              extraChild!,
+            ],
             if (busy) ...<Widget>[
               const SizedBox(height: BgSpace.md),
               Text(
@@ -370,6 +478,270 @@ class _PairingCard extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SpotifySetupBox extends StatelessWidget {
+  const _SpotifySetupBox({
+    required this.redirectUri,
+    required this.onRedirectChanged,
+    required this.showManual,
+    required this.onToggleManual,
+    required this.manualController,
+    required this.exchangingManual,
+    required this.onCompleteManual,
+  });
+
+  final String redirectUri;
+  final ValueChanged<String> onRedirectChanged;
+  final bool showManual;
+  final VoidCallback onToggleManual;
+  final TextEditingController manualController;
+  final bool exchangingManual;
+  final VoidCallback onCompleteManual;
+
+  static const List<String> _presets = <String>[
+    'https://bg.netdev.be/api/pair/spotify/callback',
+    'https://bg.netdev.be/callback',
+    'http://localhost:8080/callback',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.all(BgSpace.md),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        borderRadius: BgSpace.brSm,
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.tune, size: 15, color: colors.primary),
+              const SizedBox(width: BgSpace.xs),
+              Expanded(
+                child: Text(
+                  'SPOTIFY REDIRECT URI CONFIGURATION',
+                  style: text.labelSmall?.copyWith(
+                    color: colors.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: BgSpace.sm),
+                ),
+                onPressed: () {
+                  launchUrl(
+                    Uri.parse(
+                      'https://developer.spotify.com/dashboard/f8e0866e33e645749766395480a380b6/settings',
+                    ),
+                    mode: LaunchMode.externalApplication,
+                  );
+                },
+                icon: const Icon(Icons.open_in_new, size: 14),
+                label: const Text('Spotify App Dashboard'),
+              ),
+            ],
+          ),
+          const SizedBox(height: BgSpace.xs),
+          Text(
+            'Ensure the active Redirect URI below is listed in your Spotify Developer Dashboard settings:',
+            style: text.bodySmall,
+          ),
+          const SizedBox(height: BgSpace.sm),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: BgSpace.sm,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    borderRadius: BgSpace.brSm,
+                    border: Border.all(color: colors.outlineVariant),
+                  ),
+                  child: SelectableText(
+                    redirectUri,
+                    style: text.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                      color: colors.onSurface,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: BgSpace.sm),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: redirectUri));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Copied $redirectUri to clipboard'),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.copy, size: 14),
+                label: const Text('Copy URI'),
+              ),
+            ],
+          ),
+          const SizedBox(height: BgSpace.sm),
+          Wrap(
+            spacing: BgSpace.xs,
+            runSpacing: BgSpace.xs,
+            children: <Widget>[
+              for (final String preset in _presets)
+                ChoiceChip(
+                  label: Text(
+                    preset.replaceFirst('https://bg.netdev.be', ''),
+                    style: text.bodySmall?.copyWith(fontSize: 11),
+                  ),
+                  selected: redirectUri == preset,
+                  onSelected: (_) => onRedirectChanged(preset),
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
+          ),
+          const SizedBox(height: BgSpace.xs),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+              ),
+              onPressed: onToggleManual,
+              icon: Icon(
+                showManual ? Icons.expand_less : Icons.expand_more,
+                size: 16,
+              ),
+              label: Text(
+                showManual
+                    ? 'Hide manual callback paste'
+                    : 'Redirected to localhost? Paste callback URL / code here',
+                style: text.bodySmall?.copyWith(color: colors.primary),
+              ),
+            ),
+          ),
+          if (showManual) ...<Widget>[
+            const SizedBox(height: BgSpace.xs),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: TextField(
+                    controller: manualController,
+                    style: text.bodySmall,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText:
+                          'Paste full callback URL (e.g. http://localhost:8080/callback?code=...)',
+                      border: OutlineInputBorder(
+                        borderRadius: BgSpace.brSm,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: BgSpace.sm),
+                FilledButton.tonal(
+                  onPressed: exchangingManual ? null : onCompleteManual,
+                  child: Text(exchangingManual ? 'Pairing…' : 'Complete'),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LastfmQuickLinkBox extends StatelessWidget {
+  const _LastfmQuickLinkBox({
+    required this.controller,
+    required this.busy,
+    required this.onLinkUsername,
+  });
+
+  final TextEditingController controller;
+  final bool busy;
+  final VoidCallback onLinkUsername;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.all(BgSpace.md),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        borderRadius: BgSpace.brSm,
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'INSTANT LINK BY USERNAME (RECOMMENDED)',
+            style: text.labelSmall?.copyWith(
+              color: colors.primary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: BgSpace.xs),
+          Text(
+            'Link your public Last.fm taste profile directly in one click — no browser redirect needed:',
+            style: text.bodySmall,
+          ),
+          const SizedBox(height: BgSpace.sm),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  style: text.bodyMedium,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.person_outline, size: 18),
+                    hintText: 'Last.fm username (e.g. jpaquay)',
+                    border: OutlineInputBorder(
+                      borderRadius: BgSpace.brSm,
+                    ),
+                  ),
+                  onSubmitted: (_) => onLinkUsername(),
+                ),
+              ),
+              const SizedBox(width: BgSpace.sm),
+              FilledButton.icon(
+                onPressed: busy ? null : onLinkUsername,
+                icon: busy
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.bolt, size: 16),
+                label: const Text('Link Username'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

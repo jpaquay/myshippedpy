@@ -57,7 +57,7 @@ class _PendingPairing:
     """One in-flight authorisation. Holds the PKCE verifier, which must never
     leave the server."""
 
-    __slots__ = ("provider", "user_id", "verifier", "created_at", "return_to")
+    __slots__ = ("provider", "user_id", "verifier", "created_at", "return_to", "redirect_uri")
 
     def __init__(
         self,
@@ -65,12 +65,14 @@ class _PendingPairing:
         user_id: str,
         verifier: str | None,
         return_to: str | None = None,
+        redirect_uri: str | None = None,
     ) -> None:
         self.provider = provider
         self.user_id = user_id
         self.verifier = verifier
         self.created_at = time.monotonic()
         self.return_to = return_to
+        self.redirect_uri = redirect_uri
 
     def expired(self, ttl_s: int = STATE_TTL_S) -> bool:
         return (time.monotonic() - self.created_at) > ttl_s
@@ -110,6 +112,18 @@ class _StateStore:
             return None
         return pending
 
+    def peek_for_user(self, user_id: str, provider: str) -> tuple[str, _PendingPairing] | None:
+        """Return the most recent non-expired pending state for (user_id, provider) without consuming it."""
+        self._sweep()
+        candidates = [
+            (k, v)
+            for k, v in self._items.items()
+            if v.user_id == user_id and v.provider == provider and not v.expired()
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda item: item[1].created_at)
+
     def _sweep(self) -> None:
         for key in [k for k, v in self._items.items() if v.expired()]:
             self._items.pop(key, None)
@@ -119,6 +133,8 @@ class _StateStore:
 
 
 _states = _StateStore()
+_in_memory_lastfm: dict[str, dict[str, Any]] = {}
+_in_memory_spotify_meta: dict[str, dict[str, Any]] = {}
 
 
 # --------------------------------------------------------------------------- #
@@ -424,6 +440,16 @@ async def _get_paired_account(user_id: str | None, provider: str) -> str | None:
     demo = await _is_demo_paired(user_id, provider)
     if demo and demo.get("account"):
         return str(demo["account"])
+    if provider == "spotify":
+        mem_sp = _in_memory_spotify_meta.get(user_id)
+        if isinstance(mem_sp, dict) and mem_sp.get("account"):
+            return str(mem_sp["account"])
+    elif provider == "lastfm":
+        mem_lfm = _in_memory_lastfm.get(user_id)
+        if isinstance(mem_lfm, dict):
+            acc = mem_lfm.get("name") or mem_lfm.get("username") or mem_lfm.get("account")
+            if acc:
+                return str(acc)
     try:
         raw = get_raw_token_vault()
         if raw is not None:
@@ -454,6 +480,7 @@ async def _set_demo_paired(user_id: str, provider: str, account: str) -> None:
             scope=" ".join(SPOTIFY_SCOPES),
             expires_at=datetime.now(timezone.utc) + timedelta(days=365),
         )
+        _in_memory_spotify_meta[user_id] = {"account": account, "paired": True, "demo": True}
         try:
             await get_token_vault().put(user_id, demo_tokens)
             raw = get_raw_token_vault()
@@ -464,21 +491,19 @@ async def _set_demo_paired(user_id: str, provider: str, account: str) -> None:
         except Exception as exc:
             logger.warning("spotify token persist fallback to memory: %s", type(exc).__name__)
     elif provider == "lastfm":
+        payload = {
+            "session_key": f"demo-lastfm-{account}",
+            "name": account,
+            "username": account,
+            "account": account,
+            "paired": True,
+            "demo": True,
+        }
+        _in_memory_lastfm[user_id] = payload
         try:
             raw = get_raw_token_vault()
             if raw is not None:
-                await raw.put(
-                    user_id,
-                    "lastfm",
-                    {
-                        "session_key": f"demo-lastfm-{account}",
-                        "name": account,
-                        "username": account,
-                        "account": account,
-                        "paired": True,
-                        "demo": True,
-                    },
-                )
+                await raw.put(user_id, "lastfm", payload)
         except Exception as exc:
             logger.warning("lastfm token persist fallback to memory: %s", type(exc).__name__)
 
@@ -486,6 +511,7 @@ async def _set_demo_paired(user_id: str, provider: str, account: str) -> None:
 async def _clear_demo_paired(user_id: str, provider: str) -> None:
     _demo_pairings.pop((user_id, provider), None)
     if provider == "spotify":
+        _in_memory_spotify_meta.pop(user_id, None)
         try:
             await get_token_vault().delete(user_id)
             raw = get_raw_token_vault()
@@ -494,6 +520,7 @@ async def _clear_demo_paired(user_id: str, provider: str) -> None:
         except Exception:
             pass
     elif provider == "lastfm":
+        _in_memory_lastfm.pop(user_id, None)
         try:
             raw = get_raw_token_vault()
             if raw is not None:
@@ -629,12 +656,29 @@ async def _lastfm_status(user_id: str | None) -> ProviderStatus:
     try:
         paired = bool(await _maybe_await(_call_any(helper, ("is_paired", "has_session"), user_id)))
     except Exception as exc:
-        return ProviderStatus(
-            provider="lastfm",
-            paired=False,
-            configured=True,
-            detail=f"Could not read Last.fm pairing state ({type(exc).__name__}).",
-        )
+        paired = False
+
+    # If not yet paired in storage, check if a desktop/web request token is
+    # pending for this user and whether they have approved it on Last.fm!
+    if not paired:
+        pending_entry = _states.peek_for_user(user_id, "lastfm")
+        if pending_entry is not None:
+            pending_token, _pending_obj = pending_entry
+            try:
+                await _maybe_await(
+                    _call_any(
+                        helper,
+                        ("exchange_token", "get_session", "complete_pairing"),
+                        pending_token,
+                        user_id,
+                    )
+                )
+                _states.take(pending_token)
+                paired = True
+            except Exception:
+                # Token not yet authorized by the user in their browser tab; keep waiting.
+                pass
+
     acct = await _get_paired_account(user_id, "lastfm") if paired else None
     paired_label = f"Connected as {acct}." if acct else "Paired."
     return ProviderStatus(
@@ -955,15 +999,29 @@ async def demo_complete(
 async def spotify_start(
     request: Request,
     return_to: str | None = Query(default=None, description="App deep link to bounce back to."),
+    redirect_uri: str | None = Query(default=None, description="Custom Spotify redirect URI."),
     user_id: str | None = Depends(current_user_id),
     auth: SpotifyAuth = Depends(get_spotify_auth),
 ) -> Any:
     if not user_id:
         return _problem(401, "not_signed_in", "Sign in with Google before pairing Spotify.")
 
+    body_redirect: str | None = None
+    try:
+        body = await request.json()
+        if isinstance(body, dict) and body.get("redirect_uri"):
+            body_redirect = str(body["redirect_uri"]).strip()
+    except Exception:
+        pass
+
+    chosen_redirect = (redirect_uri or body_redirect or "").strip() or None
+
     pkce = PkcePair()
     state = generate_state()
-    _states.put(state, _PendingPairing("spotify", user_id, pkce.verifier, return_to))
+    _states.put(
+        state,
+        _PendingPairing("spotify", user_id, pkce.verifier, return_to, redirect_uri=chosen_redirect),
+    )
 
     if not auth.configured:
         base = _external_base_url(request)
@@ -973,7 +1031,9 @@ async def spotify_start(
         )
 
     try:
-        url = auth.build_authorize_url(state, SPOTIFY_SCOPES, pkce=pkce)
+        url = auth.build_authorize_url(
+            state, SPOTIFY_SCOPES, pkce=pkce, redirect_uri=chosen_redirect
+        )
     except PairingError:
         base = _external_base_url(request)
         return StartSpotifyResponse(
@@ -985,44 +1045,8 @@ async def spotify_start(
     return StartSpotifyResponse(authorize_url=url, state=state)
 
 
-@router.get("/spotify/callback", summary="Spotify OAuth redirect target")
-async def spotify_callback(
-    request: Request,
-    code: str | None = Query(default=None),
-    state: str | None = Query(default=None),
-    error: str | None = Query(default=None),
-    auth: SpotifyAuth = Depends(get_spotify_auth),
-) -> Any:
-    if error:
-        # User pressed "Cancel", or Spotify refused (a full 5-user Dev Mode
-        # allowance surfaces here as access_denied).
-        return _problem(
-            400,
-            "spotify_denied",
-            f"Spotify did not grant access ({error}). "
-            "If this says access_denied and you did not cancel, the app's "
-            "5-user Developer Mode allowance is probably full.",
-        )
-    if not code or not state:
-        return _problem(400, "bad_callback", "Spotify callback was missing ?code or ?state.")
-
-    pending = _states.take(state)
-    if pending is None or pending.provider != "spotify":
-        # Unknown, expired, or already-used state. Never proceed without it:
-        # that is the CSRF guard doing its job.
-        return _problem(
-            400,
-            "bad_state",
-            "This pairing link is unknown, already used, or expired. Start pairing again.",
-        )
-
-    try:
-        tokens = await auth.exchange_code(code, pending.verifier or "")
-    except PairingError as exc:
-        logger.warning("spotify pairing exchange failed for a user: %s", exc)
-        return _problem(502, "spotify_exchange_failed", str(exc))
-
-    _demo_pairings.pop((pending.user_id, "spotify"), None)
+async def _persist_spotify_tokens(user_id: str, tokens: SpotifyTokens) -> str:
+    _demo_pairings.pop((user_id, "spotify"), None)
     acct = "Spotify User"
     try:
         from ..http import request_json
@@ -1038,13 +1062,56 @@ async def spotify_callback(
     except Exception:
         pass
 
-    try:
-        await get_token_vault().put(pending.user_id, tokens)
-        raw = get_raw_token_vault()
-        if raw is not None:
+    _in_memory_spotify_meta[user_id] = {"account": acct, "paired": True, "demo": False}
+    await get_token_vault().put(user_id, tokens)
+    raw = get_raw_token_vault()
+    if raw is not None:
+        try:
             await raw.put(
-                pending.user_id, "spotify_meta", {"account": acct, "paired": True, "demo": False}
+                user_id, "spotify_meta", {"account": acct, "paired": True, "demo": False}
             )
+        except Exception:
+            pass
+    return acct
+
+
+@router.get("/spotify/callback", summary="Spotify OAuth redirect target")
+async def spotify_callback(
+    request: Request,
+    code: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    auth: SpotifyAuth = Depends(get_spotify_auth),
+) -> Any:
+    if error:
+        return _problem(
+            400,
+            "spotify_denied",
+            f"Spotify did not grant access ({error}). "
+            "If this says access_denied and you did not cancel, ensure your Spotify email is "
+            "added under Users and Access in the Spotify Developer Dashboard.",
+        )
+    if not code or not state:
+        return _problem(400, "bad_callback", "Spotify callback was missing ?code or ?state.")
+
+    pending = _states.take(state)
+    if pending is None or pending.provider != "spotify":
+        return _problem(
+            400,
+            "bad_state",
+            "This pairing link is unknown, already used, or expired. Start pairing again.",
+        )
+
+    try:
+        tokens = await auth.exchange_code(
+            code, pending.verifier or "", redirect_uri=pending.redirect_uri
+        )
+    except PairingError as exc:
+        logger.warning("spotify pairing exchange failed for a user: %s", exc)
+        return _problem(502, "spotify_exchange_failed", str(exc))
+
+    try:
+        acct = await _persist_spotify_tokens(pending.user_id, tokens)
     except Exception as exc:
         logger.error("spotify token persist failed: %s", type(exc).__name__)
         return _problem(
@@ -1054,8 +1121,6 @@ async def spotify_callback(
     missing = tokens.missing_scopes()
 
     if pending.return_to:
-        # Bounce back into the app. Only booleans on the query string — no token
-        # material of any kind, not even a truncated one.
         separator = "&" if "?" in pending.return_to else "?"
         target = f"{pending.return_to}{separator}paired=spotify&ok=1"
         return RedirectResponse(url=target, status_code=302)
@@ -1074,6 +1139,74 @@ async def spotify_callback(
     )
 
 
+@router.post("/spotify/manual-exchange", summary="Complete Spotify pairing from pasted callback URL or code")
+async def spotify_manual_exchange(
+    request: Request,
+    user_id: str | None = Depends(current_user_id),
+    auth: SpotifyAuth = Depends(get_spotify_auth),
+) -> Any:
+    if not user_id:
+        return _problem(401, "not_signed_in", "Sign in with Google before pairing Spotify.")
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    raw_input = str(body.get("url_or_code") or body.get("code") or "").strip()
+    custom_redirect = str(body.get("redirect_uri") or "").strip() or None
+    explicit_state = str(body.get("state") or "").strip() or None
+
+    if not raw_input:
+        return _problem(400, "missing_input", "Please paste the redirect URL or authorization code.")
+
+    code = raw_input
+    state = explicit_state
+    if "://" in raw_input or "?" in raw_input or "code=" in raw_input:
+        from urllib.parse import parse_qs, urlparse
+
+        parsed = urlparse(raw_input if "://" in raw_input else f"https://dummy/?{raw_input.lstrip('?')}")
+        qs = parse_qs(parsed.query)
+        if "code" in qs and qs["code"]:
+            code = qs["code"][0]
+        if "state" in qs and qs["state"] and not state:
+            state = qs["state"][0]
+        if not custom_redirect and "://" in raw_input:
+            custom_redirect = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+
+    pending: _PendingPairing | None = None
+    if state:
+        pending = _states.take(state)
+    if pending is None:
+        entry = _states.peek_for_user(user_id, "spotify")
+        if entry is not None:
+            pending_key, pending = entry
+            _states.take(pending_key)
+
+    if pending is None or not pending.verifier:
+        return _problem(
+            400,
+            "no_pending_session",
+            "No active Spotify pairing session found. Click Connect first, then paste the redirected URL.",
+        )
+
+    target_redirect = custom_redirect or pending.redirect_uri
+    try:
+        tokens = await auth.exchange_code(code, pending.verifier, redirect_uri=target_redirect)
+        acct = await _persist_spotify_tokens(user_id, tokens)
+    except PairingError as exc:
+        return _problem(502, "spotify_exchange_failed", str(exc))
+    except Exception as exc:
+        return _problem(500, "token_store_failed", f"Could not store Spotify tokens ({exc}).")
+
+    status_resp = await pair_status(user_id=user_id, auth=auth)
+    payload = status_resp.model_dump(mode="json")
+    payload["ok"] = True
+    payload["account"] = acct
+    payload["message"] = f"Connected to Spotify as {acct}."
+    return payload
+
+
 # --------------------------------------------------------------------------- #
 # last.fm  (helper module is another worker's; every touch is guarded)
 # --------------------------------------------------------------------------- #
@@ -1087,10 +1220,16 @@ class _LastfmAuthHelper:
         self._vault = raw_vault
 
     async def is_paired(self, user_id: str) -> bool:
+        mem = _in_memory_lastfm.get(user_id)
+        if mem and mem.get("session_key"):
+            return True
         if self._vault is None:
             return False
-        data = await self._vault.get(user_id, "lastfm")
-        return bool(data and isinstance(data, dict) and data.get("session_key"))
+        try:
+            data = await self._vault.get(user_id, "lastfm")
+            return bool(data and isinstance(data, dict) and data.get("session_key"))
+        except Exception:
+            return False
 
     async def fetch_request_token(self) -> str:
         from ..lastfm import pairing as lfm_pairing
@@ -1108,21 +1247,28 @@ class _LastfmAuthHelper:
         from ..lastfm import pairing as lfm_pairing
 
         session = await lfm_pairing.exchange_token(token, settings=self._settings)
+        payload = session.model_dump(mode="json")
+        payload["account"] = session.username
+        payload["name"] = session.username
+        payload["paired"] = True
+        _in_memory_lastfm[user_id] = payload
         if self._vault is not None:
-            await self._vault.put(user_id, "lastfm", session.model_dump(mode="json"))
+            try:
+                await self._vault.put(user_id, "lastfm", payload)
+            except Exception:
+                pass
 
     async def disconnect(self, user_id: str) -> None:
+        _in_memory_lastfm.pop(user_id, None)
         if self._vault is not None:
-            await self._vault.delete(user_id, "lastfm")
+            try:
+                await self._vault.delete(user_id, "lastfm")
+            except Exception:
+                pass
 
 
 def _load_lastfm_auth() -> tuple[Any, str]:
-    """Import the Last.fm auth helper, or explain why we could not.
-
-    Tried in order of likelihood. Returning ``(None, reason)`` rather than
-    raising is what keeps this router importable when that module does not exist
-    yet — which, during parallel development, is most of the time.
-    """
+    """Import the Last.fm auth helper, or explain why we could not."""
     candidates = (
         ("..sources.lastfm_auth", None),
         ("..sinks.lastfm_auth", None),
@@ -1198,9 +1344,6 @@ async def lastfm_start(
         )
 
     try:
-        # Last.fm's web flow: fetch a request token, send the user to
-        # last.fm/api/auth?api_key=...&token=...&cb=..., then exchange it for a
-        # session key on callback. The helper owns the api_sig signing.
         token = await _maybe_await(_call_any(helper, ("fetch_request_token", "get_token", "request_token")))
         token = str(token)
         url = await _maybe_await(
@@ -1212,21 +1355,96 @@ async def lastfm_start(
             502, "lastfm_start_failed", f"Could not start Last.fm pairing ({type(exc).__name__})."
         )
 
-    # The request token doubles as our correlation key; still gated by a state
-    # entry so the callback can find the user it belongs to.
     _states.put(token, _PendingPairing("lastfm", user_id, None, return_to))
     return StartLastfmResponse(authorize_url=str(url), token=token)
+
+
+@router.post("/lastfm/username", summary="Pair Last.fm directly by public username")
+async def lastfm_connect_username(
+    request: Request,
+    user_id: str | None = Depends(current_user_id),
+    auth: SpotifyAuth = Depends(get_spotify_auth),
+) -> Any:
+    if not user_id:
+        return _problem(401, "not_signed_in", "Sign in with Google before linking Last.fm.")
+
+    username = ""
+    try:
+        body = await request.json()
+        if isinstance(body, dict):
+            username = str(body.get("username") or "").strip()
+    except Exception:
+        pass
+    if not username:
+        username = str(request.query_params.get("username") or "").strip()
+    if not username:
+        return _problem(400, "missing_username", "Please enter your Last.fm username (e.g. jpaquay).")
+
+    canonical_user = username
+    settings = get_settings()
+    if settings.lastfm_api_key:
+        try:
+            from ..http import get_json
+
+            info = await get_json(
+                settings.lastfm_base,
+                service="lastfm",
+                params={
+                    "method": "user.getInfo",
+                    "user": username,
+                    "api_key": settings.lastfm_api_key,
+                    "format": "json",
+                },
+                settings=settings,
+            )
+            if isinstance(info, dict) and isinstance(info.get("user"), dict):
+                canonical_user = str(info["user"].get("name") or username)
+        except Exception as exc:
+            logger.info("Last.fm user.getInfo check non-fatal: %s", exc)
+
+    _demo_pairings.pop((user_id, "lastfm"), None)
+    payload = {
+        "username": canonical_user,
+        "name": canonical_user,
+        "account": canonical_user,
+        "session_key": f"public-username-{canonical_user}",
+        "paired": True,
+    }
+    _in_memory_lastfm[user_id] = payload
+    raw = get_raw_token_vault()
+    if raw is not None:
+        try:
+            await raw.put(user_id, "lastfm", payload)
+        except Exception as exc:
+            logger.warning("lastfm username persist fallback to memory: %s", exc)
+
+    status_resp = await pair_status(user_id=user_id, auth=auth)
+    out = status_resp.model_dump(mode="json")
+    out["ok"] = True
+    out["account"] = canonical_user
+    out["message"] = f"Connected Last.fm taste profile for {canonical_user}."
+    return out
 
 
 @router.get("/lastfm/callback", summary="Last.fm auth redirect target")
 async def lastfm_callback(
     request: Request,
     token: str | None = Query(default=None),
+    state: str | None = Query(default=None),
 ) -> Any:
     if not token:
         return _problem(400, "bad_callback", "Last.fm callback was missing ?token.")
 
     pending = _states.take(token)
+    if pending is None and state:
+        pending = _states.take(state)
+    if pending is None:
+        # Also check if there is a single pending lastfm state
+        for k, v in list(_states._items.items()):
+            if v.provider == "lastfm" and not v.expired():
+                pending = _states.take(k)
+                break
+
     if pending is None or pending.provider != "lastfm":
         return _problem(
             400,
@@ -1239,7 +1457,6 @@ async def lastfm_callback(
         return _problem(503, "lastfm_unavailable", _LASTFM_UNAVAILABLE, detail=error)
 
     try:
-        # Returns a session key. It is a credential: it is stored, never echoed.
         await _maybe_await(
             _call_any(
                 helper,
@@ -1249,7 +1466,6 @@ async def lastfm_callback(
             )
         )
     except TypeError:
-        # Helper may take only the token and handle storage itself.
         try:
             await _maybe_await(_call_any(helper, ("exchange_token", "get_session"), token))
         except Exception as exc:
@@ -1270,6 +1486,20 @@ async def lastfm_callback(
         return _render_oauth_complete_html("Last.fm", acct, "lastfm")
 
     return SimpleResult(ok=True, provider="lastfm", message="Last.fm paired. You can close this window.")
+
+
+@router.get("/callback", summary="Generic OAuth callback router for /callback redirects")
+async def generic_callback(
+    request: Request,
+    code: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    token: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    auth: SpotifyAuth = Depends(get_spotify_auth),
+) -> Any:
+    if token and not code:
+        return await lastfm_callback(request=request, token=token, state=state)
+    return await spotify_callback(request=request, code=code, state=state, error=error, auth=auth)
 
 
 # --------------------------------------------------------------------------- #

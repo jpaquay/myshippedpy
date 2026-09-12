@@ -545,7 +545,7 @@ build_and_deploy() {
 
   step "Cloud Build -> Cloud Run (${REGION})"
   local tag
-  tag="$(git rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
+  tag="$(git rev-parse --short HEAD 2>/dev/null || echo 'local')-$(date +%Y%m%d%H%M%S)"
   info "submitting build with tag ${tag}; this typically takes 3-6 minutes"
 
   run gcloud builds submit \

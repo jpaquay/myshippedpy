@@ -292,6 +292,39 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Owner check supporting multi-UID accounts (e.g., user_ids array).
+    function ownsMultiUser() {
+      return signedIn()
+        && (
+          (resource.data.user_id is string && resource.data.user_id == request.auth.uid)
+          || ('user_ids' in resource.data && resource.data.user_ids is list && request.auth.uid in resource.data.user_ids)
+        );
+    }
+
+    // ==================================================================
+    // scrobbles/{scrobbleId} -- 15-year historical scrobble log
+    // ==================================================================
+    match /scrobbles/{scrobbleId} {
+      allow read: if ownsMultiUser();
+      allow write: if false;
+    }
+
+    // ==================================================================
+    // track_catalog/{catalogId} -- deduplicated track catalog with Spotify & Last.fm metadata
+    // ==================================================================
+    match /track_catalog/{catalogId} {
+      allow read: if ownsMultiUser();
+      allow write: if false;
+    }
+
+    // ==================================================================
+    // scrobble_summaries/{summaryId} -- pre-computed 15-year histograms & top 50 rollups
+    // ==================================================================
+    match /scrobble_summaries/{summaryId} {
+      allow read: if ownsMultiUser();
+      allow write: if false;
+    }
+
     // ==================================================================
     // Diagnostics
     // ==================================================================

@@ -392,6 +392,58 @@ class PlaylistForge:
             ledger.note("rerank", f"scoring failed ({exc}); falling back to pool order")
             return []
 
+        # Apply Street-Art Geo-Cache vibe synergy, Almanac scrobble seeding,
+        # and exploration temperature jitter when running live (request.seed is None).
+        is_live_explore = request.seed is None
+        eff_seed = request.seed if request.seed is not None else int(time.time() * 1000) % 1000000
+
+        vibe_tags: set[str] = set()
+        try:
+            from ..sky.geocaches import find_nearest_geocache, get_geocache
+
+            gc = get_geocache(request.geocache_id) or (
+                find_nearest_geocache(request.coordinates.latitude, request.coordinates.longitude)
+                if request.coordinates
+                else None
+            )
+            if gc is not None:
+                vibe_tags = {t.lower().strip() for t in gc.vibe_tags}
+        except Exception:  # noqa: BLE001
+            pass
+
+        seed_scrobble_keys: set[str] = {
+            s.lower().strip() for s in (request.seed_scrobbles or []) if s.strip()
+        }
+
+        if is_live_explore or vibe_tags or seed_scrobble_keys:
+            adjusted: list[ScoredTrack] = []
+            for st in scored:
+                delta = 0.0
+                track_tags = {t.lower().strip() for t in (st.track.tags or ())}
+                track_full = f"{st.track.artist} - {st.track.title}".lower()
+                track_colon = f"{st.track.artist}:::{st.track.title}".lower()
+
+                if seed_scrobble_keys and (
+                    st.track.key.lower() in seed_scrobble_keys
+                    or track_full in seed_scrobble_keys
+                    or track_colon in seed_scrobble_keys
+                    or st.track.title.lower() in seed_scrobble_keys
+                ):
+                    delta += 0.38
+                if vibe_tags and (track_tags & vibe_tags):
+                    delta += 0.095
+                if is_live_explore:
+                    digest = hashlib.sha1(f"{eff_seed}:{st.track.key}".encode("utf-8")).digest()
+                    unit = (int.from_bytes(digest[:4], "big") / 0xFFFFFFFF) - 0.5
+                    delta += unit * 0.15  # ±0.075 exploration temperature
+
+                if delta != 0.0:
+                    new_score = clamp(st.score + delta, 0.01, 0.999)
+                    st = arc_mod.replace_scored(st, score=new_score)
+                adjusted.append(st)
+            adjusted.sort(key=lambda x: x.score, reverse=True)
+            scored = adjusted
+
         cap = int(getattr(self._settings, "max_tracks_per_artist", 2) or 2)
         try:
             return diversity_mod.select(
@@ -400,13 +452,11 @@ class PlaylistForge:
                 index=diversity_mod.vector_index(pool),
                 theme=theme,
                 max_per_artist=cap,
-                seed=request.seed,
+                seed=eff_seed,
                 ledger=ledger,
             )
         except Exception as exc:  # noqa: BLE001
             ledger.note("diversity", f"selection failed ({exc}); using straight top-k")
-            # Still honour the two hard rules by hand rather than shipping
-            # duplicates: a degraded playlist is fine, an incoherent one is not.
             out: list[ScoredTrack] = []
             seen: set[str] = set()
             per_artist: dict[str, int] = {}
@@ -583,10 +633,17 @@ class PlaylistForge:
             ledger=ledger,
         )
 
+        loc_label = getattr(request.coordinates, "label", None) or "your sky"
+        base_tagline = (theme.tagline or theme.description or "").strip()
+        daylist_subtitle = (
+            f"Weather-inspired Daylist • {len(ordered)} tracks curated for {loc_label}. "
+            f"{base_tagline}"
+        ).strip()
+
         playlist = Playlist(
             id=_playlist_id(request, theme.id, corridor.id, sky),
             title=rationale.headline,
-            subtitle=(theme.tagline or theme.description or "").strip(),
+            subtitle=daylist_subtitle,
             tracks=ordered,
             sky=sky,
             sonic_target=target,

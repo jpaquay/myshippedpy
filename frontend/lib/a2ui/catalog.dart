@@ -438,15 +438,43 @@ Map<String, A2uiComponentBuilder> basicComponents() =>
         );
         return content.isEmpty ? const SizedBox.shrink() : child;
       },
-      'Column': (A2uiNode n) => Column(
-            crossAxisAlignment: _crossAxis(n.component.constString('align')),
-            mainAxisSize: MainAxisSize.min,
-            children: _spaced(
+      'Column': (A2uiNode n) {
+        final String? heading = n.string('heading');
+        final String? subheading = n.string('subheading');
+        final double gap = switch (n.component.constString('gap')) {
+          'section' || 'xl' => BgSpace.xl,
+          'lg' => BgSpace.lg,
+          'sm' => BgSpace.sm,
+          _ => n.numberOr('gap', BgSpace.md),
+        };
+        return Column(
+          crossAxisAlignment: _crossAxis(n.component.constString('align')),
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            if (heading != null && heading.isNotEmpty) ...<Widget>[
+              Text(
+                heading,
+                style: n.text.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              if (subheading != null && subheading.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 4),
+                Text(
+                  subheading,
+                  style: n.text.bodyMedium?.copyWith(
+                    color: n.colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              const SizedBox(height: BgSpace.md),
+            ],
+            ..._spaced(
               n.childrenOf(),
-              n.numberOr('gap', BgSpace.md),
+              gap,
               Axis.vertical,
             ),
-          ),
+          ],
+        );
+      },
       'Row': (A2uiNode n) => Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             mainAxisAlignment: _mainAxis(n.component.constString('justify')),

@@ -127,6 +127,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     _mount(app, "backend.app.routes.almanac", label="almanac")
     _mount(app, "backend.app.routes.surfaces", label="surfaces")
 
+    @app.get("/callback", include_in_schema=False)
+    async def _root_oauth_callback(request: Request):  # type: ignore[no-untyped-def]
+        from .routes.pairing import generic_callback, get_spotify_auth
+
+        return await generic_callback(
+            request=request,
+            code=request.query_params.get("code"),
+            state=request.query_params.get("state"),
+            token=request.query_params.get("token"),
+            error=request.query_params.get("error"),
+            auth=get_spotify_auth(),
+        )
+
     # --- MCP server, streamable HTTP, mounted on this same app ------------
     #
     # OFF for now. `mcp_enabled` defaults False, so /mcp is not mounted and the

@@ -50,6 +50,49 @@
         { "fieldPath": "signal", "order": "ASCENDING" },
         { "fieldPath": "created_at", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "scrobbles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lastfm_user", "order": "ASCENDING" },
+        { "fieldPath": "uts", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scrobbles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lastfm_user", "order": "ASCENDING" },
+        { "fieldPath": "artist_norm", "order": "ASCENDING" },
+        { "fieldPath": "uts", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scrobbles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lastfm_user", "order": "ASCENDING" },
+        { "fieldPath": "year", "order": "ASCENDING" },
+        { "fieldPath": "uts", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "track_catalog",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lastfm_user", "order": "ASCENDING" },
+        { "fieldPath": "scrobble_count", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "track_catalog",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lastfm_user", "order": "ASCENDING" },
+        { "fieldPath": "loved", "order": "ASCENDING" },
+        { "fieldPath": "scrobble_count", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

@@ -334,6 +334,7 @@ class SpotifyAuth:
         challenge: str | None = None,
         pkce: PkcePair | None = None,
         show_dialog: bool = False,
+        redirect_uri: str | None = None,
     ) -> str:
         """The URL to send the user to.
 
@@ -348,10 +349,11 @@ class SpotifyAuth:
         if not state:
             raise PairingError("build_authorize_url requires a state value (CSRF guard).")
 
+        target_redirect = (redirect_uri or "").strip() or self.redirect_uri
         params: dict[str, str] = {
             "client_id": self.client_id,
             "response_type": "code",
-            "redirect_uri": self.redirect_uri,
+            "redirect_uri": target_redirect,
             "state": state,
             "scope": " ".join(scopes),
             "code_challenge_method": "S256",
@@ -365,7 +367,13 @@ class SpotifyAuth:
 
     # -- step 2: exchange ---------------------------------------------------- #
 
-    async def exchange_code(self, code: str, verifier: str) -> SpotifyTokens:
+    async def exchange_code(
+        self,
+        code: str,
+        verifier: str,
+        *,
+        redirect_uri: str | None = None,
+    ) -> SpotifyTokens:
         """Swap ``code`` + ``verifier`` for tokens.
 
         ``redirect_uri`` is sent for validation only — Spotify compares it to the
@@ -376,10 +384,11 @@ class SpotifyAuth:
         if not verifier:
             raise PairingError("Missing PKCE verifier; the pairing state has expired.")
 
+        target_redirect = (redirect_uri or "").strip() or self.redirect_uri
         form = {
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": self.redirect_uri,
+            "redirect_uri": target_redirect,
             "client_id": self.client_id,
             "code_verifier": verifier,
         }

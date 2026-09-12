@@ -27,6 +27,13 @@
         }
       },
       {
+        "source": "/callback",
+        "run": {
+          "serviceId": "barogroove-api",
+          "region": "europe-west1"
+        }
+      },
+      {
         "source": "/mcp",
         "run": {
           "serviceId": "barogroove-api",

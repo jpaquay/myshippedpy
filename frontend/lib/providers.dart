@@ -142,14 +142,28 @@ final FutureProvider<List<SkyScenario>> scenariosProvider =
   },
 );
 
+/// Curated World Street-Art Geo-Cache landmarks.
+final FutureProvider<List<StreetArtGeoCache>> geocachesProvider =
+    FutureProvider<List<StreetArtGeoCache>>(
+  (Ref ref) async {
+    final ApiResult<List<StreetArtGeoCache>> res =
+        await ref.watch(apiProvider).geocaches();
+    return res.valueOrNull ?? const <StreetArtGeoCache>[];
+  },
+);
+
+/// Currently active World Street-Art Geo-Cache landmark on the Forge screen.
+final StateProvider<StreetArtGeoCache?> activeGeocacheProvider =
+    StateProvider<StreetArtGeoCache?>((Ref ref) => null);
+
+/// Scrobbles selected in the Almanac Scrobble Explorer to seed the next Forge.
+final StateProvider<Set<String>> selectedSeedScrobblesProvider =
+    StateProvider<Set<String>>((Ref ref) => <String>{});
+
 // ===========================================================================
 // Forge selection (shell state, not domain state)
 // ===========================================================================
 
-/// What the user has picked in the forge shell. This is the ONE piece of
-/// client-held selection state, and it exists only because the pickers need
-/// somewhere to keep a value between opening a screen and pressing Forge.
-/// The moment the surface stream carries the selection, delete this.
 class ForgeSelection {
   const ForgeSelection({
     this.themeId,
@@ -157,6 +171,9 @@ class ForgeSelection {
     this.scenario,
     this.lat = 50.8503,
     this.lon = 4.3517,
+    this.label = 'Parcours BD Comic Strip Trail (Brussels)',
+    this.geocacheId = 'parcours_bd_brussels',
+    this.seedScrobbles = const <String>[],
   });
 
   final String? themeId;
@@ -164,6 +181,9 @@ class ForgeSelection {
   final String? scenario;
   final double? lat;
   final double? lon;
+  final String label;
+  final String? geocacheId;
+  final List<String> seedScrobbles;
 
   ForgeSelection copyWith({
     String? themeId,
@@ -171,7 +191,11 @@ class ForgeSelection {
     String? scenario,
     double? lat,
     double? lon,
+    String? label,
+    String? geocacheId,
+    List<String>? seedScrobbles,
     bool clearScenario = false,
+    bool clearGeocache = false,
   }) =>
       ForgeSelection(
         themeId: themeId ?? this.themeId,
@@ -179,6 +203,9 @@ class ForgeSelection {
         scenario: clearScenario ? null : (scenario ?? this.scenario),
         lat: lat ?? this.lat,
         lon: lon ?? this.lon,
+        label: label ?? this.label,
+        geocacheId: clearGeocache ? null : (geocacheId ?? this.geocacheId),
+        seedScrobbles: seedScrobbles ?? this.seedScrobbles,
       );
 
   ForgeRequest toRequest() => ForgeRequest(
@@ -187,6 +214,8 @@ class ForgeSelection {
         themeId: themeId,
         genreId: genreId,
         scenario: scenario,
+        geocacheId: geocacheId,
+        seedScrobbles: seedScrobbles,
       );
 }
 
@@ -197,8 +226,23 @@ class ForgeSelectionNotifier extends StateNotifier<ForgeSelection> {
   void setGenre(String? id) => state = state.copyWith(genreId: id);
   void setScenario(String? id) =>
       state = state.copyWith(scenario: id, clearScenario: id == null);
-  void setLocation(double lat, double lon) =>
-      state = state.copyWith(lat: lat, lon: lon);
+  void setLocation(double lat, double lon, {String? label, String? geocacheId}) =>
+      state = state.copyWith(
+        lat: lat,
+        lon: lon,
+        label: label,
+        geocacheId: geocacheId,
+        clearGeocache: geocacheId == null,
+      );
+  void setGeocache(StreetArtGeoCache gc) => state = state.copyWith(
+        lat: gc.lat,
+        lon: gc.lon,
+        label: gc.label,
+        geocacheId: gc.id,
+        clearScenario: true,
+      );
+  void setSeedScrobbles(List<String> scrobbles) =>
+      state = state.copyWith(seedScrobbles: scrobbles);
 }
 
 final StateNotifierProvider<ForgeSelectionNotifier, ForgeSelection>
@@ -221,6 +265,8 @@ class ActivePlayerTrack {
     this.spotifyUri,
     this.lastfmUrl,
     this.playlistExternalUrl,
+    this.index = 0,
+    this.total = 1,
   });
 
   final String title;
@@ -229,6 +275,8 @@ class ActivePlayerTrack {
   final String? spotifyUri;
   final String? lastfmUrl;
   final String? playlistExternalUrl;
+  final int index;
+  final int total;
 }
 
 final StateProvider<ActivePlayerTrack?> activePlayerTrackProvider =

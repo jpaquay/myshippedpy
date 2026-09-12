@@ -411,12 +411,23 @@ final class A2uiComponent {
         asStringOrNull(map['type']) ??
         asStringOrNull(map['componentType']);
     if (flatType != null) {
+      final JsonMap merged = <String, Object?>{
+        for (final MapEntry<String, Object?> entry in map.entries)
+          if (entry.key != 'id' &&
+              entry.key != 'componentId' &&
+              entry.key != 'component' &&
+              entry.key != 'type' &&
+              entry.key != 'componentType' &&
+              entry.key != 'properties' &&
+              entry.key != 'componentProperties')
+            entry.key: entry.value,
+        ...?asJsonMap(map['componentProperties']),
+        ...?asJsonMap(map['properties']),
+      };
       return A2uiComponent(
         id: id,
         type: flatType,
-        properties: asJsonMap(map['properties']) ??
-            asJsonMap(map['componentProperties']) ??
-            const <String, Object?>{},
+        properties: merged,
         raw: map,
       );
     }

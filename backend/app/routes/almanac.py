@@ -26,11 +26,23 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from ..firebase.auth import AuthUser, current_user
+from ..almanac.scrobbles import (
+    ScrobbleSearchResponse,
+    search_scrobbles,
+    sync_scrobbles_from_lastfm,
+)
+from ..firebase.auth import AuthUser, current_user, current_user_optional
 
 logger = logging.getLogger("barogroove.routes.almanac")
 
 router = APIRouter(prefix="/api/almanac", tags=["almanac"])
+
+
+def _resolve_user(user: AuthUser | None = Depends(current_user_optional)) -> AuthUser:
+    """Resolve authenticated user or default to the shared 'demo' identity."""
+    if user is not None:
+        return user
+    return AuthUser(uid="demo", name="BaroGroove Listener", is_dev=True)
 
 
 # --------------------------------------------------------------------------
@@ -47,11 +59,7 @@ class FeedbackRequest(BaseModel):
 
 
 class FeedbackResponse(BaseModel):
-    """Always 200 when the request was well-formed.
-
-    ``recorded`` is advisory: the almanac is best-effort, and the client should
-    not un-highlight a heart because Firestore hiccuped.
-    """
+    """Always 200 when the request was well-formed."""
 
     recorded: bool
     detail: str = "ok"
@@ -67,6 +75,9 @@ class HistoryEntry(BaseModel):
     genre_id: str | None = None
     track_count: int = 0
     created_at: datetime | None = None
+    location_label: str | None = None
+    pressure_trend_6h: float | None = None
+    tracks_preview: list[str] = Field(default_factory=list)
 
 
 class HistoryResponse(BaseModel):
@@ -110,11 +121,7 @@ class RetrospectiveResponse(BaseModel):
 
 
 def _store() -> Any:
-    """Resolve the almanac store from the container.
-
-    Kept as a function rather than a module-level lookup so importing this
-    module never constructs a container, and so tests can override it.
-    """
+    """Resolve the almanac store from the container."""
     from ..container import get_container  # noqa: PLC0415 - lazy by design
 
     return get_container().almanac()
@@ -125,18 +132,56 @@ def _store() -> Any:
 # --------------------------------------------------------------------------
 
 
+@router.get("/scrobbles", response_model=ScrobbleSearchResponse, summary="Search & analyse scrobbles in Firestore")
+async def get_scrobbles(
+    query: str | None = Query(default=None, description="Search artist, title, album, or tag"),
+    tag: str | None = Query(default=None, description="Filter by micro-genre tag"),
+    theme: str | None = Query(default=None, description="Filter by weather theme affinity"),
+    limit: int = Query(default=50, ge=1, le=200),
+    user: AuthUser = Depends(_resolve_user),
+) -> ScrobbleSearchResponse:
+    """Search and analyse user scrobbles from Firestore `scrobbles` collection."""
+    return search_scrobbles(user.uid, query=query, tag=tag, theme=theme, limit=limit)
+
+
+@router.post("/scrobbles/sync", response_model=ScrobbleSearchResponse, summary="Sync Last.fm scrobbles into Firestore")
+async def sync_scrobbles(
+    lastfm_user: str = Query(default="jpaquay", description="Last.fm username to sync"),
+    user: AuthUser = Depends(_resolve_user),
+) -> ScrobbleSearchResponse:
+    """Sync live recent scrobbles from Last.fm into Firestore `scrobbles` collection."""
+    return await sync_scrobbles_from_lastfm(user.uid, lastfm_username=lastfm_user)
+
+
+@router.get("/forges/{playlist_id}", summary="Fetch a full forged playlist from Almanac history")
+async def get_forged_playlist(
+    playlist_id: str,
+    user: AuthUser = Depends(_resolve_user),
+) -> dict[str, Any]:
+    """Retrieve a complete stored Playlist by ID so it can be reloaded into the Player."""
+    store = _store()
+    try:
+        playlists = await store.history(user.uid, limit=100)
+        for p in playlists:
+            if str(getattr(p, "id", "")) == playlist_id:
+                return {"ok": True, "playlist": p.model_dump(mode="json") if hasattr(p, "model_dump") else p}
+        # Also search demo history if not found under user.uid
+        if user.uid != "demo":
+            demo_playlists = await store.history("demo", limit=100)
+            for p in demo_playlists:
+                if str(getattr(p, "id", "")) == playlist_id:
+                    return {"ok": True, "playlist": p.model_dump(mode="json") if hasattr(p, "model_dump") else p}
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Lookup for playlist %s failed: %s", playlist_id, exc)
+    raise HTTPException(status_code=404, detail=f"Forge '{playlist_id}' not found in Almanac")
+
+
 @router.get("/history", response_model=HistoryResponse, summary="Your past forges")
 async def get_history(
     limit: int = Query(default=50, ge=1, le=200),
-    user: AuthUser = Depends(current_user),
+    user: AuthUser = Depends(_resolve_user),
 ) -> HistoryResponse:
-    """Every sky you have turned into sound, newest first.
-
-    Degrades to an empty list with ``degraded: true`` if the store is
-    unreachable. The client renders "nothing here yet" either way; the flag
-    lets it say "we could not reach your almanac" instead of implying you have
-    never used the app.
-    """
+    """Every sky you have turned into sound, newest first."""
     notes: list[str] = []
     try:
         playlists = await _store().history(user.uid, limit=limit)
@@ -188,26 +233,15 @@ async def _events_for(store: Any, user_id: str) -> list[Any]:
     summary="Your rain sound, your first-frost record",
 )
 async def get_retrospective(
-    user: AuthUser = Depends(current_user),
+    user: AuthUser = Depends(_resolve_user),
 ) -> RetrospectiveResponse:
-    """Named memories drawn out of your listening history.
-
-    Delegates to the Almanac worker's retrospective module when it is present.
-    When it is not, falls back to :func:`_fallback_retrospective`, which builds
-    a handful of honest highlights out of the history rows alone -- no weather
-    reasoning, no cleverness, just counting.
-    """
+    """Named memories drawn out of your listening history."""
     store = _store()
     notes: list[str] = []
 
     builder = _load_retrospective_builder()
     if builder is not None:
         try:
-            # build_retrospective takes the flattened records, not the store:
-            # it is a pure function so it can be tested and replayed without a
-            # database. Prefer the store's native record/feedback accessors and
-            # fall back to converting the Playlist history when a store (like
-            # the Firestore one) only offers that.
             records = await _records_for(store, user.uid)
             events = await _events_for(store, user.uid)
             result = builder(user.uid, records, events)
@@ -253,14 +287,9 @@ async def get_retrospective(
 @router.post("/feedback", response_model=FeedbackResponse, summary="Loved or skipped")
 async def post_feedback(
     body: FeedbackRequest,
-    user: AuthUser = Depends(current_user),
+    user: AuthUser = Depends(_resolve_user),
 ) -> FeedbackResponse:
-    """Tell the almanac what landed.
-
-    Signals feed the Almanac worker's fit, which eventually shows up as the
-    9x7 delta returned by ``nudge()``. Validation of ``signal`` happens in the
-    model, so anything reaching the store is already one of two literals.
-    """
+    """Tell the almanac what landed."""
     store = _store()
     try:
         await store.record_feedback(
@@ -276,13 +305,8 @@ async def post_feedback(
 
 
 @router.get("/nudge", summary="Debug: the stored 9x7 transfer-matrix delta")
-async def get_nudge(user: AuthUser = Depends(current_user)) -> dict[str, Any]:
-    """Expose the stored personalisation matrix for inspection.
-
-    Not a product surface -- a debugging one. Returns ``{"nudge": null}`` when
-    nothing has been learned yet, which is the honest answer for a new user and
-    for an unreachable store alike.
-    """
+async def get_nudge(user: AuthUser = Depends(_resolve_user)) -> dict[str, Any]:
+    """Expose the stored personalisation matrix for inspection."""
     store = _store()
     try:
         matrix = await store.nudge(user.uid)
@@ -311,12 +335,6 @@ async def get_nudge(user: AuthUser = Depends(current_user)) -> dict[str, Any]:
 
 
 def _load_retrospective_builder() -> Any | None:
-    """Find the Almanac worker's retrospective entry point, if it shipped.
-
-    Tries a couple of plausible names because the two modules are being written
-    in parallel. Anything found must be callable as
-    ``builder(store=..., user_id=...)``.
-    """
     try:
         from ..almanac import retrospective as _retro  # noqa: PLC0415
     except Exception:
@@ -330,11 +348,6 @@ def _load_retrospective_builder() -> Any | None:
 
 
 def _coerce_highlights(result: Any) -> list[RetrospectiveHighlight]:
-    """Accept whatever shape the other worker returns, within reason.
-
-    Handles: a list of dicts/models, or a mapping with a ``highlights`` key.
-    Anything unparseable is dropped rather than raised.
-    """
     raw = result
     if isinstance(result, dict):
         raw = result.get("highlights", [])
@@ -356,7 +369,6 @@ def _coerce_highlights(result: Any) -> list[RetrospectiveHighlight]:
 
 
 def _coerce_total(result: Any) -> int:
-    """Pull a total count out of the other worker's payload, else 0."""
     if isinstance(result, dict):
         try:
             return int(result.get("total_forges", 0) or 0)
@@ -372,6 +384,17 @@ def _coerce_total(result: Any) -> int:
 def _to_entry(playlist: Any) -> HistoryEntry:
     """Flatten a Playlist into a list row, tolerating partial documents."""
     tracks = getattr(playlist, "tracks", None) or []
+    coords = getattr(playlist, "coordinates", None)
+    loc_label = getattr(coords, "label", None) if coords else None
+    sky = getattr(playlist, "sky", None)
+    trend = getattr(sky, "pressure_trend_6h", None) if sky else None
+    preview: list[str] = []
+    for st in tracks[:4]:
+        tr = getattr(st, "track", st)
+        artist = getattr(tr, "artist", "")
+        title = getattr(tr, "title", "")
+        if artist and title:
+            preview.append(f"{artist} — {title}")
     return HistoryEntry(
         id=str(getattr(playlist, "id", "") or ""),
         title=str(getattr(playlist, "title", "") or "untitled forge"),
@@ -380,6 +403,9 @@ def _to_entry(playlist: Any) -> HistoryEntry:
         genre_id=_opt_str(getattr(playlist, "genre_id", None)),
         track_count=len(tracks),
         created_at=getattr(playlist, "created_at", None),
+        location_label=_opt_str(loc_label),
+        pressure_trend_6h=float(trend) if trend is not None else None,
+        tracks_preview=preview,
     )
 
 

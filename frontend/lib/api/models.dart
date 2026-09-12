@@ -187,6 +187,57 @@ class SkyScenario {
       );
 }
 
+/// Curated World Street-Art Geo-Cache landmark from `GET /api/sky/geocaches`.
+class StreetArtGeoCache {
+  const StreetArtGeoCache({
+    required this.id,
+    required this.name,
+    required this.city,
+    required this.country,
+    required this.label,
+    required this.lat,
+    required this.lon,
+    required this.tzOffsetHours,
+    required this.localTime,
+    required this.dayPeriod,
+    required this.artistHighlight,
+    required this.description,
+    required this.vibeTags,
+  });
+
+  final String id;
+  final String name;
+  final String city;
+  final String country;
+  final String label;
+  final double lat;
+  final double lon;
+  final double tzOffsetHours;
+  final String localTime;
+  final String dayPeriod;
+  final String artistHighlight;
+  final String description;
+  final List<String> vibeTags;
+
+  factory StreetArtGeoCache.fromJson(JsonMap json) => StreetArtGeoCache(
+        id: asStringOrNull(json['id']) ?? '',
+        name: asStringOrNull(json['name']) ?? 'Street Art Landmark',
+        city: asStringOrNull(json['city']) ?? '',
+        country: asStringOrNull(json['country']) ?? '',
+        label: asStringOrNull(json['label']) ??
+            asStringOrNull(json['name']) ??
+            '',
+        lat: asDoubleOrNull(json['lat']) ?? 50.8503,
+        lon: asDoubleOrNull(json['lon']) ?? 4.3517,
+        tzOffsetHours: asDoubleOrNull(json['tz_offset_hours']) ?? 1.0,
+        localTime: asStringOrNull(json['local_time']) ?? '14:00 (UTC+1)',
+        dayPeriod: asStringOrNull(json['day_period']) ?? 'afternoon',
+        artistHighlight: asStringOrNull(json['artist_highlight']) ?? '',
+        description: asStringOrNull(json['description']) ?? '',
+        vibeTags: asStringList(json['vibe_tags']),
+      );
+}
+
 // ===========================================================================
 // Themes and genres
 // ===========================================================================
@@ -316,6 +367,8 @@ class ForgeRequest {
     this.genreId,
     this.scenario,
     this.trackCount,
+    this.geocacheId,
+    this.seedScrobbles = const <String>[],
   });
 
   final double? lat;
@@ -328,6 +381,8 @@ class ForgeRequest {
   final String? scenario;
 
   final int? trackCount;
+  final String? geocacheId;
+  final List<String> seedScrobbles;
 
   JsonMap toJson() => <String, Object?>{
         if (lat != null) 'lat': lat,
@@ -336,6 +391,8 @@ class ForgeRequest {
         if (genreId != null) 'genre_id': genreId,
         if (scenario != null) 'scenario': scenario,
         if (trackCount != null) 'track_count': trackCount,
+        if (geocacheId != null) 'geocache_id': geocacheId,
+        if (seedScrobbles.isNotEmpty) 'seed_scrobbles': seedScrobbles,
       };
 
   ForgeRequest copyWith({
@@ -345,6 +402,8 @@ class ForgeRequest {
     String? genreId,
     String? scenario,
     int? trackCount,
+    String? geocacheId,
+    List<String>? seedScrobbles,
   }) =>
       ForgeRequest(
         lat: lat ?? this.lat,
@@ -353,6 +412,8 @@ class ForgeRequest {
         genreId: genreId ?? this.genreId,
         scenario: scenario ?? this.scenario,
         trackCount: trackCount ?? this.trackCount,
+        geocacheId: geocacheId ?? this.geocacheId,
+        seedScrobbles: seedScrobbles ?? this.seedScrobbles,
       );
 }
 
@@ -661,6 +722,8 @@ class AlmanacEntry {
     required this.trackCount,
     this.headline,
     this.pressureTrend6h,
+    this.locationLabel,
+    this.tracksPreview = const <String>[],
   });
 
   final String id;
@@ -670,6 +733,8 @@ class AlmanacEntry {
   final int trackCount;
   final String? headline;
   final double? pressureTrend6h;
+  final String? locationLabel;
+  final List<String> tracksPreview;
 
   factory AlmanacEntry.fromJson(JsonMap json) => AlmanacEntry(
         id: asStringOrNull(json['id']) ?? '',
@@ -687,6 +752,132 @@ class AlmanacEntry {
               asJsonMap(json['sky'])?['pressure_trend_6h'],
             ) ??
             asDoubleOrNull(json['pressure_trend_6h']),
+        locationLabel: asStringOrNull(json['location_label']),
+        tracksPreview: asStringList(json['tracks_preview']),
+      );
+}
+
+/// A single scrobbled track indexed in the Firestore Almanac (`GET /api/almanac/scrobbles`).
+class ScrobbleEntry {
+  const ScrobbleEntry({
+    required this.id,
+    required this.title,
+    required this.artist,
+    required this.tags,
+    required this.weatherTheme,
+    required this.bpmEstimate,
+    required this.energyEstimate,
+    required this.playCount,
+    required this.lastPlayedAt,
+    this.album,
+  });
+
+  final String id;
+  final String title;
+  final String artist;
+  final String? album;
+  final List<String> tags;
+  final String weatherTheme;
+  final int bpmEstimate;
+  final double energyEstimate;
+  final int playCount;
+  final String lastPlayedAt;
+
+  String get trackKey => '$artist - $title';
+
+  factory ScrobbleEntry.fromJson(JsonMap json) => ScrobbleEntry(
+        id: asStringOrNull(json['id']) ?? '',
+        title: asStringOrNull(json['title']) ?? 'Untitled',
+        artist: asStringOrNull(json['artist']) ?? 'Unknown Artist',
+        album: asStringOrNull(json['album']),
+        tags: asStringList(json['tags']),
+        weatherTheme: asStringOrNull(json['weather_theme']) ?? 'petrichor',
+        bpmEstimate: (asDoubleOrNull(json['bpm_estimate']) ?? 112).round(),
+        energyEstimate: asDoubleOrNull(json['energy_estimate']) ?? 0.6,
+        playCount: (asDoubleOrNull(json['play_count']) ?? 1).round(),
+        lastPlayedAt: asStringOrNull(json['last_played_at']) ?? '',
+      );
+}
+
+class ScrobbleAnalytics {
+  const ScrobbleAnalytics({
+    required this.totalScrobbles,
+    required this.uniqueTracks,
+    required this.avgBpm,
+    required this.avgEnergy,
+    required this.topArtists,
+    required this.topGenres,
+    required this.weatherAffinity,
+  });
+
+  final int totalScrobbles;
+  final int uniqueTracks;
+  final double avgBpm;
+  final double avgEnergy;
+  final List<JsonMap> topArtists;
+  final List<JsonMap> topGenres;
+  final List<JsonMap> weatherAffinity;
+
+  static const ScrobbleAnalytics empty = ScrobbleAnalytics(
+    totalScrobbles: 0,
+    uniqueTracks: 0,
+    avgBpm: 112.0,
+    avgEnergy: 0.60,
+    topArtists: <JsonMap>[],
+    topGenres: <JsonMap>[],
+    weatherAffinity: <JsonMap>[],
+  );
+
+  factory ScrobbleAnalytics.fromJson(JsonMap json) => ScrobbleAnalytics(
+        totalScrobbles: (asDoubleOrNull(json['total_scrobbles']) ?? 0).round(),
+        uniqueTracks: (asDoubleOrNull(json['unique_tracks']) ?? 0).round(),
+        avgBpm: asDoubleOrNull(json['avg_bpm']) ?? 112.0,
+        avgEnergy: asDoubleOrNull(json['avg_energy']) ?? 0.60,
+        topArtists: <JsonMap>[
+          for (final Object? item in asJsonList(json['top_artists']) ?? const <Object?>[])
+            if (asJsonMap(item) case final JsonMap m) m,
+        ],
+        topGenres: <JsonMap>[
+          for (final Object? item in asJsonList(json['top_genres']) ?? const <Object?>[])
+            if (asJsonMap(item) case final JsonMap m) m,
+        ],
+        weatherAffinity: <JsonMap>[
+          for (final Object? item in asJsonList(json['weather_affinity']) ?? const <Object?>[])
+            if (asJsonMap(item) case final JsonMap m) m,
+        ],
+      );
+}
+
+class ScrobbleSearchResponse {
+  const ScrobbleSearchResponse({
+    required this.count,
+    required this.scrobbles,
+    required this.analytics,
+    required this.syncedFromFirestore,
+  });
+
+  final int count;
+  final List<ScrobbleEntry> scrobbles;
+  final ScrobbleAnalytics analytics;
+  final bool syncedFromFirestore;
+
+  static const ScrobbleSearchResponse empty = ScrobbleSearchResponse(
+    count: 0,
+    scrobbles: <ScrobbleEntry>[],
+    analytics: ScrobbleAnalytics.empty,
+    syncedFromFirestore: false,
+  );
+
+  factory ScrobbleSearchResponse.fromJson(JsonMap json) => ScrobbleSearchResponse(
+        count: (asDoubleOrNull(json['count']) ?? 0).round(),
+        scrobbles: <ScrobbleEntry>[
+          for (final Object? item in asJsonList(json['scrobbles']) ?? const <Object?>[])
+            if (asJsonMap(item) case final JsonMap m) ScrobbleEntry.fromJson(m),
+        ],
+        analytics: ScrobbleAnalytics.fromJson(
+          asJsonMap(json['analytics']) ?? const <String, Object?>{},
+        ),
+        syncedFromFirestore: json['synced_from_firestore'] == true,
       );
 }
 

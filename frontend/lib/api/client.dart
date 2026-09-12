@@ -113,10 +113,45 @@ class BarogrooveApi {
   Future<ApiResult<List<SkyScenario>>> scenarios() =>
       _getJsonList('/api/sky/scenarios', SkyScenario.fromJson);
 
+  Future<ApiResult<List<StreetArtGeoCache>>> geocaches() =>
+      _getJsonList('/api/sky/geocaches', StreetArtGeoCache.fromJson);
+
+  Future<ApiResult<StreetArtGeoCache>> randomGeocache({String? excludeId}) async {
+    final ApiResult<http.Response> res = await _get(
+      '/api/sky/geocaches',
+      query: <String, String>{
+        'random': 'true',
+        if (excludeId != null && excludeId.isNotEmpty) 'exclude_id': excludeId,
+      },
+    );
+    return res.when(
+      ok: (http.Response r) {
+        try {
+          final JsonMap? root = asJsonMap(jsonDecode(r.body));
+          final JsonMap? selected = asJsonMap(root?['selected']);
+          if (selected != null) {
+            return ApiOk<StreetArtGeoCache>(StreetArtGeoCache.fromJson(selected));
+          }
+          return const ApiFailure<StreetArtGeoCache>(
+            message: 'No selected geocache in response',
+            kind: ApiFailureKind.decode,
+          );
+        } catch (e) {
+          return ApiFailure<StreetArtGeoCache>(
+            message: 'Decode error: $e',
+            kind: ApiFailureKind.decode,
+          );
+        }
+      },
+      failed: (ApiFailure<http.Response> f) => f.cast<StreetArtGeoCache>(),
+    );
+  }
+
   Future<ApiResult<SkyVector>> skyVector({
     double? lat,
     double? lon,
     String? scenario,
+    String? geocacheId,
   }) =>
       _getJson(
         '/api/sky/vector',
@@ -125,6 +160,7 @@ class BarogrooveApi {
           if (lat != null) 'lat': '$lat',
           if (lon != null) 'lon': '$lon',
           if (scenario != null) 'scenario': scenario,
+          if (geocacheId != null) 'geocache_id': geocacheId,
         },
       );
 
@@ -221,6 +257,26 @@ class BarogrooveApi {
         PairingStart.fromJson,
       );
 
+  Future<ApiResult<PairingStatus>> connectLastfmUsername(String username) =>
+      _postJson(
+        '/api/pair/lastfm/username',
+        <String, Object?>{'username': username},
+        PairingStatus.fromJson,
+      );
+
+  Future<ApiResult<PairingStatus>> manualSpotifyExchange({
+    required String urlOrCode,
+    String? redirectUri,
+  }) =>
+      _postJson(
+        '/api/pair/spotify/manual-exchange',
+        <String, Object?>{
+          'url_or_code': urlOrCode,
+          if (redirectUri != null) 'redirect_uri': redirectUri,
+        },
+        PairingStatus.fromJson,
+      );
+
   Future<ApiResult<PairingStatus>> disconnect(String provider) => _postJson(
         '/api/pair/$provider/disconnect',
         const <String, Object?>{},
@@ -233,6 +289,56 @@ class BarogrooveApi {
 
   Future<ApiResult<List<AlmanacEntry>>> almanacHistory() =>
       _getJsonList('/api/almanac/history', AlmanacEntry.fromJson);
+
+  Future<ApiResult<ScrobbleSearchResponse>> scrobbles({
+    String? query,
+    String? tag,
+    String? theme,
+  }) =>
+      _getJson(
+        '/api/almanac/scrobbles',
+        ScrobbleSearchResponse.fromJson,
+        query: <String, String>{
+          if (query != null && query.isNotEmpty) 'query': query,
+          if (tag != null && tag.isNotEmpty) 'tag': tag,
+          if (theme != null && theme.isNotEmpty) 'theme': theme,
+        },
+      );
+
+  Future<ApiResult<ScrobbleSearchResponse>> syncScrobbles({
+    String? lastfmUser,
+  }) =>
+      _postJson(
+        '/api/almanac/scrobbles/sync?lastfm_user=${Uri.encodeQueryComponent(lastfmUser ?? "jpaquay")}',
+        const <String, Object?>{},
+        ScrobbleSearchResponse.fromJson,
+      );
+
+  Future<ApiResult<Playlist>> getForgedPlaylist(String playlistId) async {
+    final ApiResult<http.Response> res =
+        await _get('/api/almanac/forges/$playlistId');
+    return res.when(
+      ok: (http.Response r) {
+        try {
+          final JsonMap? root = asJsonMap(jsonDecode(r.body));
+          final JsonMap? pMap = asJsonMap(root?['playlist']);
+          if (pMap != null) {
+            return ApiOk<Playlist>(Playlist.fromJson(pMap));
+          }
+          return const ApiFailure<Playlist>(
+            message: 'Playlist payload missing',
+            kind: ApiFailureKind.decode,
+          );
+        } catch (e) {
+          return ApiFailure<Playlist>(
+            message: 'Decode error: $e',
+            kind: ApiFailureKind.decode,
+          );
+        }
+      },
+      failed: (ApiFailure<http.Response> f) => f.cast<Playlist>(),
+    );
+  }
 
   Future<ApiResult<Retrospective>> retrospective() async {
     final ApiResult<http.Response> res = await _get('/api/almanac/retrospective');

@@ -46,6 +46,13 @@ justifications live here. Each entry below maps one-to-one onto an entry in
 | `user_id ASC, created_at DESC` | `FeedbackRepository.for_user()` — the training set for the Almanac worker's ridge regression | The learning loop reads the most recent N signals per user. Recency ordering matters because the fit is time-weighted; without the index it would have to read the whole collection and sort in memory. |
 | `user_id ASC, signal ASC, created_at DESC` | "what have I skipped lately" — negative-signal analysis | Lets the fit pull loved and skipped rows separately rather than reading everything and partitioning client-side. Cheaper at the ten-thousand-row scale where it starts to matter. |
 
+### `scrobbles` and `track_catalog`
+
+| Collection | Fields | Serves |
+|---|---|---|
+| `scrobbles` | `lastfm_user ASC, uts DESC` / `artist_norm ASC` / `year ASC` | Almanac Scrobble Explorer & Sonic DNA Analytics — queries and filters user scrobbles in Firestore. |
+| `track_catalog` | `lastfm_user ASC, scrobble_count DESC` / `loved ASC` | Top scrobbled & loved track catalog lookup for seeding new weather-inspired Daylists. |
+
 ### `fieldOverrides` — indexes we deliberately turn **off**
 
 Single-field indexing is on by default for every field, including large nested

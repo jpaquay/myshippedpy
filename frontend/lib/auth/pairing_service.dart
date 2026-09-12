@@ -146,11 +146,12 @@ class PairingService {
   /// the user stop the poll.
   Future<PairingAttempt> connect(
     PairingProvider provider, {
+    String? redirectUri,
     Future<void>? cancelled,
   }) async {
     final ApiResult<PairingStart> start = switch (provider) {
-      PairingProvider.spotify => await _startSpotify(),
-      PairingProvider.lastfm => await _api.startLastfmPairing(),
+      PairingProvider.spotify => await _startSpotify(redirectUri: redirectUri),
+      PairingProvider.lastfm => await _api.startLastfmPairing(redirectUri: redirectUri),
     };
 
     final PairingStart? begin = start.valueOrNull;
@@ -202,10 +203,42 @@ class PairingService {
     return _pollUntilConnected(provider, cancelled: cancelled);
   }
 
-  Future<ApiResult<PairingStart>> _startSpotify() async {
+  Future<ApiResult<PairingStart>> _startSpotify({String? redirectUri}) async {
     final PkcePair pkce = PkcePair.generate();
     await _remember(_verifierKey, pkce.verifier);
-    return _api.startSpotifyPairing(codeChallenge: pkce.challenge);
+    return _api.startSpotifyPairing(
+      codeChallenge: pkce.challenge,
+      redirectUri: redirectUri,
+    );
+  }
+
+  /// Directly pairs Last.fm by public username (e.g., jpaquay).
+  Future<PairingAttempt> connectLastfmUsername(String username) async {
+    final ApiResult<PairingStatus> res =
+        await _api.connectLastfmUsername(username.trim());
+    return res.when(
+      ok: (PairingStatus status) =>
+          PairingAttempt(PairingOutcome.connected, status: status),
+      failed: (ApiFailure<PairingStatus> f) =>
+          PairingAttempt(PairingOutcome.failed, message: f.message),
+    );
+  }
+
+  /// Completes Spotify pairing using a manually pasted redirect URL or code.
+  Future<PairingAttempt> manualSpotifyExchange(
+    String urlOrCode, {
+    String? redirectUri,
+  }) async {
+    final ApiResult<PairingStatus> res = await _api.manualSpotifyExchange(
+      urlOrCode: urlOrCode.trim(),
+      redirectUri: redirectUri,
+    );
+    return res.when(
+      ok: (PairingStatus status) =>
+          PairingAttempt(PairingOutcome.connected, status: status),
+      failed: (ApiFailure<PairingStatus> f) =>
+          PairingAttempt(PairingOutcome.failed, message: f.message),
+    );
   }
 
   /// Polls `/api/pair/status` until [provider] is connected.

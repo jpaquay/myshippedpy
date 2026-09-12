@@ -579,6 +579,11 @@ class ForgeRequest(BaseModel):
     sink: "SinkKind" = "auto"
     at: _dt.datetime | None = Field(None, description="Override 'now' — used by fixtures and the Almanac.")
     seed: int | None = Field(None, description="Deterministic diversity shuffling for tests.")
+    geocache_id: str | None = Field(None, description="Optional World Street-Art Geo-Cache ID or 'random'.")
+    seed_scrobbles: list[str] = Field(
+        default_factory=list,
+        description="Optional scrobble keys or titles ('Artist - Title') selected from Almanac to seed the set.",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -586,6 +591,21 @@ class ForgeRequest(BaseModel):
         if not isinstance(data, dict):
             return data
         out = dict(data)
+        gc_id = out.get("geocache_id")
+        if gc_id:
+            try:
+                from .sky.geocaches import get_geocache
+
+                gc = get_geocache(str(gc_id))
+                if gc is not None:
+                    out["geocache_id"] = gc.id
+                    out["coordinates"] = {
+                        "latitude": gc.lat,
+                        "longitude": gc.lon,
+                        "label": gc.label,
+                    }
+            except Exception:  # noqa: BLE001
+                pass
         if "coordinates" not in out or out["coordinates"] is None:
             lat = out.pop("lat", None)
             lon = out.pop("lon", None)

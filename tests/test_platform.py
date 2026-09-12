@@ -828,8 +828,14 @@ class TestFirestoreIndexes:
         )
 
     def test_collection_names_match_the_code(self, cfg: dict) -> None:
-        known = {fs_mod.COL_FORGES, fs_mod.COL_FEEDBACK, fs_mod.COL_ALMANAC,
-                 fs_mod.COL_USERS}
+        known = {
+            fs_mod.COL_FORGES,
+            fs_mod.COL_FEEDBACK,
+            fs_mod.COL_ALMANAC,
+            fs_mod.COL_USERS,
+            fs_mod.COL_SCROBBLES,
+            fs_mod.COL_TRACK_CATALOG,
+        }
         for index in cfg["indexes"]:
             assert index["collectionGroup"] in known
 

@@ -310,24 +310,168 @@ class _SetHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Text('THE SET', style: text.labelSmall),
-        const SizedBox(height: BgSpace.xs),
-        Text(playlist.title, style: text.displaySmall),
-        if (playlist.subtitle.isNotEmpty) ...<Widget>[
-          const SizedBox(height: BgSpace.xs),
-          Text(
-            playlist.subtitle,
-            style: text.bodyLarge?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+
+    // Collect top unique micro-genre tags from the Daylist tracks.
+    final Set<String> tagSet = <String>{};
+    for (final ScoredTrack st in playlist.tracks) {
+      for (final String tag in st.track.tags) {
+        final String clean = tag.trim().toLowerCase();
+        if (clean.isNotEmpty && !clean.startsWith('via:')) {
+          tagSet.add(clean);
+        }
+        if (tagSet.length >= 6) break;
+      }
+      if (tagSet.length >= 6) break;
+    }
+
+    final double trend = playlist.sky.pressureTrend6h;
+    final String trendStr =
+        '${trend >= 0 ? '+' : ''}${(trend * 12.0).toStringAsFixed(1)} hPa/6h';
+    final String cityLabel = playlist.subtitle?.contains('curated for ') == true
+        ? playlist.subtitle!
+            .split('curated for ')
+            .last
+            .split(' under ')
+            .first
+            .trim()
+        : 'Brussels';
+    final String themeLabel =
+        (playlist.themeId ?? 'petrichor').replaceAll('_', ' ').toUpperCase();
+
+    return Container(
+      padding: const EdgeInsets.all(BgSpace.lg),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[
+            colors.primary.withValues(alpha: 0.16),
+            colors.surfaceContainerHigh,
+            colors.surface,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: colors.primary.withValues(alpha: 0.32),
+        ),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
           ),
         ],
-      ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Wrap(
+            spacing: BgSpace.sm,
+            runSpacing: BgSpace.xs,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: <Widget>[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: colors.primary,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      Icons.auto_awesome,
+                      size: 13,
+                      color: colors.onPrimary,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      'BAROMETRIC DAYLIST • ${playlist.tracks.length} TRACKS',
+                      style: text.labelSmall?.copyWith(
+                        color: colors.onPrimary,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.7,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerHighest.withValues(alpha: 0.75),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: colors.outlineVariant),
+                ),
+                child: Text(
+                  '$cityLabel • $themeLabel • $trendStr',
+                  style: text.labelSmall?.copyWith(
+                    color: colors.onSurface,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: BgSpace.md),
+          Text(
+            playlist.title,
+            style: text.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.4,
+              height: 1.18,
+            ),
+          ),
+          if (playlist.subtitle.isNotEmpty) ...<Widget>[
+            const SizedBox(height: BgSpace.xs),
+            Text(
+              playlist.subtitle,
+              style: text.bodyLarge?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          ],
+          if (tagSet.isNotEmpty) ...<Widget>[
+            const SizedBox(height: BgSpace.md),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: tagSet.map((String t) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: colors.primary.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Text(
+                    '#$t',
+                    style: text.labelSmall?.copyWith(
+                      color: colors.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

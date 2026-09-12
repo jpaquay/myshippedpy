@@ -42,29 +42,26 @@ async def forge(
     """
     from .surfaces import get_last_selection
 
-    sel = get_last_selection(user_id or "default")
+    uid = user_id if isinstance(user_id, str) and user_id else None
+    sel = get_last_selection(uid or "default")
     updates: dict[str, Any] = {}
     if not request.theme_id and sel.get("theme_id"):
         updates["theme_id"] = sel["theme_id"]
     if (not request.genre_id or request.genre_id == "any") and sel.get("genre_id"):
         updates["genre_id"] = sel["genre_id"]
 
-    if user_id:
-        if not request.user_id:
-            updates["user_id"] = user_id
-        if not request.lastfm_user:
-            try:
-                raw_vault = get_raw_token_vault()
-                if raw_vault is not None:
-                    lfm = await raw_vault.get(user_id, "lastfm")
-                    if isinstance(lfm, dict):
-                        handle = lfm.get("username") or lfm.get("name") or lfm.get("account")
-                        if handle:
-                            updates["lastfm_user"] = str(handle)
-            except Exception:
-                pass
+    effective_uid = uid or request.user_id or "demo"
+    if not request.user_id:
+        updates["user_id"] = effective_uid
+
+    if uid and not request.lastfm_user:
+        from .pairing import _get_paired_account
+
+        handle = await _get_paired_account(uid, "lastfm")
+        if handle:
+            updates["lastfm_user"] = str(handle)
     if not request.lastfm_user and "lastfm_user" not in updates:
-        updates["lastfm_user"] = user_id or request.user_id or "jpaquay"
+        updates["lastfm_user"] = "jpaquay"
     if updates:
         request = request.model_copy(update=updates)
 
@@ -86,7 +83,11 @@ async def forge(
 
 
 @router.get("/forge/demo", response_model=ForgeResult)
-async def forge_demo(length: int = 18, theme_id: str | None = None) -> ForgeResult:
+async def forge_demo(
+    length: int = 18,
+    theme_id: str | None = None,
+    user_id: str | None = Depends(current_user_id),
+) -> ForgeResult:
     """Zero-argument forge over Brussels. The demo endpoint.
 
     Sink is pinned to ``m3u``: the demo must never depend on an OAuth session,
@@ -101,7 +102,7 @@ async def forge_demo(length: int = 18, theme_id: str | None = None) -> ForgeResu
         sink="m3u",
         seed=DEMO_SEED,
     )
-    return await forge(request)
+    return await forge(request, user_id=user_id)
 
 
 @router.post("/forge/explain", response_model=Rationale)

@@ -650,17 +650,69 @@ def build_rationale(
     body_parts.append(_voice_tail(theme, seed))
     body = " ".join(part for part in body_parts if part)
 
-    # ---- headline ----------------------------------------------------------
+    # ---- headline (Spotify Daylist style: weather + time-of-day + micro-genres) ----
     if sky.pressure_trend_6h <= -0.10:
         glass = "a falling barometer"
     elif sky.pressure_trend_6h >= 0.10:
         glass = "a building barometer"
     else:
         glass = "a steady barometer"
+
+    utc_dt = getattr(sky, "observed_at", None)
+    utc_hour = getattr(utc_dt, "hour", 14)
+    coords = getattr(sky, "coordinates", None)
+    tz_offset = 1.0
+    if coords is not None:
+        try:
+            from ..sky.geocaches import find_nearest_geocache
+
+            gc = find_nearest_geocache(coords.latitude, coords.longitude)
+            if gc is not None:
+                tz_offset = gc.tz_offset_hours
+            else:
+                tz_offset = round(coords.longitude / 15.0)
+        except Exception:  # noqa: BLE001
+            tz_offset = round(coords.longitude / 15.0)
+    obs_hour = int((utc_hour + tz_offset) % 24)
+    if getattr(sky, "golden_hour_proximity", 0.0) > 0.55:
+        tod = "golden hour"
+    elif obs_hour < 6:
+        tod = "late night"
+    elif obs_hour < 11:
+        tod = "morning"
+    elif obs_hour < 14:
+        tod = "midday"
+    elif obs_hour < 18:
+        tod = "afternoon"
+    elif obs_hour < 21:
+        tod = "twilight"
+    else:
+        tod = "night"
+
+    seen_tags: list[str] = []
+    for item in tracks or ():
+        tr = getattr(item, "track", item)
+        for tag in getattr(tr, "tags", None) or ():
+            clean = str(tag).strip().lower()
+            if clean and not clean.startswith("via:") and clean not in seen_tags:
+                seen_tags.append(clean)
+            if len(seen_tags) >= 2:
+                break
+        if len(seen_tags) >= 2:
+            break
+    if len(seen_tags) >= 2:
+        genres_str = f"{seen_tags[0]} & {seen_tags[1]}"
+    elif len(seen_tags) == 1:
+        genres_str = f"{seen_tags[0]} & atmospheric drift"
+    elif corridor.id != "any":
+        genres_str = f"{corridor.name.lower()} & atmospheric drift"
+    else:
+        genres_str = "misty synthwave & atmospheric indie"
+
     headline_options = (
-        f"{theme.name}, at {sonic.tempo_bpm:.0f} BPM",
-        f"{theme.name} — {sonic.tempo_bpm:.0f} BPM under {glass}",
-        f"{sonic.tempo_bpm:.0f} BPM under {glass}. {theme.tagline}",
+        f"{theme.name.lower()} {tod} daylist — {genres_str} for {glass} ({sonic.tempo_bpm:.0f} BPM)",
+        f"{tod} {theme.name.lower()} drift • {genres_str} under {glass} ({sonic.tempo_bpm:.0f} BPM)",
+        f"{genres_str} {tod} — {theme.name.lower()} daylist at {sonic.tempo_bpm:.0f} BPM under {glass}",
     )
     headline = _pick(headline_options, seed, "headline")
 
