@@ -2,7 +2,7 @@
 // Enables Chrome Desktop & Mobile "Install App" / "Save as Chrome App" prompt
 // and provides resilient network-first navigation with offline fallback.
 
-const CACHE_NAME = 'barogroove-pwa-v6';
+const CACHE_NAME = 'barogroove-pwa-v7';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -37,15 +37,39 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  // Pass through API requests and non-GET requests directly to network
-  if (req.method !== 'GET' || req.url.includes('/api/')) {
+  if (req.method !== 'GET') {
     return;
   }
 
+  let url;
+  try {
+    url = new URL(req.url);
+  } catch (_) {
+    return;
+  }
+
+  // Never intercept cross-origin requests (e.g. Google Auth apis.google.com,
+  // accounts.google.com, Firebase Auth *.firebaseapp.com, Spotify, Last.fm).
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  // Pass through backend API, MCP, and Firebase Auth helper paths directly.
+  if (
+    url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/mcp') ||
+    url.pathname.startsWith('/__/auth/') ||
+    url.pathname.startsWith('/auth/') ||
+    url.pathname.startsWith('/callback')
+  ) {
+    return;
+  }
+
+  const isNavigation = req.mode === 'navigate';
   const isCodeOrDoc =
-    req.url.endsWith('.js') ||
-    req.url.endsWith('.html') ||
-    req.mode === 'navigate';
+    isNavigation ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.html');
 
   event.respondWith(
     fetch(req, isCodeOrDoc ? { cache: 'no-cache' } : undefined)
@@ -56,6 +80,17 @@ self.addEventListener('fetch', (event) => {
         }
         return res;
       })
-      .catch(() => caches.match(req).then((cached) => cached || caches.match('/index.html')))
+      .catch(() =>
+        caches.match(req).then((cached) => {
+          if (cached) return cached;
+          // Only return SPA index.html fallback for top-level page navigations.
+          // Returning text/html for a failed script or asset request triggers
+          // strict MIME-type (nosniff) execution failures.
+          if (isNavigation) {
+            return caches.match('/index.html');
+          }
+          return Response.error();
+        })
+      )
   );
 });

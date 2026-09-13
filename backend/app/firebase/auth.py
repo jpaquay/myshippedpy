@@ -423,16 +423,28 @@ async def _verify_with_admin_sdk(token: str, project_id: str) -> dict[str, Any] 
         # check_revoked=False keeps this to a local signature check: enabling it
         # costs a network round trip to the Firebase Auth backend on every
         # request. Revocation is handled by short token lifetimes (1h) instead.
-        return dict(fb_auth.verify_id_token(token, check_revoked=False))
+        try:
+            return dict(
+                fb_auth.verify_id_token(
+                    token, check_revoked=False, clock_skew_seconds=_CLOCK_SKEW_S
+                )
+            )
+        except TypeError:
+            return dict(fb_auth.verify_id_token(token, check_revoked=False))
 
     try:
         return await asyncio.wait_for(asyncio.to_thread(_verify), timeout=10.0)
     except asyncio.TimeoutError as exc:
         raise AuthError("token verification timed out", status_code=503) from exc
     except Exception as exc:
-        # The SDK raises a family of ExpiredIdTokenError / InvalidIdTokenError /
-        # RevokedIdTokenError. All of them mean the same thing to a caller.
-        raise AuthError(f"invalid ID token: {type(exc).__name__}") from exc
+        # Fall through to the direct JWT + x.509 certificate verifier below so
+        # transient SDK / clock-skew / ADC issues never block a valid token.
+        logger.debug(
+            "firebase-admin verify_id_token failed (%s: %s); falling back to JWT path",
+            type(exc).__name__,
+            exc,
+        )
+        return None
 
 
 def _ensure_admin_app(firebase_admin: Any, project_id: str) -> Any:

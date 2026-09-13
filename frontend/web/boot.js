@@ -10,31 +10,31 @@
   }
 
   // Register PWA Service Worker immediately so Chrome Desktop & Mobile offer "Install App"
+  // and immediately purge any stale/poisoned caches from earlier SW versions.
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function () {
-      // Remove any legacy Flutter service worker & stale cache entries
-      navigator.serviceWorker.getRegistrations().then(function (regs) {
-        regs.forEach(function (reg) {
-          if (reg.active && reg.active.scriptURL && reg.active.scriptURL.indexOf('flutter_service_worker.js') !== -1) {
-            reg.unregister();
+    if ('caches' in window) {
+      caches.keys().then(function (keys) {
+        keys.forEach(function (k) {
+          if (k !== 'barogroove-pwa-v7') {
+            caches.delete(k);
           }
         });
       });
-      if ('caches' in window) {
-        caches.keys().then(function (keys) {
-          keys.forEach(function (k) {
-            if (k.indexOf('flutter-app') !== -1 || k.indexOf('flutter-temp') !== -1) {
-              caches.delete(k);
-            }
-          });
-        });
-      }
-      navigator.serviceWorker.register('/sw.js').then(function (reg) {
-        reg.update();
-        console.debug('BAROGROOVE PWA Service Worker active:', reg.scope);
-      }).catch(function (err) {
-        console.warn('BAROGROOVE Service Worker registration failed:', err);
+    }
+    navigator.serviceWorker.getRegistrations().then(function (regs) {
+      regs.forEach(function (reg) {
+        if (reg.active && reg.active.scriptURL && reg.active.scriptURL.indexOf('flutter_service_worker.js') !== -1) {
+          reg.unregister();
+        } else {
+          reg.update();
+        }
       });
+    });
+    navigator.serviceWorker.register('/sw.js').then(function (reg) {
+      reg.update();
+      console.debug('BAROGROOVE PWA Service Worker active:', reg.scope);
+    }).catch(function (err) {
+      console.warn('BAROGROOVE Service Worker registration failed:', err);
     });
   }
 
