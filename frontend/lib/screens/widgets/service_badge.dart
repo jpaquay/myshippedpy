@@ -30,6 +30,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api/models.dart';
 import '../../app_theme.dart';
+import '../../auth/auth_service.dart';
 import '../../auth/pairing_service.dart';
 import '../../providers.dart';
 import '../shell.dart';
@@ -195,7 +196,16 @@ class ServiceBadgeStrip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final AsyncValue<PairingStatus> status = ref.watch(pairingStatusProvider);
+    // Whose connections are these? A badge is a statement about the signed-in
+    // user, so it is read together with the identity it belongs to. Signed
+    // out, there is no user to be connected: the honest answer is "unknown",
+    // never the last user's "Connected".
+    final String? uid = ref.watch(
+      authStateProvider.select((AsyncValue<BgUser?> u) => u.valueOrNull?.uid),
+    );
+    final AsyncValue<PairingStatus> status = uid == null
+        ? const AsyncLoading<PairingStatus>()
+        : ref.watch(pairingStatusProvider);
 
     return Row(
       mainAxisSize: MainAxisSize.min,

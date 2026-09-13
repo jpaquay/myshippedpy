@@ -112,6 +112,21 @@ class _StateStore:
             return None
         return pending
 
+    def peek(self, state: str | None) -> _PendingPairing | None:
+        """Exact-key lookup that does NOT consume.
+
+        Callbacks need to validate a state (right provider, right owner) before
+        spending it: consuming a state that then turns out to belong to someone
+        else would let any caller cancel a stranger's in-flight pairing.
+        """
+        if not state:
+            return None
+        self._sweep()
+        pending = self._items.get(state)
+        if pending is None or pending.expired():
+            return None
+        return pending
+
     def peek_for_user(self, user_id: str, provider: str) -> tuple[str, _PendingPairing] | None:
         """Return the most recent non-expired pending state for (user_id, provider) without consuming it."""
         self._sweep()
@@ -232,6 +247,14 @@ async def current_user_id(
     ``firebase.auth.current_user_optional``, then checks ``request.state`` and
     finally falls back to an explicit header for local development. Returning
     ``None`` rather than raising keeps ``/status`` usable by a signed-out client.
+
+    Every branch that *does* resolve someone provisions their Barogroove
+    profile (item 2 of the tenancy rework) before handing the uid back. The
+    bearer branch is already covered inside ``current_user_optional``; the
+    ``request.state`` and header branches are covered here, so that a caller
+    identified by the local-dev header is as real to Barogroove as one carrying
+    a Firebase token. ``ensure_profile`` is idempotent and a set lookup after
+    the first success, so this costs nothing on the hot path.
     """
     try:
         from fastapi import HTTPException
@@ -246,15 +269,25 @@ async def current_user_id(
     except Exception:
         pass
 
+    resolved: str | None = None
     for attribute in ("user_id", "uid", "user"):
         value = getattr(request.state, attribute, None)
         if isinstance(value, str) and value:
-            return value
+            resolved = value
+            break
         if value is not None and hasattr(value, "uid"):
             uid = getattr(value, "uid")
             if isinstance(uid, str) and uid:
-                return uid
-    return x_barogroove_user or None
+                resolved = uid
+                break
+    if resolved is None:
+        resolved = x_barogroove_user or None
+
+    if resolved:
+        from ..identity import ensure_profile
+
+        await ensure_profile(resolved, provider="header")
+    return resolved
 
 
 # --------------------------------------------------------------------------- #
@@ -405,7 +438,11 @@ async def _is_demo_paired(user_id: str | None, provider: str) -> dict[str, Any] 
             if tokens and getattr(tokens, "access_token", "").startswith("demo-spotify-"):
                 acc = getattr(tokens, "access_token", "").removeprefix("demo-spotify-")
                 if not acc or acc == "access-token":
-                    acc = "Demo Spotify Account" if user_id == "test_demo_user" else "jpaquay"
+                    # Never label an anonymous demo token with a real person's
+                    # handle: that renders "Connected as jpaquay" on somebody
+                    # else's badge, which is the disclosure this item exists to
+                    # stop, cosmetic or not.
+                    acc = "Demo Spotify Account"
                 info = {"paired": True, "account": acc}
                 _demo_pairings[(user_id, "spotify")] = info
                 return info
@@ -424,7 +461,9 @@ async def _is_demo_paired(user_id: str | None, provider: str) -> dict[str, Any] 
                         data.get("username")
                         or data.get("name")
                         or data.get("account")
-                        or ("demo_scrobbler" if user_id == "test_demo_user" else "jpaquay")
+                        # Never a real person's handle as the default label:
+                        # that is someone else's identity on this user's badge.
+                        or "demo_scrobbler"
                     )
                     info = {"paired": True, "account": str(acc)}
                     _demo_pairings[(user_id, "lastfm")] = info
@@ -888,12 +927,26 @@ async def configure_provider(
         new_auth = SpotifyAuth(settings=settings)
         if new_auth.configured:
             pending = _states.take(state)
-            uid = pending.user_id if pending else "jpaquay"
-            verifier, challenge = generate_pkce_pair()
+            if pending is None or pending.provider != "spotify":
+                # The credentials above are a deployment-level setting and
+                # are already saved. Starting an OAuth flow, however, is a
+                # per-user act: it mints a pending state that decides whose
+                # vault the resulting refresh token lands in. With no
+                # resolvable pending state there is no caller to bind it
+                # to, and substituting a literal uid here handed this
+                # browser's Spotify tokens to a real named account.
+                return _problem(
+                    400,
+                    "bad_state",
+                    "Credentials saved, but this pairing link is unknown, already "
+                    "used, or expired. Start pairing again from the app.",
+                )
+            uid = pending.user_id
+            pkce = PkcePair()
             new_state = generate_state()
-            _states.put(new_state, _PendingPairing("spotify", uid, verifier, None))
+            _states.put(new_state, _PendingPairing("spotify", uid, pkce.verifier, None))
             return RedirectResponse(
-                url=new_auth.build_authorize_url(new_state, challenge),
+                url=new_auth.build_authorize_url(new_state, SPOTIFY_SCOPES, pkce=pkce),
                 status_code=302,
             )
     elif normalised == "lastfm" and client_id and client_secret:
@@ -977,13 +1030,24 @@ async def demo_complete(
 ) -> Any:
     normalised = provider.strip().lower()
     pending = _states.take(state)
-    user_id = pending.user_id if pending else "demo_user"
+    if pending is None or pending.provider != normalised:
+        # This endpoint writes a pairing (and, for Spotify, a token) into a
+        # user's vault. An unresolvable state means we do not know whose vault
+        # that is; inventing one would pair a stranger's browser into a
+        # concrete account. Refuse.
+        return _problem(
+            400,
+            "bad_state",
+            "This pairing link is unknown, already used, or expired. Start pairing again.",
+        )
+    user_id = pending.user_id
     if account and account.strip():
         chosen_account = account.strip()
-    elif user_id == "test_demo_user":
-        chosen_account = "Demo Spotify Account" if normalised == "spotify" else "demo_scrobbler"
     else:
-        chosen_account = "jpaquay"
+        # No handle supplied: label it as the demo account it is. Defaulting to
+        # a real person's handle put "Connected as jpaquay" on every other
+        # user's badge.
+        chosen_account = "Demo Spotify Account" if normalised == "spotify" else "demo_scrobbler"
     await _set_demo_paired(user_id, normalised, chosen_account)
 
     label = "Spotify" if normalised == "spotify" else "Last.fm"
@@ -1176,7 +1240,19 @@ async def spotify_manual_exchange(
 
     pending: _PendingPairing | None = None
     if state:
-        pending = _states.take(state)
+        peeked = _states.peek(state)
+        if peeked is not None:
+            # A state belongs to the pairing attempt it was issued for. Pasting
+            # someone else's redirect URL must not consume their pending state
+            # (nor exchange their code under this account).
+            if peeked.user_id != user_id:
+                return _problem(
+                    403,
+                    "state_user_mismatch",
+                    "That pairing link was issued to a different account. "
+                    "Click Connect again from this account.",
+                )
+            pending = _states.take(state)
     if pending is None:
         entry = _states.peek_for_user(user_id, "spotify")
         if entry is not None:
@@ -1431,21 +1507,46 @@ async def lastfm_callback(
     request: Request,
     token: str | None = Query(default=None),
     state: str | None = Query(default=None),
+    caller_id: str | None = Depends(current_user_id),
 ) -> Any:
     if not token:
         return _problem(400, "bad_callback", "Last.fm callback was missing ?token.")
 
-    pending = _states.take(token)
-    if pending is None and state:
-        pending = _states.take(state)
-    if pending is None:
-        # Also check if there is a single pending lastfm state
-        for k, v in list(_states._items.items()):
-            if v.provider == "lastfm" and not v.expired():
-                pending = _states.take(k)
-                break
+    # State fixation guard.
+    #
+    # This used to fall back to "any pending Last.fm state" when neither the
+    # token nor the state matched. That made the callback redeemable by anyone:
+    # an unauthenticated caller arriving with their OWN Last.fm request token
+    # would be matched against whichever pairing attempt happened to be
+    # in flight, and the exchange would write THEIR session key into THAT
+    # user's vault. The state must be the one that was issued for this
+    # attempt, looked up by exact key and by nothing else.
+    key: str | None = None
+    if _states.peek(token) is not None:
+        key = token
+    elif state and _states.peek(state) is not None:
+        key = state
 
+    pending = _states.peek(key)
     if pending is None or pending.provider != "lastfm":
+        return _problem(
+            400,
+            "bad_state",
+            "This pairing link is unknown, already used, or expired. Start pairing again.",
+        )
+
+    # If the caller carries an identity, it must be the identity the state was
+    # issued to. Peek-then-take is deliberate: a mismatched caller must not be
+    # able to burn someone else's in-flight state.
+    if caller_id and caller_id != pending.user_id:
+        return _problem(
+            403,
+            "state_user_mismatch",
+            "This pairing link was issued to a different account. Start pairing again.",
+        )
+
+    pending = _states.take(key or "")
+    if pending is None or pending.provider != "lastfm":  # pragma: no cover - race
         return _problem(
             400,
             "bad_state",

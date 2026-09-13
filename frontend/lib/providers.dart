@@ -201,9 +201,19 @@ final FutureProvider<HealthStatus> healthProvider =
 final FutureProvider<PairingStatus> pairingStatusProvider =
     FutureProvider<PairingStatus>(
   (Ref ref) async {
-    // Re-runs whenever the session changes; a different user has a different
-    // set of connections.
-    ref.watch(authStateProvider);
+    // Re-runs whenever the *identity* changes; a different user has a
+    // different set of connections, and a signed-out client has none. Keying
+    // on the uid (rather than on the auth AsyncValue) means a user switch
+    // rebuilds this provider, so the next user can never be served the
+    // previous user's connections.
+    final String? uid = ref.watch(
+      authStateProvider.select((AsyncValue<BgUser?> u) => u.valueOrNull?.uid),
+    );
+    if (uid == null) {
+      // Signed out: do not ask, and do not keep the last answer. Whatever was
+      // connected belonged to whoever was signed in a moment ago.
+      return PairingStatus.none;
+    }
     final ApiResult<PairingStatus> res =
         await ref.watch(pairingServiceProvider).status();
     return res.valueOrNull ?? PairingStatus.none;
