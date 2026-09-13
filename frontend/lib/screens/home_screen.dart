@@ -28,6 +28,9 @@ import '../app_theme.dart';
 import '../providers.dart';
 import 'shell.dart';
 import 'widgets/atmospheric_cursors_console.dart';
+import 'widgets/console/console_tokens.dart';
+import 'widgets/console/forge_sky_block.dart';
+import 'widgets/console/forge_sky_reading.dart';
 import 'widgets/gemini_live_advisor.dart';
 import 'widgets/netdev_footer.dart';
 import 'widgets/section.dart';
@@ -223,6 +226,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  /// Lifts the three at-a-glance values out of the server-described `sky`
+  /// surface (§3.1). Nothing is computed here: every string is the `display`
+  /// the Python surface builder already published, so the strip and the dial
+  /// can never disagree. A surface that has not arrived yields nulls and the
+  /// strip prints `—`.
+  ForgeSkyReading _readSky(A2uiSurfaceController sky) {
+    if (!sky.isCreated) return ForgeSkyReading.unavailable;
+
+    String? dimensionDisplay(String id) {
+      final Object? dims = sky.dataModel.resolve('/sky/dimensions');
+      if (dims is! List<Object?>) return null;
+      for (final Object? entry in dims) {
+        if (entry is Map<String, Object?> && entry['dimensionId'] == id) {
+          final Object? display = entry['display'];
+          return display is String ? display : null;
+        }
+      }
+      return null;
+    }
+
+    final Object? heroTone = sky.dataModel.resolve('/sky/heroTone');
+    final Object? heroDisplay = sky.dataModel.resolve('/sky/heroDisplay');
+    final Object? heroCaption = sky.dataModel.resolve('/sky/heroCaption');
+
+    return ForgeSkyReading(
+      trendDisplay: heroDisplay is String ? heroDisplay : null,
+      trendTone: heroTone is String ? heroTone : null,
+      trendCaption: heroCaption is String ? heroCaption : null,
+      tempDisplay: dimensionDisplay('temp_norm_deviation'),
+      lightDisplay: dimensionDisplay('sun_elevation'),
+      stale: sky.dataModel.resolve('/sky/stale') == true,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final A2uiSurfaceController sky =
@@ -308,23 +345,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           const SizedBox(height: BgSpace.xl),
 
           // --- SERVER-DESCRIBED: the sky reading ---------------------------
+          // How much of it shows is the console's business, not this file's:
+          // Guided gets three values, Easy hides the dial behind SKY DETAIL,
+          // Expert promotes the dial to first glance (spec §5.2).
           Section(
             eyebrow: 'CURRENT BAROMETRIC READING',
             child: _loadingSurfaces && !sky.isCreated
                 ? const _SurfaceSkeleton(height: 300)
-                : A2uiSurfaceView(
-                    controller: sky,
-                    padding: EdgeInsets.zero,
-                    emptyState: const _SurfaceSkeleton(height: 300),
+                : ForgeSkyBlock(
+                    reading: _readSky(sky),
+                    dial: A2uiSurfaceView(
+                      controller: sky,
+                      padding: EdgeInsets.zero,
+                      emptyState: const _SurfaceSkeleton(height: 300),
+                    ),
                   ),
           ),
 
           const SizedBox(height: BgSpace.xl),
 
-          // --- DESKTOP & MOBILE ATMOSPHERIC SYNTHESIS CONSOLE --------------
-          AtmosphericCursorsConsole(
-            onTriggerForge: _forging ? null : _forge,
-          ),
+          // --- THE FORGE CONSOLE: guided / easy / expert -------------------
+          AtmosphericCursorsConsole(skyReading: _readSky(sky)),
 
           const SizedBox(height: BgSpace.xxl),
 
@@ -361,7 +402,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           const SizedBox(height: BgSpace.lg),
           const NetdevFooter(),
-          const SizedBox(height: BgSpace.xl),
+          // §7.2: bottom padding equals the assistant-bubble clearance, so the
+          // floating bubble that replaces the inline Live banners (§6.2) can
+          // never sit on top of the FORGE call to action.
+          const SizedBox(height: ForgeMetrics.bubbleClearance),
         ],
       ),
     );
