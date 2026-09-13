@@ -25,6 +25,7 @@ from typing import Any, Generator
 
 from pydantic import BaseModel, Field
 
+from . import seed_corpus
 from .scrobbles import (
     _ensure_catalog_and_indexes,
     fetch_firestore_summary,
@@ -47,8 +48,17 @@ DATA_CHAT_ENDPOINT = (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_QNA_CACHE_DIR = _REPO_ROOT / "data" / "scrobbles" / "qna_cache"
-_QNA_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+# TENANCY / DEMO MODE (item 5, audit finding 10).
+#
+# This used to be ``data/scrobbles/qna_cache`` with a ``mkdir`` at import time,
+# so importing the app created directories inside the read-only demo corpus and
+# every cache miss wrote a file into it. Answers are now READ from the shipped
+# corpus and WRITTEN only to the runtime cache. See ``seed_corpus`` for why the
+# distinction is load-bearing.
+_QNA_CACHE_SUBDIR = "qna_cache"
+_QNA_WRITE_DIR = seed_corpus.RUNTIME_CACHE_DIR / _QNA_CACHE_SUBDIR
+_QNA_SEED_DIR = seed_corpus.SEED_CORPUS_DIR / _QNA_CACHE_SUBDIR
 
 # Tier 1 In-Memory LRU Cache: hash -> dict payload
 _QNA_MEM_CACHE: dict[str, dict[str, Any]] = {}
@@ -209,8 +219,10 @@ def _get_cached_qna(key: str) -> tuple[dict[str, Any] | None, str]:
         _QNA_CACHE_STATS["memory_hits"] += 1
         return _QNA_MEM_CACHE[key], "MEMORY_HIT"
 
-    disk_path = _QNA_CACHE_DIR / f"{key}.json"
-    if disk_path.exists():
+    # Runtime cache first, then the shipped seed. A regenerated answer shadows
+    # the seeded one without overwriting it.
+    disk_path = seed_corpus.readable_path(_QNA_CACHE_SUBDIR, f"{key}.json")
+    if disk_path is not None:
         try:
             payload = json.loads(disk_path.read_text(encoding="utf-8"))
             _QNA_MEM_CACHE[key] = payload
@@ -223,16 +235,32 @@ def _get_cached_qna(key: str) -> tuple[dict[str, Any] | None, str]:
 
 
 def _save_cached_qna(key: str, payload: dict[str, Any]) -> None:
+    """Persist an answer. Never into the read-only seed corpus (item 5)."""
     _QNA_MEM_CACHE[key] = payload
-    disk_path = _QNA_CACHE_DIR / f"{key}.json"
     try:
-        disk_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        disk_path = seed_corpus.writable_path(_QNA_CACHE_SUBDIR, f"{key}.json")
+        seed_corpus.write_text(disk_path, json.dumps(payload, indent=2))
+    except seed_corpus.SeedCorpusWriteRefused:
+        # Loud on purpose: this means something re-pointed the cache at the
+        # demo corpus, which is the bug item 5 exists to prevent.
+        logger.error("refused a QnA cache write into the read-only seed corpus")
+        raise
     except Exception as exc:
-        logger.warning("Failed writing QnA disk cache %s: %s", disk_path, exc)
+        logger.warning("Failed writing QnA disk cache for %s: %s", key, exc)
 
 
 def get_qna_cache_stats() -> dict[str, Any]:
-    disk_files = list(_QNA_CACHE_DIR.glob("*.json"))
+    # Both tiers count: the shipped seed answers and anything regenerated at
+    # run time. Dedup on filename so a regenerated answer is not counted twice.
+    _seen: set[str] = set()
+    disk_files = []
+    for _dir in (_QNA_WRITE_DIR, _QNA_SEED_DIR):
+        if not _dir.is_dir():
+            continue
+        for _f in _dir.glob("*.json"):
+            if _f.name not in _seen:
+                _seen.add(_f.name)
+                disk_files.append(_f)
     total_hits = _QNA_CACHE_STATS["memory_hits"] + _QNA_CACHE_STATS["disk_hits"]
     total_reqs = (
         total_hits

@@ -130,6 +130,15 @@ async def ensure_profile(
         # concrete uid here is exactly the bug this rework is removing.
         return False
 
+    if uid == ANONYMOUS_USER_ID:
+        # Item 5: demo mode is READ-ONLY. A signed-out visitor browsing the
+        # seed taste must leave no trace -- no profile document, and so nothing
+        # for a history, a collection or a taste vector to hang off. The
+        # anonymous scope owns nothing by construction; giving it a profile
+        # would quietly make it a tenant with storage, which is the first step
+        # back towards a shared bucket.
+        return False
+
     if profile_already_ensured(uid):
         return True
 

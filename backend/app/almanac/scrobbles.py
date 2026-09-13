@@ -28,6 +28,8 @@ from typing import Any
 import urllib.parse
 import urllib.request
 
+from . import seed_corpus
+
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -77,8 +79,16 @@ SEED_CORPUS_LASTFM_USER = SEED_CORPUS_USER_ID
 LASTFM_USER = SEED_CORPUS_LASTFM_USER
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DATA_SCROBBLES_DIR = REPO_ROOT / "data/scrobbles"
+#: READ location for shipped corpus artifacts. Resolving to the demo corpus is
+#: correct and intended -- it is where ``track_catalog.jsonl`` actually lives.
+#: What is NOT correct is writing here, which is what used to happen: this
+#: doubled as the runtime cache directory, so the app mutated its own
+#: git-tracked seed. Item 5 split the two. Writes go to
+#: ``seed_corpus.RUNTIME_CACHE_DIR``; see ``seed_corpus.py``.
 CACHE_DIR = DATA_SCROBBLES_DIR if DATA_SCROBBLES_DIR.exists() else (REPO_ROOT / ".cache/scrobbles")
-BQ_CACHE_DIR = CACHE_DIR / "bq_query_cache"
+
+#: WRITE location for BigQuery query results. Always the runtime cache.
+BQ_CACHE_DIR = seed_corpus.RUNTIME_CACHE_DIR / "bq_query_cache"
 
 
 class ScrobbleEntry(BaseModel):
@@ -373,10 +383,12 @@ def fetch_firestore_summary() -> dict[str, Any] | None:
     if _SUMMARY_CACHE["data"] and (now - _SUMMARY_CACHE["ts"] < 300.0):
         return _SUMMARY_CACHE["data"]
 
-    summary_cache_file = CACHE_DIR / "summary_cache.json"
-    if summary_cache_file.exists() and not _SUMMARY_CACHE["data"]:
+    # Item 5: read from the runtime cache if a refresh has landed there,
+    # otherwise from the shipped read-only seed. Writes go to the former only.
+    summary_cache_read = seed_corpus.readable_path("summary_cache.json")
+    if summary_cache_read is not None and not _SUMMARY_CACHE["data"]:
         try:
-            cached = json.loads(summary_cache_file.read_text(encoding="utf-8"))
+            cached = json.loads(summary_cache_read.read_text(encoding="utf-8"))
             _SUMMARY_CACHE["data"] = cached
             _SUMMARY_CACHE["ts"] = now
             return cached
@@ -397,8 +409,11 @@ def fetch_firestore_summary() -> dict[str, Any] | None:
         _SUMMARY_CACHE["data"] = parsed
         _SUMMARY_CACHE["ts"] = now
         try:
-            summary_cache_file.parent.mkdir(parents=True, exist_ok=True)
-            summary_cache_file.write_text(json.dumps(parsed), encoding="utf-8")
+            seed_corpus.write_text(
+                seed_corpus.writable_path("summary_cache.json"), json.dumps(parsed)
+            )
+        except seed_corpus.SeedCorpusWriteRefused:
+            raise
         except Exception:
             pass
         return parsed
@@ -637,7 +652,8 @@ def _run_bigquery_rest_query_cached(
             return entry["rows"], "MEMORY_HIT", 0, 0.0
 
     # Tier 2: Persistent Disk Cache (.cache/scrobbles/bq_query_cache/{hash16}.json)
-    disk_file = BQ_CACHE_DIR / f"{qhash}.json"
+    # Item 5: BQ_CACHE_DIR used to resolve inside the read-only demo corpus.
+    disk_file = seed_corpus.RUNTIME_CACHE_DIR / "bq_query_cache" / f"{qhash}.json"
     if disk_file.exists():
         try:
             disk_data = json.loads(disk_file.read_text(encoding="utf-8"))
@@ -703,11 +719,12 @@ def _run_bigquery_rest_query_cached(
         # Persist to Tier 1 and Tier 2 caches
         _BQ_MEM_CACHE[qhash] = {"ts": now, "rows": parsed_rows}
         try:
-            BQ_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            disk_file.write_text(
+            seed_corpus.write_text(
+                disk_file,
                 json.dumps({"ts": now, "sql": normalized_sql, "rows": parsed_rows}),
-                encoding="utf-8",
             )
+        except seed_corpus.SeedCorpusWriteRefused:
+            raise
         except Exception:
             pass
 

@@ -20,6 +20,11 @@ flutter_app/.dart_tool/
 frontend/build/
 
 frontend/.dart_tool/
+# Runtime cache. Item 5 of the tenancy rework moved every generated artifact
+# here, out of data/scrobbles/, so the shipped demo corpus stays read-only and
+# the app can no longer mutate its own git-tracked seed.
+.cache/
+
 # Ignore raw temporary data dumps, keep pre-computed OLAP & QnA caches
 data/*
 !data/scrobbles/
