@@ -524,14 +524,30 @@ def build_themes_surface(
         # The Theme's own palette wins where it has one; the house palette fills
         # the gaps so a chip can never render with an undefined colour.
         swatch = {**palette, **(theme.palette or {})}
+        accent = swatch.get("accent", "#0369A1")
+        soft = swatch.get("accentSoft", "#E0F2FE")
+        chip_ink = swatch.get("accentInk", "#0C4A6E")
         theme_items.append(
             {
+                # ``themeId`` is what the ThemeChip template binds; ``id`` is what
+                # a renderer that draws the whole list from data binds. Both are
+                # the same string -- see the ThemeChips note below for why the
+                # item carries both spellings.
                 "themeId": theme.id,
+                "id": theme.id,
                 "name": theme.name,
                 "tagline": theme.tagline,
-                "swatchAccent": swatch.get("accent", "#0369A1"),
-                "swatchSoft": swatch.get("accentSoft", "#E0F2FE"),
-                "swatchInk": swatch.get("accentInk", "#0C4A6E"),
+                "swatchAccent": accent,
+                "swatchSoft": soft,
+                "swatchInk": chip_ink,
+                #: The same three colours as a map, because a list-rendering
+                #: chip reads a palette rather than three flat swatch keys.
+                "palette": {
+                    "accent": accent,
+                    "primary": accent,
+                    "base": soft,
+                    "ink": chip_ink,
+                },
                 "selected": theme.id == selected_theme,
             }
         )
@@ -572,6 +588,37 @@ def build_themes_surface(
                 "helpText": bind("/themes/helpText"),
                 "selectedThemeId": bind("/themes/selectedThemeId"),
                 "chips": ChildTemplate(component_id="themeChip", data_binding="/themes/items"),
+                # A ThemeChips renderer comes in two kinds and this node has to
+                # feed both, because the surface JSON is published to both.
+                #
+                # A generic A2UI renderer expands ``chips`` -- one ThemeChip
+                # prototype, rebased per row. A renderer that ships ThemeChips as
+                # a single self-drawing widget (the Flutter catalog does: it has
+                # no ThemeChip builder at all) never looks at the template and
+                # binds the ARRAY instead, under ``items``, with ``selected`` and
+                # ``title`` beside it and one node-level ``action`` it fires with
+                # the tapped row's id.
+                #
+                # Emitting only the template is what produced "themeChips: no
+                # themes bound to items": the chips were described, correctly,
+                # in a form that renderer cannot bind. The REST router used to
+                # paper over it by rewriting the node on its way to Flutter,
+                # which left every other consumer of this exact surface (the MCP
+                # stream, frontend/a2ui/catalog.json) still broken. The
+                # description belongs here, once, for everyone.
+                "items": bind("/themes/items"),
+                "selected": bind("/themes/selectedThemeId"),
+                "title": bind("/themes/label"),
+                # One action for the whole list: the renderer resolves it with
+                # the tapped row's id. The context still declares ``themeId``
+                # -- every emitted action must carry the keys its signature
+                # requires -- and defaults to the current selection, so firing
+                # it unresolved re-selects today's theme rather than failing.
+                "action": Action(
+                    action=FN_SELECT_THEME,
+                    context={"themeId": bind("/themes/selectedThemeId")},
+                    send_data_model=False,
+                ),
             },
         ),
         Component(

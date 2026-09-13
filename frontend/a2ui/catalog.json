@@ -357,6 +357,23 @@
         "selectedThemeId": {
           "$ref": "common_types.json#/$defs/DynamicString",
           "description": "Currently selected theme id."
+        },
+        "items": {
+          "$ref": "common_types.json#/$defs/DynamicArray",
+          "description": "The theme array itself, for renderers that draw the whole list rather than expanding the `chips` template. Each item carries id, name, tagline, palette{} and selected."
+        },
+        "selected": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Selected theme id, beside `items`."
+        },
+        "title": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Axis label, beside `items`."
+        },
+        "action": {
+          "$ref": "common_types.json#/$defs/Action",
+          "description": "Select the tapped theme. Dispatches `barogroove.selectTheme`.",
+          "x-a2ui-function": "barogroove.selectTheme"
         }
       },
       "required": [
@@ -376,7 +393,10 @@
               "label",
               "axisNote",
               "helpText",
-              "selectedThemeId"
+              "selectedThemeId",
+              "items",
+              "selected",
+              "title"
             ],
             "functions": [
               "barogroove.selectTheme"

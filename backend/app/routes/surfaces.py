@@ -167,11 +167,19 @@ def _transform_components(
             props["title"] = {"path": "/sky/heading"}
             comp["properties"] = props
         elif ctype == "ThemeChips":
+            # items / selected / title / action now come from the surface
+            # builder itself, so every consumer of that surface gets them and
+            # not just this route. All that is left is dropping the
+            # ChildTemplate, because Flutter's catalog has no ThemeChip builder
+            # and the prototype component is filtered out below -- an expanded
+            # template would reference a node that never arrives.
+            #
+            # A2UI serialises component properties FLAT, as siblings of `id`, so
+            # the template sits at the top level of the node and not under
+            # `properties`: popping only the latter (as this did) removed
+            # nothing at all.
+            comp.pop("chips", None)
             props.pop("chips", None)
-            props["items"] = {"path": "/themes/items"}
-            props["selected"] = {"path": "/themes/selectedThemeId"}
-            props["title"] = {"path": "/themes/label"}
-            props["action"] = {"actionId": FN_SELECT_THEME}
             comp["properties"] = props
         elif ctype == "GenreCorridor":
             props.pop("options", None)

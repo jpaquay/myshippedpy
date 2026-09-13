@@ -637,9 +637,22 @@ COMPONENTS: Final[dict[str, dict[str, Any]]] = {
             "axisNote": _dyn("String", "'Axis 1 of 2 - the weather register'."),
             "helpText": _dyn("String", "One line on what the axis does."),
             "selectedThemeId": _dyn("String", "Currently selected theme id."),
+            # A renderer that ships ThemeChips as one self-drawing widget has no
+            # ThemeChip prototype to expand, so it binds the array directly.
+            # Both forms are declared and both are always emitted: see the note
+            # in surfaces.build_themes_surface.
+            "items": _dyn(
+                "Array",
+                "The theme array itself, for renderers that draw the whole list "
+                "rather than expanding the `chips` template. Each item carries "
+                "id, name, tagline, palette{} and selected.",
+            ),
+            "selected": _dyn("String", "Selected theme id, beside `items`."),
+            "title": _dyn("String", "Axis label, beside `items`."),
+            "action": _action("Select the tapped theme.", FN_SELECT_THEME),
         },
         required=["chips"],
-        bindable=["label", "axisNote", "helpText", "selectedThemeId"],
+        bindable=["label", "axisNote", "helpText", "selectedThemeId", "items", "selected", "title"],
         actions=[FN_SELECT_THEME],
         design="Chips are pill-shaped, bordered, and tint with their own accentSoft.",
     ),
