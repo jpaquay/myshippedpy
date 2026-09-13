@@ -2,9 +2,27 @@
 ///
 /// ## Policy
 ///
-/// Every call has a timeout, retries idempotent GETs with exponential backoff
-/// and jitter, and returns an [ApiResult] rather than throwing. Nothing in
-/// this app should be able to die because a network was slow.
+/// Every call has a bounded timeout, retries *idempotent* requests with
+/// exponential backoff and jitter, and returns an [ApiResult] rather than
+/// throwing. Nothing in this app should be able to die because a network was
+/// slow.
+///
+/// ### What may be retried, and why
+///
+/// A retry is only free if repeating the call cannot act twice. So:
+///
+/// * **GET** — retried. Reads cannot change anything.
+/// * **POST** — *not* retried by default. A timeout means the answer went
+///   missing, not that the request did; the server may well have acted.
+///   Retrying `/api/forge` on a timeout is how one tap becomes two playlists.
+/// * **POST with an idempotency key** — retried, by explicit opt-in. Only
+///   [startForgeJob] qualifies: it carries a client-generated `job_id` that
+///   the backend dedupes on, so a repeat provably joins the existing run
+///   instead of starting a second.
+/// * **DELETE** — not retried; a repeat turns success into a confusing 404.
+///
+/// Long-running work is watched with [watchForgeJob], which reconnects across
+/// transient failures instead of surrendering to the first one.
 ///
 /// "Graceful degradation" here means something specific and slightly
 /// unfashionable: we do NOT hide failures. A degraded backend reports what is
@@ -152,6 +170,18 @@ class BarogrooveApi {
   final http.Client _client;
   final Random _jitter = Random();
 
+  /// First backoff step. Doubles per attempt, capped at [_backoffCeilingMs].
+  static const int _backoffBaseMs = 300;
+
+  /// Nobody waits ten seconds between retries of a foreground action.
+  static const int _backoffCeilingMs = 6000;
+
+  /// Consecutive failed polls before a job watch gives up. Generous on
+  /// purpose: the job is still running on the server, so the cost of trying
+  /// again is a single cheap GET, while the cost of quitting early is telling
+  /// someone their playlist is gone when it is not.
+  static const int _maxPollFailures = 6;
+
   void dispose() => _client.close();
 
   // =========================================================================
@@ -268,7 +298,9 @@ class BarogrooveApi {
   ///
   /// Sending the same [jobId] twice is explicitly safe: the server returns
   /// the existing job with `resumed == true` rather than forging again. That
-  /// is what makes this the one POST in this client that may be retried.
+  /// is what makes this the one POST in this client that may be retried —
+  /// the key turns a write into something repeat-safe, so `idempotent: true`
+  /// here is an earned exception, not an optimistic one.
   Future<ApiResult<ForgeJob>> startForgeJob(
     ForgeRequest request, {
     required String jobId,
@@ -279,6 +311,7 @@ class BarogrooveApi {
         ForgeJob.fromJson,
         query: <String, String>{'job_id': jobId},
         timeout: const Duration(seconds: 20),
+        idempotent: true,
       );
 
   /// Polls one job. Pure read; safe to call as often as you like.
@@ -758,9 +791,15 @@ class BarogrooveApi {
     T Function(JsonMap json) decode, {
     Map<String, String>? query,
     Duration? timeout,
+    bool idempotent = false,
   }) async {
-    final ApiResult<http.Response> res =
-        await _post(path, body, query: query, timeout: timeout);
+    final ApiResult<http.Response> res = await _post(
+      path,
+      body,
+      query: query,
+      timeout: timeout,
+      idempotent: idempotent,
+    );
     return res.when(
       ok: (http.Response r) => _decodeObject(r.body, decode, path),
       failed: (ApiFailure<http.Response> f) => f.cast<T>(),
@@ -826,20 +865,29 @@ class BarogrooveApi {
             _client.delete(uri, headers: headers),
       );
 
-  /// POST. Retried only on a timeout or a 5xx, and only because the BAROGROOVE
-  /// POST endpoints are all either idempotent or cheap to repeat. Do not add
-  /// a non-idempotent POST here without narrowing this.
+  /// POST. **Not retried** unless the caller says the operation is idempotent.
+  ///
+  /// This used to retry every POST on a timeout or a 5xx, on the theory that
+  /// the BAROGROOVE POST endpoints were "all either idempotent or cheap to
+  /// repeat". `/api/forge` was neither: a timed-out forge that had in fact
+  /// succeeded got forged a second time, which is a minute of upstream work
+  /// and a duplicate playlist. A timeout tells you the answer went missing,
+  /// not that the request did.
+  ///
+  /// Pass `idempotent: true` only with a reason — an idempotency key the
+  /// server dedupes on, or an operation that genuinely cannot act twice.
   Future<ApiResult<http.Response>> _post(
     String path,
     JsonMap body, {
     Map<String, String>? query,
     Duration? timeout,
+    bool idempotent = false,
   }) =>
       _send(
         path: path,
         query: query,
         timeout: timeout,
-        retryable: true,
+        retryable: idempotent,
         perform: (Uri uri, Map<String, String> headers) => _client.post(
           uri,
           headers: headers,
@@ -847,23 +895,59 @@ class BarogrooveApi {
         ),
       );
 
-  /// Polls [jobId] until it reaches a terminal state, yielding each snapshot.
+  /// Exponential backoff with full jitter, capped.
   ///
-  /// The stream ends when the job is done or failed. A poll that itself fails
-  /// ends the stream with an [ApiFailure] error — the caller decides whether
-  /// that is worth restarting for.
+  /// Jitter is not decoration: without it every widget that failed on the
+  /// same dropped connection retries on the same millisecond, and the backend
+  /// gets the spike it was already struggling with.
+  Duration _backoff(int attempt) {
+    final int base = _backoffBaseMs * (1 << (attempt - 1).clamp(0, 6));
+    final int capped = base.clamp(0, _backoffCeilingMs);
+    return Duration(milliseconds: capped ~/ 2 + _jitter.nextInt(capped ~/ 2 + 1));
+  }
+
+  /// Polls [jobId] to a terminal state, yielding each snapshot, and
+  /// *reconnecting* across transient failures rather than giving up on them.
+  ///
+  /// This is the stream-reconnect half of the transport hardening. A poll is
+  /// used instead of a socket precisely because it makes reconnection
+  /// trivial: there is no connection to re-establish, only a next tick. A
+  /// dropped network, a backgrounded tab that suspends timers, a backend
+  /// rolling a new revision — all of it looks like one failed tick, and the
+  /// loop simply tries again on a jittered backoff.
+  ///
+  /// It gives up in exactly two cases, both of which are answers rather than
+  /// interruptions:
+  ///   * a *fatal* failure (404 — this backend has no such job; 401/403 — not
+  ///     ours to watch), rethrown immediately;
+  ///   * [_maxPollFailures] consecutive transient failures, at which point
+  ///     the network is not coming back on its own.
+  ///
+  /// A successful poll resets the failure budget, so a long job across a flaky
+  /// connection survives indefinitely as long as it makes occasional progress.
   Stream<ForgeJob> _watchForgeJob(
     String jobId, {
     required Duration interval,
   }) async* {
+    int consecutiveFailures = 0;
+
     while (true) {
       final ApiResult<ForgeJob> res = await forgeJobStatus(jobId);
-
       final ApiFailure<ForgeJob>? failure = res.failureOrNull;
+
       if (failure != null) {
-        throw failure;
+        final bool fatal = failure.kind == ApiFailureKind.notFound ||
+            failure.kind == ApiFailureKind.unauthorized;
+        consecutiveFailures++;
+        if (fatal || consecutiveFailures >= _maxPollFailures) {
+          throw failure;
+        }
+        // Transient. Wait a bit longer each time and reconnect.
+        await Future<void>.delayed(_backoff(consecutiveFailures));
+        continue;
       }
 
+      consecutiveFailures = 0;
       final ForgeJob job = res.valueOrNull!;
       yield job;
       if (job.isTerminal) return;
@@ -946,12 +1030,9 @@ class BarogrooveApi {
       }
 
       if (attempt < attempts) {
-        // Exponential backoff with jitter. Jitter matters: without it a
-        // dozen widgets that all failed at once retry in lockstep.
-        final int base = 300 * (1 << (attempt - 1));
-        await Future<void>.delayed(
-          Duration(milliseconds: base + _jitter.nextInt(250)),
-        );
+        // Exponential backoff with jitter, shared with the job watcher so
+        // there is exactly one backoff curve in this client.
+        await Future<void>.delayed(_backoff(attempt));
       }
     }
 

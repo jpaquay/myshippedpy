@@ -7,8 +7,36 @@ House rules, enforced here so no connector has to remember them:
   (429, 5xx, connect errors). A 403 from Spotify is *not* transient — that is
   the November 2024 deprecation talking, and retrying it is just rudeness.
 * ``Retry-After`` is honoured when present. Last.fm and Spotify both send it.
+* The *whole* call is bounded, not just each attempt: a total budget caps
+  attempts plus backoff, so a wedged upstream cannot hold a request open for
+  ``retries × (timeout + 12s)``.
 * Failures raise :class:`UpstreamError`, which carries enough context for the
   caller to decide between "degrade" and "give up".
+
+Retry safety — read this before widening anything
+-------------------------------------------------
+A retry is only free if repeating the call cannot change the world twice.
+That is a property of the *operation*, not of the error, so the policy keys
+off the HTTP method:
+
+``GET`` / ``HEAD`` / ``OPTIONS`` / ``PUT`` / ``DELETE``
+    Idempotent by definition. Full policy: retried on connect errors, read
+    timeouts, 429 and 5xx.
+
+``POST`` (and anything else)
+    Assumed to change state. Retried **only** on a connect error — the one
+    failure mode where we know the request never reached the server, because
+    no connection was ever established. A read timeout is explicitly *not*
+    retried: the server may well have acted and only the response was lost,
+    and "probably fine" is not a standard to duplicate a user's playlist on.
+    A 5xx is likewise not retried; the server definitely saw the request.
+
+This is not theoretical. ``POST /v1/users/{id}/playlists`` and
+``POST /v1/playlists/{id}/tracks`` in ``sinks/spotify.py`` both used to be
+retried on a 5xx, which is how you end up with two playlists, or one playlist
+with every track twice. Callers that know better can override with
+``idempotent=True`` — the forge job start does exactly that, because its
+``job_id`` is an idempotency key the server dedupes on.
 
 Connectors should never construct their own ``httpx.AsyncClient``.
 """
@@ -18,6 +46,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import time
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
@@ -32,6 +61,14 @@ RETRYABLE_STATUS: frozenset[int] = frozenset({408, 425, 429, 500, 502, 503, 504}
 
 #: Statuses that mean "this endpoint is gone, stop asking" — the Nov 2024 cliff.
 DEPRECATED_STATUS: frozenset[int] = frozenset({403, 404, 410})
+
+#: Methods whose repetition is a no-op on the server, per RFC 9110. These get
+#: the full retry policy; everything else is treated as state-changing.
+IDEMPOTENT_METHODS: frozenset[str] = frozenset({"GET", "HEAD", "OPTIONS", "PUT", "DELETE"})
+
+#: Extra wall-clock slack on top of (attempts x per-request timeout), covering
+#: the jittered backoff sleeps. Keeps the worst case finite and predictable.
+TOTAL_BUDGET_SLACK_S: float = 15.0
 
 
 class UpstreamError(RuntimeError):
@@ -148,14 +185,34 @@ async def request_json(
     settings: Settings | None = None,
     max_retries: int | None = None,
     expect_json: bool = True,
+    idempotent: bool | None = None,
+    budget_s: float | None = None,
 ) -> Any:
     """Perform a request with the house retry policy and return parsed JSON.
 
     Raises :class:`UpstreamError` on definitive failure. Callers are expected
     to catch it and degrade — see each connector's fallback path.
+
+    ``idempotent`` overrides the method-derived default. Pass ``True`` only
+    when repeating the call genuinely cannot act twice — either the operation
+    is naturally a no-op on repeat, or the upstream dedupes on a key you sent.
+    Pass ``False`` to forbid all retries, including the connect-error one.
+
+    ``budget_s`` caps total wall-clock across attempts and backoff. The
+    default derives from the per-request timeout, so no call can hang around
+    for the full ``retries × (timeout + max backoff)`` worst case.
     """
     s = settings or get_settings()
     retries = s.http_max_retries if max_retries is None else max_retries
+    verb = method.upper()
+    safe = verb in IDEMPOTENT_METHODS if idempotent is None else bool(idempotent)
+    if budget_s is None:
+        budget_s = (retries + 1) * s.http_timeout_s + TOTAL_BUDGET_SLACK_S
+    started = time.monotonic()
+
+    def _budget_left() -> float:
+        return budget_s - (time.monotonic() - started)
+
     client = await get_client(s)
     clean_params = {k: v for k, v in (params or {}).items() if v is not None}
 
@@ -165,19 +222,42 @@ async def request_json(
         _STATS.by_service[service] = _STATS.by_service.get(service, 0) + 1
         try:
             resp = await client.request(
-                method.upper(), url,
+                verb, url,
                 params=clean_params or None,
                 json=json_body,
                 data=dict(data) if data else None,
                 headers=dict(headers) if headers else None,
             )
-        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout,
-                httpx.WriteTimeout, httpx.PoolTimeout) as exc:
+        except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+            # The connection was never established, so the server cannot have
+            # seen this request. Safe to repeat even for a POST — this is the
+            # single exception to the "no retrying writes" rule.
             last = exc
             if attempt >= retries:
                 break
-            _STATS.retries += 1
             delay = _sleep_for(attempt, s.http_backoff_base_s, None)
+            if delay >= _budget_left():
+                log.warning("%s connect error; out of budget, giving up", service)
+                break
+            _STATS.retries += 1
+            log.warning("%s transport error (%s); retry %d in %.2fs", service, type(exc).__name__, attempt + 1, delay)
+            await asyncio.sleep(delay)
+            continue
+        except (httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout) as exc:
+            # The request may well have been delivered and acted upon; only
+            # the answer went missing. Repeating an idempotent call is still
+            # free, but repeating a write here is how you get two playlists.
+            last = exc
+            if not safe:
+                log.warning("%s %s timed out; not retrying a non-idempotent call", service, verb)
+                break
+            if attempt >= retries:
+                break
+            delay = _sleep_for(attempt, s.http_backoff_base_s, None)
+            if delay >= _budget_left():
+                log.warning("%s timeout; out of budget, giving up", service)
+                break
+            _STATS.retries += 1
             log.warning("%s transport error (%s); retry %d in %.2fs", service, type(exc).__name__, attempt + 1, delay)
             await asyncio.sleep(delay)
             continue
@@ -191,12 +271,16 @@ async def request_json(
                 status=resp.status_code, retryable=False, url=str(resp.request.url),
             )
 
-        if resp.status_code in RETRYABLE_STATUS and attempt < retries:
-            _STATS.retries += 1
+        # A 5xx/429 means the server saw the request. Repeating it is only
+        # safe when the operation itself is idempotent.
+        if resp.status_code in RETRYABLE_STATUS and attempt < retries and safe:
             delay = _sleep_for(attempt, s.http_backoff_base_s, resp.headers.get("Retry-After"))
-            log.warning("%s HTTP %d; retry %d in %.2fs", service, resp.status_code, attempt + 1, delay)
-            await asyncio.sleep(delay)
-            continue
+            if delay < _budget_left():
+                _STATS.retries += 1
+                log.warning("%s HTTP %d; retry %d in %.2fs", service, resp.status_code, attempt + 1, delay)
+                await asyncio.sleep(delay)
+                continue
+            log.warning("%s HTTP %d; out of budget, giving up", service, resp.status_code)
 
         if resp.status_code >= 400:
             _STATS.failures += 1
@@ -228,6 +312,10 @@ async def get_json(url: str, *, service: str, **kwargs: Any) -> Any:
 
 
 async def post_json(url: str, *, service: str, **kwargs: Any) -> Any:
+    """POST. Retried only on a connect error unless you pass ``idempotent=True``.
+
+    Say why in a comment when you do pass it. "It seemed flaky" is not why.
+    """
     return await request_json("POST", url, service=service, **kwargs)
 
 
