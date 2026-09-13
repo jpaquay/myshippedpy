@@ -8,6 +8,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'a2ui/actions.dart';
 import 'a2ui/catalog.dart';
@@ -15,12 +16,77 @@ import 'a2ui/renderer.dart';
 import 'api/auth_interceptor.dart';
 import 'api/client.dart';
 import 'api/models.dart';
+import 'app_theme.dart';
 import 'auth/auth_service.dart';
 import 'auth/pairing_service.dart';
 
-/// User-controlled Dark/Light ThemeMode (top-right switch in AppBar).
-final StateProvider<ThemeMode> themeModeProvider =
-    StateProvider<ThemeMode>((Ref ref) => ThemeMode.dark);
+// ===========================================================================
+// Appearance
+// ===========================================================================
+
+/// Holds the user's Dark / Light / As-host choice and persists it.
+///
+/// Storage is `shared_preferences`, which the pairing service already uses —
+/// on web that is `localStorage`, so the choice survives a reload and a new
+/// session on the same browser. Persistence is deliberately best-effort:
+/// a browser with storage disabled, or a private window, must give you a
+/// working app that simply forgets, not a start-up crash.
+///
+/// First run, or an unreadable value: [BgThemeChoice.host]. The app follows
+/// the OS until the user says otherwise.
+class BgThemeController extends StateNotifier<BgThemeChoice> {
+  BgThemeController({Future<SharedPreferences>? preferences})
+      : _preferences = preferences ?? SharedPreferences.getInstance(),
+        super(BgThemeChoice.fallback) {
+    restored = _restore();
+  }
+
+  /// The key the choice is stored under. Part of the contract; do not rename.
+  static const String storageKey = 'bg.theme.choice';
+
+  final Future<SharedPreferences> _preferences;
+
+  /// Completes once the stored choice (if any) has been applied. Tests await
+  /// it; the app does not need to — the first frame renders on the default
+  /// and swaps in the stored value on the next one.
+  late final Future<void> restored;
+
+  Future<void> _restore() async {
+    try {
+      final SharedPreferences prefs = await _preferences;
+      final BgThemeChoice? stored =
+          BgThemeChoice.byId(prefs.getString(storageKey));
+      if (stored != null && mounted) state = stored;
+    } catch (_) {
+      // Storage unavailable. Keep the default; this is not worth a dialog.
+    }
+  }
+
+  /// Records an explicit choice. The UI updates immediately; the write is
+  /// fire-and-forget because a failed write must not block a repaint.
+  Future<void> choose(BgThemeChoice choice) async {
+    if (mounted) state = choice;
+    try {
+      final SharedPreferences prefs = await _preferences;
+      await prefs.setString(storageKey, choice.id);
+    } catch (_) {
+      // See above.
+    }
+  }
+}
+
+/// The three-option appearance control's state (Settings → APPEARANCE).
+final StateNotifierProvider<BgThemeController, BgThemeChoice>
+    bgThemeChoiceProvider =
+    StateNotifierProvider<BgThemeController, BgThemeChoice>(
+  (Ref ref) => BgThemeController(),
+);
+
+/// What `MaterialApp` consumes. Derived — there is one source of truth and it
+/// is [bgThemeChoiceProvider].
+final Provider<ThemeMode> themeModeProvider = Provider<ThemeMode>(
+  (Ref ref) => ref.watch(bgThemeChoiceProvider).mode,
+);
 
 // ===========================================================================
 // Settings deep links

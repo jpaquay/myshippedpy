@@ -396,6 +396,40 @@ class BgText {
       );
 }
 
+/// What the user picked in Settings → APPEARANCE (spec §7.4).
+///
+/// Three options, not a toggle. [host] means "follow the operating system",
+/// it is the **default**, and it is what a first run gets — the app has no
+/// business overriding a preference the user already expressed to their OS.
+enum BgThemeChoice {
+  dark('dark', 'Dark', Icons.dark_mode_outlined, ThemeMode.dark),
+  light('light', 'Light', Icons.light_mode_outlined, ThemeMode.light),
+  host('host', 'As host', Icons.contrast, ThemeMode.system);
+
+  const BgThemeChoice(this.id, this.label, this.icon, this.mode);
+
+  /// Stable string written to storage. Never renamed — a rename silently
+  /// resets everyone's preference.
+  final String id;
+
+  final String label;
+  final IconData icon;
+  final ThemeMode mode;
+
+  /// The default, and what an unreadable or absent stored value falls back to.
+  static const BgThemeChoice fallback = host;
+
+  /// Parses a stored [id]. Anything unrecognised — a value from a future
+  /// build, a corrupted profile — yields `null` so the caller can fall back
+  /// rather than crash on start-up.
+  static BgThemeChoice? byId(String? id) {
+    for (final BgThemeChoice c in values) {
+      if (c.id == id) return c;
+    }
+    return null;
+  }
+}
+
 class BgTheme {
   const BgTheme._();
 

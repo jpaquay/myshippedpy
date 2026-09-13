@@ -26,6 +26,7 @@ import '../providers.dart';
 import '../pwa/pwa_install.dart';
 import 'widgets/section.dart';
 import 'widgets/status_notes.dart';
+import 'widgets/theme_mode_control.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -270,6 +271,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
             ),
           ),
+        ),
+
+        const SizedBox(height: BgSpace.xxl),
+
+        // --- Appearance -------------------------------------------------
+        // The only home of the theme control (spec §7.4). One row, nothing
+        // else; the header and the navigation rail no longer carry a copy.
+        Section(
+          key: _appearanceKey,
+          eyebrow: 'APPEARANCE',
+          child: const ThemeModeControl(),
         ),
 
         const SizedBox(height: BgSpace.xxl),

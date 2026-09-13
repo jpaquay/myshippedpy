@@ -103,8 +103,6 @@ class AppShellState extends ConsumerState<AppShell> {
       appBar: AppBar(
         title: const BarogrooveWordmark(compact: true),
         actions: <Widget>[
-          const _ThemeModeSwitchButton(),
-          const SizedBox(width: BgSpace.xs),
           const _HealthPip(),
           const SizedBox(width: BgSpace.sm),
           const _AccountMenu(),
@@ -361,7 +359,6 @@ class _HealthPip extends ConsumerWidget {
         bg.statusDanger,
         'Backend unreachable',
         <String>['$e'],
-        ref,
         null,
       ),
       data: (HealthStatus healthData) {
@@ -373,7 +370,6 @@ class _HealthPip extends ConsumerWidget {
           bg.statusWarn,
           healthData.ok ? 'Running degraded' : 'Backend unhealthy',
           healthData.degraded,
-          ref,
           healthData,
         );
       },
@@ -393,7 +389,6 @@ class _HealthPip extends ConsumerWidget {
       bg.hairline,
       healthData == null ? 'Checking the backend' : 'All systems nominal',
       const <String>[],
-      null,
       healthData,
     );
   }
@@ -403,7 +398,6 @@ class _HealthPip extends ConsumerWidget {
     Color tone,
     String label,
     List<String> details,
-    WidgetRef? ref,
     HealthStatus? healthStatus,
   ) {
     return Tooltip(
@@ -714,43 +708,14 @@ enum _AccountAction {
     install,
   ];
 
-  /// Read-only current value shown on the right of the row.
+  /// Read-only current value shown on the right of the row — the account
+  /// menu reports the appearance setting, it does not change it.
   String? valueLabel(WidgetRef ref) => switch (this) {
-        _AccountAction.appearance => null,
+        // `read`, not `watch`: menus and sheets are built outside the
+        // widget's build phase.
+        _AccountAction.appearance => ref.read(bgThemeChoiceProvider).label,
         _ => null,
       };
-}
-
-/// Binary Dark/Light toggle.
-///
-/// TEMPORARY. Spec §7.4 replaces this with a three-option control
-/// (Dark / Light / As host) living in Settings → APPEARANCE. This copy is the
-/// header one; the duplicate in `NavigationRail.trailing` is already gone.
-/// De-neoned here in the meantime: no gold glow, no accent-alpha fill — an
-/// icon button with a tooltip, like every other thing in the header.
-class _ThemeModeSwitchButton extends ConsumerWidget {
-  const _ThemeModeSwitchButton();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final ThemeMode mode = ref.watch(themeModeProvider);
-    final bool isDark = mode == ThemeMode.dark ||
-        (mode == ThemeMode.system &&
-            Theme.of(context).brightness == Brightness.dark);
-
-    return IconButton(
-      tooltip: isDark ? 'Dark theme · switch to light' : 'Light theme · switch to dark',
-      iconSize: BgIcon.chrome,
-      icon: Icon(
-        isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
-      ),
-      onPressed: () {
-        HapticFeedback.selectionClick();
-        ref.read(themeModeProvider.notifier).state =
-            isDark ? ThemeMode.light : ThemeMode.dark;
-      },
-    );
-  }
 }
 
 class _Identity extends StatelessWidget {
