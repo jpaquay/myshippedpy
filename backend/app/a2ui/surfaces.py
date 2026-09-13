@@ -73,7 +73,7 @@ from .catalog import (
     SKY_DIM_UNITS,
     SKY_DIM_WEIGHTS,
 )
-from .palette import THEME_PALETTES, surface_properties_for
+from .palette import THEME_PALETTES, icon_for, surface_properties_for
 from .protocol import (
     Action,
     AgentFunctionResponse,
@@ -540,6 +540,12 @@ def build_themes_surface(
                 "swatchAccent": accent,
                 "swatchSoft": soft,
                 "swatchInk": chip_ink,
+                #: The glyph, as a semantic token from ``palette.THEME_ICONS``.
+                #: It rides here beside the tint and for the same reason: icon
+                #: identity is presentation vocabulary the backend owns.  The
+                #: renderer resolves token -> IconData through a const map; it
+                #: must never go back to guessing from the id.
+                "icon": icon_for(theme.id),
                 #: The same three colours as a map, because a list-rendering
                 #: chip reads a palette rather than three flat swatch keys.
                 "palette": {
@@ -629,6 +635,7 @@ def build_themes_surface(
                 "themeId": bind("/themeId"),
                 "name": bind("/name"),
                 "tagline": bind("/tagline"),
+                "icon": bind("/icon"),
                 "swatchAccent": bind("/swatchAccent"),
                 "swatchSoft": bind("/swatchSoft"),
                 "swatchInk": bind("/swatchInk"),

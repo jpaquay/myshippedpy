@@ -882,7 +882,10 @@ class _ForgeActionDeck extends StatelessWidget {
                         color: Colors.white,
                       ),
                     )
-                  : const Icon(Icons.bolt, size: 20),
+                  // UX_IA_SPEC §1.3: the FORGE CTA is an arrow ("produce
+                  // this"), not a lightning bolt. `play_arrow` was taken by the
+                  // mini-player, so `east`.
+                  : const Icon(Icons.east, size: BgIcon.chrome),
               label: Text(
                 forging
                     ? 'SYNTHESIZING ATMOSPHERIC SOUNDTRACK…'

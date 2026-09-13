@@ -47,6 +47,7 @@ from ..a2ui.palette import (
     THEME_IDS,
     THEME_INTENT,
     THEME_PALETTES,
+    icon_for,
     resolve_theme_id,
 )
 from ..a2ui.protocol import A2UI_MIME_TYPE, A2UIProtocolError
@@ -276,6 +277,12 @@ def _transform_data_model(
                 it = dict(item)
                 tid = it.get("themeId") or it.get("id") or ""
                 it["id"] = tid
+                # The builder already emits ``icon``; this is the belt to that
+                # brace, for a payload that reached the adapter from somewhere
+                # older.  Same registry either way -- the adapter must never
+                # invent a second icon vocabulary of its own.
+                if not it.get("icon"):
+                    it["icon"] = icon_for(tid)
                 it["palette"] = {
                     "accent": it.get("swatchAccent", "#0369A1"),
                     "primary": it.get("swatchAccent", "#0369A1"),

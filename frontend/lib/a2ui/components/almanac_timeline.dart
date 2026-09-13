@@ -405,7 +405,10 @@ class _EmptyAlmanac extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Icon(Icons.auto_stories_outlined,
+          // UX_IA_SPEC §1.3: the Almanac is a ledger, not a spellbook.
+          // `auto_stories` is the magic-book glyph; the frozen one is
+          // `menu_book_outlined`.
+          Icon(Icons.menu_book_outlined,
               size: 28, color: node.colors.onSurfaceVariant),
           const SizedBox(height: BgSpace.md),
           Text(

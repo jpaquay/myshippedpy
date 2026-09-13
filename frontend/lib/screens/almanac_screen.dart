@@ -396,7 +396,10 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
         const SizedBox(width: BgSpace.sm),
         // Direct shortcut pill to the main-menu Data Viz & Gemini Live QnA Studio
         ActionChip(
-          avatar: Icon(Icons.insights_rounded, size: 16, color: colors.primary),
+          // UX_IA_SPEC §1.3: Data Viz is `query_stats`. `insights` is the
+          // placeholder glyph with the sparkle in it, and this pill navigates
+          // to Data Viz, so it must wear the destination's frozen icon.
+          avatar: Icon(Icons.query_stats, size: 16, color: colors.primary),
           label: Text(
             'Data Viz & Live QnA →',
             style: text.labelMedium?.copyWith(
@@ -701,7 +704,9 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
               const SizedBox(height: BgSpace.md),
               FilledButton.icon(
                 onPressed: () => AppShell.of(context)?.go(BgDestination.forge),
-                icon: const Icon(Icons.bolt_rounded, size: 18),
+                // Navigation, not production: wear the Forge destination's own
+                // glyph (UX_IA_SPEC §1.3) rather than the banned bolt.
+                icon: const Icon(Icons.explore_outlined, size: BgIcon.inline),
                 label: const Text('Go to Forge'),
               ),
             ],
@@ -1762,7 +1767,8 @@ class _FloatingSeedBar extends StatelessWidget {
                       color: Colors.white,
                     ),
                   )
-                : const Icon(Icons.bolt_rounded, size: 16),
+                // UX_IA_SPEC §1.3: the FORGE CTA is `east`, never a bolt.
+                : const Icon(Icons.east, size: 16),
             label: Text(
               forging ? 'FORGING…' : 'FORGE DAYLIST WITH SEEDS',
               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),

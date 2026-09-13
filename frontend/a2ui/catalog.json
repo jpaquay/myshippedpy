@@ -360,7 +360,7 @@
         },
         "items": {
           "$ref": "common_types.json#/$defs/DynamicArray",
-          "description": "The theme array itself, for renderers that draw the whole list rather than expanding the `chips` template. Each item carries id, name, tagline, palette{} and selected."
+          "description": "The theme array itself, for renderers that draw the whole list rather than expanding the `chips` template. Each item carries id, name, tagline, icon, palette{} and selected."
         },
         "selected": {
           "$ref": "common_types.json#/$defs/DynamicString",
@@ -427,6 +427,10 @@
           "$ref": "common_types.json#/$defs/DynamicString",
           "description": "Six-word promise."
         },
+        "icon": {
+          "$ref": "common_types.json#/$defs/DynamicString",
+          "description": "Semantic icon token from palette.THEME_ICONS (e.g. 'water_drop'). The renderer maps token -> glyph through a static table; it must not guess a glyph from the theme id."
+        },
         "swatchAccent": {
           "$ref": "common_types.json#/$defs/DynamicString",
           "description": "#RRGGBB accent for the swatch."
@@ -466,6 +470,7 @@
               "themeId",
               "name",
               "tagline",
+              "icon",
               "swatchAccent",
               "swatchSoft",
               "swatchInk",

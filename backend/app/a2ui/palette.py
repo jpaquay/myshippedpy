@@ -18,9 +18,10 @@ THEME IDS ARE NOT OWNED HERE
 *tints* it.  It used to carry a second, divergent list of its own (a set of
 design-time working names), which is how the theme chips could offer an id that
 ``selectTheme`` then rejected as invalid.  :data:`THEME_IDS` below is now a
-re-export of the contract, :data:`THEME_PALETTES` and :data:`THEME_INTENT` are
-keyed by it, and an import-time guard (:func:`_assert_no_theme_drift`) refuses to
-load the module if the three ever diverge again.
+re-export of the contract, :data:`THEME_PALETTES`, :data:`THEME_INTENT` and
+:data:`THEME_ICONS` are keyed by it, and an import-time guard
+(:func:`_assert_no_theme_drift`) refuses to load the module if they ever diverge
+again.
 
 CONTRAST
 --------
@@ -69,6 +70,9 @@ __all__ = [
     "THEME_PALETTES",
     "THEME_IDS",
     "THEME_INTENT",
+    "THEME_ICONS",
+    "FALLBACK_THEME_ICON",
+    "icon_for",
     "RETIRED_THEME_ALIASES",
     "RETIRED_THEME_IDS",
     "resolve_theme_id",
@@ -379,6 +383,51 @@ THEME_INTENT: Final[dict[str, str]] = {
     "sirocco": "A warm wind from the wrong direction. Dust and kiln, nothing blue.",
 }
 
+#: The glyph each theme wears, as a stable SEMANTIC TOKEN -- never a codepoint.
+#:
+#: Icon identity is presentation vocabulary exactly like the tint and the intent
+#: line, so it is owned here and travels with them.  It used to be *guessed* in
+#: Dart by substring (``id.contains('rain')``, ``contains('fog')`` ...), which
+#: silently collapsed heatwave_cruise, blue_hour, first_frost and sirocco onto
+#: one meaningless fallback glyph because none of them contained any of the
+#: words the guesser knew.  The renderer now looks the token up instead.
+#:
+#: Rules for anyone editing this table:
+#:   * A token is a lowercase Material-icon family name (``water_drop``), NOT a
+#:     Flutter constant and NOT a font codepoint.  The renderer maps token ->
+#:     ``IconData`` through its own const map so Flutter web can still tree-shake
+#:     the icon font; an int crossing this boundary would ship blank boxes.
+#:   * Tokens must be DISTINCT -- two themes sharing a glyph is the bug this
+#:     table exists to prevent, so :func:`_assert_no_theme_drift` rejects it.
+#:   * Adding a theme id without adding its icon fails at import time.
+THEME_ICONS: Final[dict[str, str]] = {
+    "petrichor": "water_drop",
+    "golden_hour": "wb_twilight",
+    "nordic_fog": "foggy",
+    "storm_front": "thunderstorm",
+    "heatwave_cruise": "wb_sunny",
+    "blue_hour": "nights_stay",
+    "first_frost": "ac_unit",
+    "sirocco": "air",
+}
+
+#: The one token a renderer is allowed to fall back to, and the one this module
+#: emits for an id it does not know.  It is deliberately part of the vocabulary
+#: rather than a Dart-only secret, so "we could not identify this theme" looks
+#: the same on both sides of the wire.
+FALLBACK_THEME_ICON: Final[str] = "graphic_eq"
+
+
+def icon_for(theme_id: str | None) -> str:
+    """Return the icon token for ``theme_id``, resolving retired spellings.
+
+    Unknown or missing ids get :data:`FALLBACK_THEME_ICON` rather than raising:
+    a surface that cannot name its theme should still draw a chip.
+    """
+    resolved = resolve_theme_id(theme_id) if theme_id else None
+    return THEME_ICONS.get(resolved or "", FALLBACK_THEME_ICON)
+
+
 def _assert_no_theme_drift() -> None:
     """Refuse to import if the tints and the contract have drifted apart.
 
@@ -387,7 +436,11 @@ def _assert_no_theme_drift() -> None:
     import-time check, no second chance.
     """
     canonical = set(THEME_IDS)
-    for name, keys in (("THEME_PALETTES", set(THEME_PALETTES)), ("THEME_INTENT", set(THEME_INTENT))):
+    for name, keys in (
+        ("THEME_PALETTES", set(THEME_PALETTES)),
+        ("THEME_INTENT", set(THEME_INTENT)),
+        ("THEME_ICONS", set(THEME_ICONS)),
+    ):
         missing = sorted(canonical - keys)
         extra = sorted(keys - canonical)
         if missing or extra:
@@ -395,6 +448,17 @@ def _assert_no_theme_drift() -> None:
                 f"palette.{name} has drifted from contracts.THEME_IDS: "
                 f"missing={missing} unexpected={extra}"
             )
+    # Two themes wearing the same glyph is the exact symptom the icon table was
+    # introduced to kill, so it is an import-time error and not a UI surprise.
+    if len(set(THEME_ICONS.values())) != len(THEME_ICONS):
+        seen: set[str] = set()
+        clashes = sorted({t for t in THEME_ICONS.values() if t in seen or seen.add(t)})
+        raise RuntimeError(f"palette.THEME_ICONS reuses icon tokens across themes: {clashes}")
+    if FALLBACK_THEME_ICON in set(THEME_ICONS.values()):
+        raise RuntimeError(
+            f"palette.THEME_ICONS uses the fallback token {FALLBACK_THEME_ICON!r} for a real "
+            "theme; the fallback must stay recognisable as 'we do not know this theme'"
+        )
     overlap = (set(RETIRED_THEME_ALIASES) | set(RETIRED_THEME_IDS)) & canonical
     if overlap:
         raise RuntimeError(f"retired theme ids collide with canonical ids: {sorted(overlap)}")

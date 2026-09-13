@@ -82,9 +82,11 @@ class TelemetryInspectorA2uiWidget extends StatelessWidget {
                   ),
                 ),
                 child: Icon(
-                  Icons.radar,
+                  // UX_IA_SPEC §1.3: telemetry is `monitor_heart_outlined`
+                  // everywhere. `Icons.radar` was the old, filled glyph.
+                  Icons.monitor_heart_outlined,
                   color: node.colors.primary,
-                  size: 20,
+                  size: BgIcon.chrome,
                 ),
               ),
               const SizedBox(width: BgSpace.md),

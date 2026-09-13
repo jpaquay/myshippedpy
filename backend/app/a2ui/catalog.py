@@ -704,7 +704,7 @@ COMPONENTS: Final[dict[str, dict[str, Any]]] = {
                 "Array",
                 "The theme array itself, for renderers that draw the whole list "
                 "rather than expanding the `chips` template. Each item carries "
-                "id, name, tagline, palette{} and selected.",
+                "id, name, tagline, icon, palette{} and selected.",
             ),
             "selected": _dyn("String", "Selected theme id, beside `items`."),
             "title": _dyn("String", "Axis label, beside `items`."),
@@ -722,6 +722,12 @@ COMPONENTS: Final[dict[str, dict[str, Any]]] = {
             "themeId": _dyn("String", "Theme id."),
             "name": _dyn("String", "Display name."),
             "tagline": _dyn("String", "Six-word promise."),
+            "icon": _dyn(
+                "String",
+                "Semantic icon token from palette.THEME_ICONS (e.g. 'water_drop'). "
+                "The renderer maps token -> glyph through a static table; it must "
+                "not guess a glyph from the theme id.",
+            ),
             "swatchAccent": _dyn("String", "#RRGGBB accent for the swatch."),
             "swatchSoft": _dyn("String", "#RRGGBB soft fill when selected."),
             "swatchInk": _dyn("String", "#RRGGBB text colour on the soft fill."),
@@ -730,7 +736,7 @@ COMPONENTS: Final[dict[str, dict[str, Any]]] = {
         },
         required=["themeId", "onSelect"],
         allowed_parents=["ThemeChips"],
-        bindable=["themeId", "name", "tagline", "swatchAccent", "swatchSoft", "swatchInk", "selected"],
+        bindable=["themeId", "name", "tagline", "icon", "swatchAccent", "swatchSoft", "swatchInk", "selected"],
         actions=[FN_SELECT_THEME],
     ),
     # ------------------------------------------------------------- feature 3 --

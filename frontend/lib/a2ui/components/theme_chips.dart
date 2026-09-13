@@ -13,7 +13,9 @@
 /// wired.
 ///
 /// Data shape: `items` binds to a Theme[] — each with id, name, tagline,
-/// palette{}. `selected` binds to the currently active theme id (a string).
+/// icon, palette{}. `selected` binds to the currently active theme id (a
+/// string). `icon` is a semantic token the backend owns; see
+/// [kThemeIconsByToken].
 library;
 
 import 'package:flutter/material.dart';
@@ -21,6 +23,46 @@ import 'package:flutter/material.dart';
 import '../../app_theme.dart';
 import '../catalog.dart';
 import '../messages.dart';
+
+/// Icon token -> glyph. The ONLY place this renderer decides what a theme
+/// looks like, and it decides nothing: the token arrives on the theme payload
+/// as `icon`, emitted by `palette.THEME_ICONS` on the Python side.
+///
+/// This used to be `_iconForTheme(String id)`, which guessed from substrings of
+/// the theme id (`contains('rain')`, `contains('fog')`, ...). Four of the eight
+/// canonical ids — heatwave_cruise, blue_hour, first_frost, sirocco — matched no
+/// branch and all collapsed onto the same grey fallback glyph. Presentation
+/// knowledge had leaked into Dart and then drifted from the Python that owns it.
+/// Do not reintroduce a guess here: add the token to `THEME_ICONS` in
+/// `backend/app/a2ui/palette.py` and give it an entry below.
+///
+/// TREE-SHAKING: every value is a literal `Icons.*` constant in a `const` map,
+/// so `flutter build web --tree-shake-icons` can prove which glyphs survive.
+/// Never construct `IconData` from a runtime codepoint here — that defeats the
+/// analysis and ships blank boxes in release.
+const Map<String, IconData> kThemeIconsByToken = <String, IconData>{
+  'water_drop': Icons.water_drop_outlined, // petrichor
+  'wb_twilight': Icons.wb_twilight_outlined, // golden_hour
+  'foggy': Icons.foggy, // nordic_fog (no outlined variant in Material)
+  'thunderstorm': Icons.thunderstorm_outlined, // storm_front
+  'wb_sunny': Icons.wb_sunny_outlined, // heatwave_cruise
+  'nights_stay': Icons.nights_stay_outlined, // blue_hour
+  'ac_unit': Icons.ac_unit_outlined, // first_frost
+  'air': Icons.air_outlined, // sirocco
+  // Not a theme glyph: the token the backend sends for an id it cannot name.
+  // It is in the vocabulary so "unknown theme" looks the same on both sides.
+  'graphic_eq': Icons.graphic_eq_outlined,
+};
+
+/// THE fallback, and the only one. Reached when the payload carries no `icon`
+/// or a token this build does not know — i.e. the backend is ahead of the app.
+/// It is deliberately the same glyph as the backend's own `FALLBACK_THEME_ICON`
+/// token so the two layers agree on what "unidentified" looks like.
+const IconData kThemeIconFallback = Icons.graphic_eq_outlined;
+
+/// Resolve a backend-supplied icon token to a glyph. No guessing, no ids.
+IconData themeIconForToken(String? token) =>
+    kThemeIconsByToken[token] ?? kThemeIconFallback;
 
 class ThemeChipsComponent extends StatelessWidget {
   const ThemeChipsComponent({required this.node, super.key});
@@ -203,7 +245,9 @@ class _ThemeCard extends StatelessWidget {
                               ),
                             ),
                             child: Icon(
-                              _iconForTheme(id),
+                              themeIconForToken(
+                                asStringOrNull(theme['icon']),
+                              ),
                               size: 17,
                               color: primaryAccent,
                             ),
@@ -303,32 +347,6 @@ class _ThemeCard extends StatelessWidget {
         'themeId': asStringOrNull(theme['id']),
       },
     );
-  }
-
-  static IconData _iconForTheme(String id) {
-    final String lower = id.toLowerCase();
-    if (lower.contains('petrichor') || lower.contains('rain')) {
-      return Icons.water_drop_outlined;
-    }
-    if (lower.contains('fog') || lower.contains('nordic') || lower.contains('mist')) {
-      return Icons.foggy;
-    }
-    if (lower.contains('solar') || lower.contains('zenith') || lower.contains('sun')) {
-      return Icons.wb_sunny_outlined;
-    }
-    if (lower.contains('isobar') || lower.contains('surge') || lower.contains('wind')) {
-      return Icons.air;
-    }
-    if (lower.contains('golden') || lower.contains('dusk') || lower.contains('twilight')) {
-      return Icons.wb_twilight;
-    }
-    if (lower.contains('midnight') || lower.contains('velvet') || lower.contains('night')) {
-      return Icons.nightlight_round;
-    }
-    if (lower.contains('storm') || lower.contains('front') || lower.contains('thunder')) {
-      return Icons.thunderstorm_outlined;
-    }
-    return Icons.graphic_eq;
   }
 
   static List<Color> _paletteGradient(JsonMap theme, Color fallback) {
