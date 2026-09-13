@@ -28,7 +28,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
+from ..almanac.seed_corpus import SEED_CORPUS_HANDLE
 from ..container import get_container
+from ..identity import ANONYMOUS_USER_ID
 from ..contracts import Coordinates, ForgeRequest, ForgeResult, Playlist, Rationale
 from ..errors import BarogrooveError
 from ..forge.jobs import ForgeJobEnvelope, get_forge_jobs
@@ -59,16 +61,26 @@ async def _prepare_request(request: ForgeRequest, user_id: str | None) -> ForgeR
     from .surfaces import get_last_selection
 
     uid = user_id if isinstance(user_id, str) and user_id else None
-    sel = get_last_selection(uid or "default")
+    # A signed-out caller gets the reserved anonymous scope, which owns
+    # nothing, rather than the shared "default" bucket every other signed-out
+    # caller was also reading from.
+    sel = get_last_selection(uid or ANONYMOUS_USER_ID)
     updates: dict[str, Any] = {}
     if not request.theme_id and sel.get("theme_id"):
         updates["theme_id"] = sel["theme_id"]
     if (not request.genre_id or request.genre_id == "any") and sel.get("genre_id"):
         updates["genre_id"] = sel["genre_id"]
 
-    effective_uid = uid or request.user_id or "demo"
-    if not request.user_id:
-        updates["user_id"] = effective_uid
+    # TENANCY. This used to be `uid or request.user_id or "demo"`, and
+    # `request.user_id` is a field on the REQUEST BODY. An unauthenticated
+    # caller could therefore name any uid they liked and have the forge
+    # stamped as that person: the playlist landed in the victim's history, and
+    # because SpotifySink resolves the refresh token from the *stamped* owner,
+    # it published into the victim's Spotify account. Identity now comes from
+    # the authenticated resolver alone; a body-supplied user_id is ignored, and
+    # an unresolved caller gets the anonymous scope, never a real tenant.
+    effective_uid = uid or ANONYMOUS_USER_ID
+    updates["user_id"] = effective_uid
 
     if uid and not request.lastfm_user:
         from .pairing import _get_paired_account
@@ -77,7 +89,14 @@ async def _prepare_request(request: ForgeRequest, user_id: str | None) -> ForgeR
         if handle:
             updates["lastfm_user"] = str(handle)
     if not request.lastfm_user and "lastfm_user" not in updates:
-        updates["lastfm_user"] = "jpaquay"
+        # No paired Last.fm account, so there is no personal taste to read.
+        # Fall back to the DEMO SEED taste -- named as such, because this is a
+        # real Last.fm handle and the audit found it doing duty as a fallback
+        # *identity* in three other places (findings 5, 7, 9). Here it is only
+        # ever a source of taste data: it is not written anywhere, and it never
+        # becomes the forge's owner, which is stamped from `effective_uid`
+        # above. A signed-in user's history and taste vector stay their own.
+        updates["lastfm_user"] = SEED_CORPUS_HANDLE
     if updates:
         request = request.model_copy(update=updates)
     return request
@@ -98,9 +117,16 @@ async def _execute_forge(request: ForgeRequest) -> ForgeResult:
 
 
 def _owner_of(user_id: str | None) -> str:
-    """Job ownership key. Anonymous callers share the ``demo`` bucket, which
-    is also what ``_prepare_request`` stamps onto the request itself."""
-    return user_id if isinstance(user_id, str) and user_id else "demo"
+    """Job ownership key.
+
+    Anonymous callers share the reserved anonymous scope, which is also what
+    ``_prepare_request`` stamps onto the request itself -- the two must agree,
+    because a job bucketed under one identity and a forge stamped with another
+    is exactly the read/write split behind 9820091.
+
+    They used to share ``"demo"``, which is a REAL tenant with real rows.
+    """
+    return user_id if isinstance(user_id, str) and user_id else ANONYMOUS_USER_ID
 
 
 @router.post("/forge", response_model=ForgeResult)

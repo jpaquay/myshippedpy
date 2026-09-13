@@ -727,3 +727,56 @@ def test_a_plain_authenticated_request_reaches_the_provisioning_hook(
 def test_the_anonymous_scope_is_not_a_real_tenant() -> None:
     """The reserved anonymous scope must not collide with demo or jpaquay."""
     assert ANONYMOUS_USER_ID not in ("demo", "jpaquay", "demo_user", "")
+
+
+# --------------------------------------------------------------------------- #
+# a body-supplied user_id must never become an identity (audit finding 14)
+# --------------------------------------------------------------------------- #
+#
+# `_prepare_request` used to resolve the forge owner as
+# `uid or request.user_id or "demo"`, and `request.user_id` is a field on the
+# REQUEST BODY. An unauthenticated caller could therefore name any uid they
+# liked. The playlist landed in that person's history, and because SpotifySink
+# resolves the refresh token from the *stamped* owner, a forge published into
+# their Spotify account. These tests pin the refusal.
+
+
+def test_a_body_supplied_user_id_cannot_claim_another_account(client: Any) -> None:
+    """The headline case: an anonymous caller naming a victim's uid."""
+    res = client.post(
+        "/api/forge",
+        json={"theme_id": "petrichor", "length": 5, "sink": "m3u", "user_id": ALICE},
+    )
+    assert res.status_code == 200, res.text[:300]
+
+    owner = res.json()["playlist"]["user_id"]
+    assert owner != ALICE, "a body-supplied user_id was accepted as the forge owner"
+    assert owner == ANONYMOUS_USER_ID
+
+
+def test_a_body_supplied_user_id_cannot_override_the_authenticated_one(
+    client: Any,
+) -> None:
+    """Signed in as Bob, claiming to be Alice. The token wins."""
+    res = client.post(
+        "/api/forge",
+        json={"theme_id": "petrichor", "length": 5, "sink": "m3u", "user_id": ALICE},
+        headers={"X-Barogroove-User": BOB},
+    )
+    assert res.status_code == 200, res.text[:300]
+
+    owner = res.json()["playlist"]["user_id"]
+    assert owner == BOB
+    assert owner != ALICE
+
+
+def test_an_anonymous_forge_is_not_stamped_as_the_demo_tenant(client: Any) -> None:
+    """"demo" is a real tenant with real rows; anonymous is a reserved scope."""
+    res = client.post(
+        "/api/forge", json={"theme_id": "petrichor", "length": 5, "sink": "m3u"}
+    )
+    assert res.status_code == 200, res.text[:300]
+
+    owner = res.json()["playlist"]["user_id"]
+    assert owner == ANONYMOUS_USER_ID
+    assert owner not in ("demo", "jpaquay", "demo_user")

@@ -523,8 +523,14 @@ def test_http_a_finished_job_lands_in_recent_playlists(client: Any) -> None:
 
     # The recent-playlist buffer is keyed by uid (tenancy audit finding 3), so
     # "it landed" means "it landed in *its owner's* bucket". This job was
-    # forged anonymously, which `_prepare_request` stamps as "demo".
-    assert surfaces.recent_playlist_for("demo", final["playlist_id"]) is not None
+    # forged anonymously, which `_prepare_request` stamps as the reserved
+    # anonymous scope -- NOT "demo", which is a real tenant with real rows.
+    from backend.app.identity import ANONYMOUS_USER_ID
+
+    assert surfaces.recent_playlist_for(ANONYMOUS_USER_ID, final["playlist_id"]) is not None
+    # ...and emphatically not in the demo tenant's bucket, which is where an
+    # anonymous forge used to land.
+    assert surfaces.recent_playlist_for("demo", final["playlist_id"]) is None
     # ...and nowhere else. Another user must not see it, and there is no
     # process-global bucket left to find it in.
     assert surfaces.recent_playlist_for("somebody_else", final["playlist_id"]) is None
