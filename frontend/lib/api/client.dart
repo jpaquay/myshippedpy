@@ -465,13 +465,19 @@ class BarogrooveApi {
         },
       );
 
+  /// Sync a Last.fm account's recent scrobbles into the almanac.
+  ///
+  /// [lastfmUser] is required on purpose. It used to default to a real
+  /// person's handle, which meant a caller with no handle silently synced
+  /// someone else's listening history.
   Future<ApiResult<ScrobbleSearchResponse>> syncScrobbles({
-    String? lastfmUser,
+    required String lastfmUser,
   }) =>
       _postJson(
-        '/api/almanac/scrobbles/sync?lastfm_user=${Uri.encodeQueryComponent(lastfmUser ?? "jpaquay")}',
+        '/api/almanac/scrobbles/sync',
         const <String, Object?>{},
         ScrobbleSearchResponse.fromJson,
+        query: <String, String>{'lastfm_user': lastfmUser},
       );
 
   Future<ApiResult<PlaylistCohortResponse>> playlistCohortCheck({

@@ -14,7 +14,12 @@ from ..config import get_settings
 router = APIRouter(tags=["ops"])
 
 
-@router.get("/", summary="What this thing is")
+# HEAD is listed explicitly. Starlette's plain ``Route`` derives HEAD from GET;
+# FastAPI's ``APIRoute`` does not, so uptime checks, link unfurlers and
+# ``curl -I`` were all answered with 405 (see the bg.netdev.be and
+# barogroove.netdev.be entries at 21:32 and 22:20 on 2026-09-13). Starlette
+# drops the body for HEAD on the way out, so the handler needs no branch.
+@router.api_route("/", methods=["GET", "HEAD"], summary="What this thing is")
 async def root() -> dict[str, object]:
     settings = get_settings()
     return {

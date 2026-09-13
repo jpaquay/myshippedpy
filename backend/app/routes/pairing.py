@@ -1399,7 +1399,21 @@ async def spotify_callback(
     if not code or not state:
         return _problem(400, "bad_callback", "Spotify callback was missing ?code or ?state.")
 
-    pending = _states.take(state)
+    # Validate the state WITHOUT consuming it.
+    #
+    # "Single use" has to mean "the pairing completed", not "an attempt was
+    # made". Taking the state up front is what turned one downstream failure
+    # into a permanently dead link: the first callback spent the state and then
+    # 500'd on the persist, and the browser's retry of the identical URL came
+    # back `bad_state`. That 500-then-400 pair, 150-500ms apart, is exactly the
+    # production signature on 2026-09-13 at 22:28, 22:31, 22:32 and 22:56.
+    #
+    # Replay is still covered: the state is consumed the moment the tokens are
+    # stored (below), and a replay before that point has to get past Spotify,
+    # which only honours an authorization code once. This is the same
+    # peek-validate-then-take order `spotify_manual_exchange` and
+    # `lastfm_callback` already use.
+    pending = _states.peek(state)
     if pending is None or pending.provider != "spotify":
         return _problem(
             400,
@@ -1414,14 +1428,34 @@ async def spotify_callback(
     except PairingError as exc:
         logger.warning("spotify pairing exchange failed for a user: %s", exc)
         return _problem(502, "spotify_exchange_failed", str(exc))
+    except Exception:
+        # Anything `SpotifyAuth` did not already translate into a PairingError.
+        # It used to escape the handler and become an unhandled 500 with no
+        # explanation for the user; the traceback goes to the log instead.
+        logger.exception("spotify pairing exchange raised an unexpected error")
+        return _problem(
+            400,
+            "spotify_exchange_failed",
+            "Could not complete the Spotify exchange. Click Connect Spotify and try again.",
+        )
 
     try:
         acct = await _persist_spotify_tokens(pending.user_id, tokens)
-    except Exception as exc:
-        logger.error("spotify token persist failed: %s", type(exc).__name__)
+    except Exception:
+        # A storage failure is not the user's fault, but it IS retryable from
+        # their side, and the state above is still unspent so retrying works.
+        # A 500 told them nothing and told the log nothing either.
+        logger.exception("spotify token persist failed")
         return _problem(
-            500, "token_store_failed", "Paired with Spotify but could not store the result."
+            400,
+            "token_store_failed",
+            "Spotify approved the connection but BAROGROOVE could not store it. "
+            "Click Connect Spotify to try again; if it keeps failing, the server's "
+            "token vault needs attention.",
         )
+
+    # Stored. Only now is the pairing link spent.
+    _states.take(state)
 
     missing = tokens.missing_scopes()
 
@@ -1513,8 +1547,17 @@ async def spotify_manual_exchange(
         acct = await _persist_spotify_tokens(user_id, tokens)
     except PairingError as exc:
         return _problem(502, "spotify_exchange_failed", str(exc))
-    except Exception as exc:
-        return _problem(500, "token_store_failed", f"Could not store Spotify tokens ({exc}).")
+    except Exception:
+        # Same contract as the redirect callback: retryable, explained, and the
+        # detail stays in the log rather than in the user's browser.
+        logger.exception("spotify manual exchange failed to store tokens")
+        return _problem(
+            400,
+            "token_store_failed",
+            "Spotify approved the connection but BAROGROOVE could not store it. "
+            "Click Connect Spotify to try again; if it keeps failing, the server's "
+            "token vault needs attention.",
+        )
 
     status_resp = await pair_status(user_id=user_id, auth=auth)
     payload = status_resp.model_dump(mode="json")

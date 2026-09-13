@@ -360,7 +360,10 @@ async def post_graph_on_demand(
 
 @router.post("/scrobbles/sync", response_model=ScrobbleSearchResponse, summary="Sync Last.fm scrobbles into Firestore")
 async def sync_scrobbles(
-    lastfm_user: str = Query(default="jpaquay", description="Last.fm username to sync"),
+    # No default. Defaulting to a real handle meant a caller who omitted the
+    # parameter pulled a named person's listening history into their own
+    # almanac. An absent username is a 422, not somebody else's account.
+    lastfm_user: str = Query(..., min_length=1, description="Last.fm username to sync"),
     user: AuthUser = Depends(_resolve_user),
 ) -> ScrobbleSearchResponse:
     """Sync live recent scrobbles from Last.fm into Firestore `scrobbles` collection."""
