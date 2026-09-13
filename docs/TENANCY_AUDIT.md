@@ -1,7 +1,12 @@
 # BAROGROOVE — tenancy gap audit
 
-Status: **findings, pre-fix**. Produced as item 1 of the multi-tenancy rework;
-items 2–5 fix what is listed here. Written against `5ef6df9`.
+Status: **findings resolved**, except where the table says otherwise. Produced
+as item 1 of the multi-tenancy rework against `5ef6df9`; items 2–5 fixed what is
+listed here. Finding 14 was found afterwards, by the work itself, and is the one
+the audit missed.
+
+See the resolution table at the end for what closed where, and
+[UX_REWORK_NOTES](./UX_REWORK_NOTES.md) for the decisions taken.
 
 ## Why this audit exists
 
@@ -148,6 +153,58 @@ read-only requirement for demo mode is currently violated by default.
   Process-local and lost on restart, which is a durability question, not a
   tenancy one.
 - **`sinks/resolver.py:_CACHE`** — keyed on track identity, holds no user data.
+
+## Finding 14 — a body-supplied `user_id` became an identity — S1
+
+**Not in the table above: the audit missed it.** Found while fixing item 4.
+
+`routes/forge.py:_prepare_request` resolved the forge owner as
+`uid or request.user_id or "demo"`, and `request.user_id` is a field on the
+**request body**. An unauthenticated caller could name any uid they liked. The
+playlist landed in that person's history, and because `SpotifySink` resolves the
+refresh token from the *stamped* owner, the forge published into their Spotify
+account — without the pairing layer being at fault at all.
+
+Root cause: the same "fill in what the caller left blank" helper that supplies a
+default theme and genre was also allowed to supply *identity*. Identity is not a
+defaulting concern. Why the audit missed it: the sweep looked for the literal
+fallback strings and for module-level state, and this line has both — but the
+dangerous limb was the middle one, `request.user_id`, which looks like
+server-side state and is not.
+
+## Resolution
+
+| # | Fixed in | Note |
+|---|----------|------|
+| 1 | `2a2e4b8` item 3 | ownership test made unconditional |
+| 2 | `2a2e4b8` item 3 | empty result is an empty result |
+| 3 | `2a2e4b8` item 3 | buffer keyed by owner, ownership checked on lookup |
+| 4 | `2a2e4b8` item 3 | demo retry removed |
+| 5 | `9c27729` item 4 | unresolvable state → `400 bad_state` |
+| 6 | `9c27729` item 4 | refuses on unresolvable / provider-mismatched state |
+| 7 | `2a2e4b8` item 3 | two-way tenant alias removed |
+| 8 | `2a2e4b8` item 3 | defaults removed; callers state who they are |
+| 9 | `2a2e4b8` item 3 | **partial** — still one process-global corpus; the `"jpaquay"` defaults are now a named constant, not a silent one |
+| 10 | `91e32c7` item 5 | seed corpus read-only; writes diverted to `.cache/` |
+| 11 | `2a2e4b8` item 3 | anonymous → reserved scope, not the demo tenant |
+| 12 | — | **open**, S3. `models.dart` still defaults a missing `user_id` to `'demo'` on parse. Display-side only; the server no longer sends one. |
+| 13 | `9c27729` item 4 | state-fixation scan deleted; exact-key match, owner-checked |
+| 14 | `4d06fe3` | body-supplied `user_id` ignored for ownership |
+
+### Still open, and deliberately so
+
+* **Finding 9 (partial).** The scrobble corpus is still single-tenant: one
+  process-global set of catalog indices, no uid in any key. No leak *between two
+  signed-in users* is possible today because no second corpus can exist — but
+  "per-user collection" does not exist either, and a second corpus would land in
+  the same globals. A real fix is a corpus store keyed by uid, which is a
+  feature, not a bugfix.
+* **Finding 12.** Cosmetic default in the Flutter model parser.
+* **`routes/pairing.py` dev form.** The manual pairing form defaults its
+  *Last.fm account* field to `jpaquay`. That is a handle, not a Barogroove uid,
+  in a dev-only surface.
+* **`_states` is per-process.** A multi-instance deployment will see spurious
+  "unknown state" on pairing callbacks. Durability, not tenancy.
 
 ## Scope handed to items 2–5
 

@@ -20,6 +20,7 @@ For full architectural blueprints, API contracts, and implementation details, ex
 | **[Playlist & Song Cohort Analysis Engine](./docs/PLAYLIST_COHORT_ANALYSIS.md)** | Universal playlist/tracklist parser (`POST /api/almanac/playlist-cohort-check`), 4-tier cohort classification (`Obsession`, `Heavy Rotation`, `Discovery`, `Unheard`), Sonic DNA affinity scoring, and custom-painted Donut & 15-Year Timeline charts. |
 | **[BigQuery Conversational Data QnA Agent & Graph Studio](./docs/BIGQUERY_DATA_QNA_AGENT.md)** | Live conversational BigQuery analytics (`geminidataanalytics.googleapis.com/v1beta`), SSE streaming, On-Demand Graph Synthesis (`horizontal_bar`, `bar`, `donut`, `line`), Two-Tier QnA cache, and local OLAP fallback. |
 | **[A2UI v1.0 Single-Source UI & AI Observability](./docs/A2UI_ARCHITECTURE.md)** | Single-source Python surface catalog (`backend/app/a2ui/`), 3-mode Atmospheric Synthesis Console, 4-tab Almanac UI, and real-time AI Observability & Telemetry Inspector (`TelemetryInspectorPanel`). |
+| **[Tenancy Gap Audit](./docs/TENANCY_AUDIT.md)** | Every read/write path for playlists, almanac history, the scrobble corpus, the taste vector and provider connections, traced to how it resolves identity. 14 findings on silent identity fallbacks, their root causes, what was fixed where, and what is deliberately still open. |
 
 ---
 
@@ -281,6 +282,77 @@ Both providers pair **inside the app** after Google sign-in. No copy-pasting API
 keys. Spotify uses OAuth PKCE, Last.fm uses its web auth flow (token → session
 key). Per-user tokens are encrypted with Fernet before they touch Firestore, and
 the token documents are never client-readable.
+
+Last.fm sessions are keyed on the **Barogroove uid**, not the Last.fm username —
+deliberately, because people rename their Last.fm accounts and a renamed account
+must not orphan its session or collide with somebody else's.
+
+---
+
+## Tenancy, profiles and demo mode
+
+Barogroove is multi-tenant, and the rules are short enough to state in full.
+
+### One identity, resolved one way
+
+`routes.pairing.current_user_id` is the only intended resolver: a Firebase
+bearer token, then `request.state`, then the `X-Barogroove-User` header for
+local development, then `None`.
+
+**An unresolved caller is never substituted with a real one.** This is the rule
+the whole model rests on, and it was not always true — see
+[TENANCY_AUDIT.md](./docs/TENANCY_AUDIT.md). Paths used to fall back to the
+literal uids `"demo"`, `"jpaquay"` or `"demo_user"`, all of which are real
+tenants with real rows, so an unresolvable identity returned `200` with somebody
+else's data instead of raising. Signed-out callers now get a reserved scope,
+`anonymous_unauthenticated`, which owns nothing and which no Firebase uid can
+collide with.
+
+A corollary worth stating because it was once violated: **a `user_id` in a
+request body is not an identity.** It is ignored for ownership. Identity comes
+from the authenticated resolver or it does not come at all.
+
+### The profile is the anchor
+
+`users/{uid}` is created at **first authenticated contact** — not, as it once
+was, as a side effect of your first forge, which left people who signed in and
+browsed existing to Firebase and to nothing else. It is idempotent, it
+back-fills anyone who predates the change, and it is the anchor that per-user
+history, collection and taste hang off.
+
+### Two enforcement layers, both load-bearing
+
+* **Firestore rules** (`firebase_cfg/firestore.rules`) — default deny, every
+  rule anchored to `request.auth.uid`, which a client cannot forge. The Flutter
+  app reads Firestore directly, so this is the only control on that path.
+  `users/{uid}/tokens/{provider}` is unreadable and unwritable by *every*
+  client, including the owner.
+* **Server-side ownership checks** (`backend/app/firebase/firestore.py`) — the
+  backend uses the Admin SDK, which bypasses rules by design. These are not
+  redundant with the rules; they are the only control on the backend path.
+
+### Demo mode is read-only
+
+`data/scrobbles/` holds a pre-loaded Last.fm corpus (~160k scrobbles, 15 years)
+used as a **seed taste**, so a signed-out visitor gets a real-feeling almanac
+instead of a blank page.
+
+* The corpus is **strictly read-only**. Reads may touch it; writes may never.
+  Everything generated at run time — Q&A answers, summary refreshes, BigQuery
+  results — goes to `.cache/`, which is gitignored.
+  `backend/app/almanac/seed_corpus.py` draws the line and *raises* on a
+  violation rather than silently redirecting.
+* Demo mode **provisions no profile**, so there is nothing for a history, a
+  collection or a taste vector to hang off, and nothing to contaminate.
+* The seed handle appears in forged playlists as a source of taste *data* when
+  you have no Last.fm account paired. It is never written, and it never becomes
+  a playlist's owner.
+
+Both guarantees are covered by tests that attempt the write and assert the
+refusal (`tests/test_demo_readonly.py`), including a fingerprint of every file
+in the corpus taken before and after. Cross-tenant reads are covered by
+`tests/test_tenancy.py`, which asserts that one user **cannot** read another's
+rows rather than that the happy path works.
 
 ---
 

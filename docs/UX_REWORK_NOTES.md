@@ -292,3 +292,138 @@ rather than changed blind.
   with an offline stand-in supplied from outside the repo on `PYTHONPATH`. No
   repo code depends on it and it is not committed — but it does mean the suite
   has not been run against the real package in this environment.
+
+
+---
+
+# Multi-tenancy rework — decision log
+
+A seven-item pass over tenancy, following the discovery of commit `9820091`:
+the forge **write** path resolved the caller via `current_user_id` (bearer
+token → `request.state` → `X-Barogroove-User`) while the almanac **read** path
+checked only the bearer token and otherwise fell back to the literal uid
+`"demo"`. Writes and reads landed in different buckets.
+
+That bug was treated as an instance, not an incident. The audit
+([TENANCY_AUDIT.md](./TENANCY_AUDIT.md)) went looking for the rest of the class
+and found 13 more; a 14th surfaced during the fixing.
+
+## The rule that came out of it
+
+> **A path that cannot resolve an identity must refuse. It must never
+> substitute a different concrete identity.**
+
+The substitution is the whole danger. A path that raises on an unresolvable
+identity fails loudly in a test. A path that substitutes `"demo"` returns `200`
+with somebody else's data in it, and looks healthy from every angle a
+monitoring dashboard can see.
+
+## Decisions
+
+**Anonymous callers get a reserved scope, not a real tenant.**
+`anonymous_unauthenticated` owns nothing and cannot collide with a Firebase uid
+(28 alphanumerics). The alternative — keep mapping signed-out visitors onto
+`"demo"` — is what caused the leaks: `demo` and `jpaquay` are *real accounts
+with real rows*. A reserved scope also makes sibling surfaces agree; before
+this, an anonymous caller was `"demo"` to the advisor and `"jpaquay"` to
+dataviz, and the two were reconciled by an explicit two-way alias in the
+telemetry store — a cross-tenant leak wearing a bugfix's hat.
+
+**The profile is provisioned at first authenticated contact, not first forge.**
+It is the anchor history, collection and taste hang off, so it must exist before
+any of them are written. Idempotent, and it back-fills users who predate the
+change.
+
+**The `_ENSURED` cache is a cache of a completed write, never a data source.**
+Keyed by uid, holds no profile data, and only records writes that already
+succeeded. A stale entry costs one redundant idempotent write, never a wrong
+answer. This was written against the shape of audit finding 3, where a render
+cache (`_RECENT_PLAYLISTS`) quietly became the source of a user's almanac.
+
+**A `user_id` in a request body is not an identity.** Finding 14. The helper
+that fills in a default theme and genre was also allowed to supply the forge's
+owner, so an unauthenticated caller could name a victim's uid and publish into
+their Spotify account. Defaulting is for preferences, never for identity.
+
+**Demo mode reads the seed corpus and writes nothing.** The corpus was also the
+runtime cache directory, so the app mutated its own git-tracked seed on every
+Q&A cache miss — the stray untracked files under `data/scrobbles/qna_cache/`
+were this, observed for a while and misfiled as noise. Reads and writes are now
+separate directories.
+
+**A refused write raises; it does not silently redirect.** A redirect would mean
+the caller believes something happened that did not — the same shape as the
+identity fallbacks this rework removes.
+
+**Fixing state fixation was pulled in, not deferred.** The Last.fm callback
+matched *any* pending state rather than the one bound to the token; it had been
+flagged earlier and left. It sat directly in item 4's path, and leaving a known
+credential-write hole open while rewriting the code around it was not
+defensible. Exact-key match, owner-checked, not consumed on refusal.
+
+**Tests assert refusal, not success.** A test that only checks "A sees A's data"
+passes against every bug in the audit. Every tenancy test added here was
+verified to **fail** against the unfixed code by reverting each fix in turn.
+`test_demo_readonly.py` additionally fingerprints every file in the seed corpus
+before and after, so a regression that writes somewhere no test named still
+fails.
+
+**The Firestore rules were read and left alone.** They are already default-deny
+and anchored to `request.auth.uid`, and the token subcollection is unreadable by
+every client including the owner. Nothing here added a collection or a
+client-read field, so changing them would have been churn on the one layer that
+was already correct.
+
+## Deliberately not done
+
+**The scrobble corpus is still single-tenant** (finding 9). One process-global
+set of catalog indices, no uid in any key. No leak between two signed-in users
+is possible, because no second corpus can exist to leak from — but per-user
+collections do not exist either, and a second corpus would land in the same
+globals. Making it per-uid is a feature with a data-model decision behind it,
+not a bugfix, and doing it half-way under a tenancy pass would have been worse
+than leaving it legible. The `"jpaquay"` defaults are now a named constant so
+the single-tenancy is stated rather than implied.
+
+**`models.dart` still defaults a missing `user_id` to `'demo'`** on parse
+(finding 12). Display-side only, and the server no longer sends a row without an
+owner.
+
+**`_states` remains per-process.** A multi-instance deployment will see spurious
+"unknown state" on pairing callbacks. That is durability, not tenancy, and
+fixing it means moving pending pairings into Firestore.
+
+## What could NOT be verified
+
+* **Anything requiring a live Firestore.** No network and no
+  `google-cloud-firestore` in this environment. The repository layer is
+  exercised through fakes and an import shim, never against a real backend or
+  the emulator. The **Firestore rules in particular have not been executed** —
+  there is no emulator here, so the claim that they enforce the same boundary as
+  the Python rests on reading them, not on running them.
+* **The live Last.fm exchange.** The helper is unconfigured offline, so
+  callbacks return `503` *after* the state check. The tests pin the ordering of
+  the refusal, not the exchange itself.
+* **The Fernet/Firestore token vault** — in-memory in tests.
+* **OAuth completion** — synthetic codes only.
+
+One environment note, correcting the previous entry in this file:
+`pydantic-settings` *was* available this time, from a local package cache, so
+the backend suite ran against the real package rather than an offline stand-in.
+No repo code changed to make that work.
+
+## Verification
+
+Baseline held or improved throughout. Final:
+
+| Check | Before | After |
+| :--- | :--- | :--- |
+| `flutter analyze` | 19 issues | 19 issues |
+| `flutter test` | 182 passed | 185 passed |
+| `pytest` | 1007 passed, 8 skipped | 1068 passed, 8 skipped |
+
+No pre-existing test was deleted. Three encoded behaviour that this rework makes
+wrong — two relied on the shared anonymous bucket, one asserted that an
+anonymous forge lands in the `"demo"` tenant. All three were updated to state an
+identity explicitly, with the reason commented in place, and the third now also
+asserts the playlist is **not** in the demo tenant's bucket.
