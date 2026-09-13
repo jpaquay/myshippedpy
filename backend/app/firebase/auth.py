@@ -578,6 +578,34 @@ def _http_exception(err: AuthError) -> Exception:
     )
 
 
+async def _ensure_barogroove_profile(user: AuthUser) -> None:
+    """First authenticated contact provisions the Barogroove profile.
+
+    Item 2 of the tenancy rework. Firebase knowing who you are is not the same
+    as Barogroove knowing who you are: the profile at ``users/{uid}`` is the
+    anchor that history, collection and taste hang off, and it used to be
+    created only as a side effect of your first forge. This runs on *every*
+    authenticated request, which also back-fills users who signed in before
+    this existed.
+
+    Idempotent and cheap: after the first success for a uid it is a set lookup.
+    Never raises -- a profile we could not write is a degraded request, not a
+    failed one.
+    """
+    try:
+        from ..identity import ensure_profile  # noqa: PLC0415
+
+        await ensure_profile(
+            user.uid,
+            email=user.email,
+            display_name=user.name,
+            photo_url=user.picture,
+            provider=user.provider,
+        )
+    except Exception:  # pragma: no cover - defensive; ensure_profile swallows
+        logger.debug("profile provisioning failed for %s", user.uid, exc_info=True)
+
+
 async def current_user(request: Request) -> AuthUser:
     """FastAPI dependency: the signed-in user, or HTTP 401.
 
@@ -603,6 +631,7 @@ async def current_user(request: Request) -> AuthUser:
         request.state.user = user
     except Exception:  # pragma: no cover - exotic ASGI shims
         pass
+    await _ensure_barogroove_profile(user)
     return user
 
 
@@ -630,6 +659,7 @@ async def current_user_optional(request: Request) -> AuthUser | None:
         request.state.user = user
     except Exception:  # pragma: no cover
         pass
+    await _ensure_barogroove_profile(user)
     return user
 
 

@@ -95,14 +95,19 @@ class FirestoreAlmanac:
             logger.warning("forge %s was not persisted; continuing degraded", playlist_id)
             return playlist_id
 
-        # Keep a cheap counter on the profile so the retrospective endpoint can
-        # answer "how many skies have you heard?" without a collection scan.
+        # Make sure the profile anchor exists. It normally already does -- item
+        # 2 of the tenancy rework provisions it at first *authenticated
+        # contact*, not here -- but a forge is a write hanging off the profile,
+        # so this backstop stays. It routes through the same idempotent
+        # ``ensure_profile`` as the auth path, so a user who has already been
+        # provisioned in this process costs a set lookup, not a Firestore write.
         user_id = getattr(playlist, "user_id", None)
         if user_id:
-            try:
-                await self._repos.users.upsert_profile(str(user_id))
-            except Exception:
-                logger.debug("profile touch failed for %s; harmless", user_id)
+            from ..identity import ensure_profile  # noqa: PLC0415
+
+            await ensure_profile(
+                str(user_id), settings=self._settings, repositories=self._repos
+            )
         return stored
 
     async def record_feedback(
