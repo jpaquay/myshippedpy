@@ -31,7 +31,6 @@ import 'widgets/atmospheric_cursors_console.dart';
 import 'widgets/console/console_tokens.dart';
 import 'widgets/console/forge_sky_block.dart';
 import 'widgets/console/forge_sky_reading.dart';
-import 'widgets/gemini_live_advisor.dart';
 import 'widgets/netdev_footer.dart';
 import 'widgets/section.dart';
 import 'widgets/status_notes.dart';
@@ -297,10 +296,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           vertical: BgSpace.lg,
         ),
         children: <Widget>[
-          GeminiLiveAdvisorBanner(
-            onSurfaceRefreshNeeded: _loadSurfaces,
-          ),
-          const SizedBox(height: BgSpace.lg),
+          // The Gemini Live banner that used to sit here is gone (§6.1). The
+          // assistant is app chrome now — one floating bubble in the shell's
+          // Stack, reachable from every destination, with one conversation
+          // that survives navigation. Forge no longer hosts a copy of it.
           _ForgeHeader(
             selection: selection,
             geocaches: geocaches,

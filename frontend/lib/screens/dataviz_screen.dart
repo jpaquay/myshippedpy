@@ -35,6 +35,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
+import '../advisor/assistant_dataviz_bridge.dart';
+import '../advisor/assistant_providers.dart';
 import '../advisor/voice_io.dart';
 import '../api/auth_interceptor.dart';
 import '../app_theme.dart';
@@ -84,7 +86,19 @@ class _DataVizScreenState extends ConsumerState<DataVizScreen> {
   void initState() {
     super.initState();
 
-    _conversation = widget.conversation ?? DataVizConversation();
+    // The overlay seam, taken (§3.4 + §6.4). The question field stays exactly
+    // where it was; its ONE exit point now routes through the shared
+    // conversation store as well as the analytics endpoint, so a question
+    // asked here is in the assistant's history on every other destination —
+    // and its `spoken_summary` is spoken by the overlay, under the overlay's
+    // mute toggle. `dataviz_qna_transport.dart` is untouched.
+    _conversation = widget.conversation ??
+        DataVizConversation(
+          transport: sharedConversationDataVizTransport(
+            store: ref.read(assistantConversationProvider),
+            controller: ref.read(assistantControllerProvider),
+          ),
+        );
     _conversation.addListener(_onConversationChanged);
 
     _voice = VoiceIo(

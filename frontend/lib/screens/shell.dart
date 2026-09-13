@@ -16,6 +16,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../advisor/assistant_overlay.dart';
+import '../advisor/assistant_providers.dart';
 import '../api/models.dart';
 import '../app_theme.dart';
 import '../auth/auth_service.dart';
@@ -72,6 +74,9 @@ class AppShellState extends ConsumerState<AppShell> {
   void go(BgDestination destination) {
     if (!mounted) return;
     HapticFeedback.selectionClick();
+    // A destination you arrive at has not been scrolled yet, so the assistant
+    // bubble comes back with it (spec §6.2).
+    ref.read(bubbleVisibilityProvider.notifier).state = true;
     setState(() => _current = destination);
   }
 
@@ -119,92 +124,108 @@ class AppShellState extends ConsumerState<AppShell> {
       ),
       body: Stack(
         children: <Widget>[
-          Row(
-            children: <Widget>[
-              if (expanded) ...<Widget>[
-                NavigationRail(
-                  selectedIndex: _current.index,
-                  onDestinationSelected: (int i) =>
-                      go(BgDestination.values[i]),
-                  labelType: NavigationRailLabelType.all,
-                  // `trailing` is deliberately null. It used to carry a second
-                  // copy of the theme toggle; the theme control now lives in
-                  // Settings → APPEARANCE and nowhere else (spec §1, row 7).
-                  destinations: <NavigationRailDestination>[
-                    for (final BgDestination d in BgDestination.values)
-                      NavigationRailDestination(
-                        icon: Icon(d.icon),
-                        selectedIcon: Icon(d.selectedIcon),
-                        label: Text(d.label),
-                      ),
-                  ],
-                ),
-                VerticalDivider(
-                  width: 1,
-                  color: Theme.of(context).bg.hairline,
-                ),
-              ],
-              Expanded(
-                child: SafeArea(
-                  bottom: false,
-                  child: Column(
-                    children: <Widget>[
-                      Expanded(
-                        child: Align(
-                          alignment: Alignment.topCenter,
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              maxWidth: BgBreak.shellMaxWidth,
-                            ),
-                            // IndexedStack keeps all 5 screens mounted in
-                            // memory so tab transitions take 0ms, preserve
-                            // scroll position on mobile, and keep active audio
-                            // playback uninterrupted.
-                            child: IndexedStack(
-                              index: _current.index,
-                              children: const <Widget>[
-                                HomeScreen(),
-                                PlaylistScreen(),
-                                AlmanacScreen(),
-                                DataVizScreen(),
-                                SettingsScreen(),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (miniPlayerVisible)
-                        _FloatingMiniPlayerBar(
-                          forge: lastForge,
-                          onOpenSet: () => go(BgDestination.playlist),
+          // §6.2 — the bubble hides on scroll-down and returns on scroll-up.
+          // Listening HERE rather than inside each destination means all five
+          // drive it, including the ones this worker does not own, and no
+          // screen has to remember to opt in. `UserScrollNotification` bubbles
+          // up from whichever scroll view is the primary content; the guard
+          // ignores nested scrollables (depth > 0) so a horizontal chip row
+          // never hides the assistant.
+          BubbleVisibilityScrollGuard(
+            child: Row(
+              children: <Widget>[
+                if (expanded) ...<Widget>[
+                  NavigationRail(
+                    selectedIndex: _current.index,
+                    onDestinationSelected: (int i) =>
+                        go(BgDestination.values[i]),
+                    labelType: NavigationRailLabelType.all,
+                    // `trailing` is deliberately null. It used to carry a second
+                    // copy of the theme toggle; the theme control now lives in
+                    // Settings → APPEARANCE and nowhere else (spec §1, row 7).
+                    destinations: <NavigationRailDestination>[
+                      for (final BgDestination d in BgDestination.values)
+                        NavigationRailDestination(
+                          icon: Icon(d.icon),
+                          selectedIcon: Icon(d.selectedIcon),
+                          label: Text(d.label),
                         ),
                     ],
                   ),
+                  VerticalDivider(
+                    width: 1,
+                    color: Theme.of(context).bg.hairline,
+                  ),
+                ],
+                Expanded(
+                  child: SafeArea(
+                    bottom: false,
+                    child: Column(
+                      children: <Widget>[
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                maxWidth: BgBreak.shellMaxWidth,
+                              ),
+                              // IndexedStack keeps all 5 screens mounted in
+                              // memory so tab transitions take 0ms, preserve
+                              // scroll position on mobile, and keep active audio
+                              // playback uninterrupted.
+                              child: IndexedStack(
+                                index: _current.index,
+                                children: const <Widget>[
+                                  HomeScreen(),
+                                  PlaylistScreen(),
+                                  AlmanacScreen(),
+                                  DataVizScreen(),
+                                  SettingsScreen(),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (miniPlayerVisible)
+                          _FloatingMiniPlayerBar(
+                            forge: lastForge,
+                            onOpenSet: () => go(BgDestination.playlist),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
 
           // ---------------------------------------------------------------
-          // ASSISTANT OVERLAY MOUNT POINT (spec §6.2) — reserved, item 10/11.
+          // THE ASSISTANT (spec §6.2) — items 10 + 11.
           //
-          // A later worker mounts `BgAssistantBubble` HERE, as the last child
-          // of this Stack: above the IndexedStack and above the floating
-          // mini-player, but outside `Scaffold.bottomNavigationBar`, so it can
-          // never overlap the tab bar.
+          // Last child of this Stack: above the IndexedStack and above the
+          // floating mini-player, but outside `Scaffold.bottomNavigationBar`,
+          // so it structurally cannot overlap the tab bar. One instance for
+          // the whole app — this is what replaced the two inline Gemini Live
+          // banners on Forge and Data Viz (§6.1). Conversation state lives in
+          // `advisor/assistant_providers.dart`, above this widget, so
+          // switching destinations never loses history (§6.4).
           //
-          //   Positioned(
-          //     right: assistantInset.right,
-          //     bottom: assistantInset.bottom,
-          //     child: const BgAssistantBubble(),
-          //   ),
-          //
-          // Use [assistantBubbleInset] below for the offsets: it already
-          // clears the tab bar, the viewport's bottom safe area and the
-          // mini-player when it is showing. Scroll views reserve
+          // [assistantBubbleInset] supplies the offsets: it already clears
+          // the tab bar, the viewport's bottom safe area and the mini-player
+          // when it is showing. Scroll views reserve
           // `BgSpace.bubbleClearance` (96) at the bottom so the bubble never
           // covers content.
           // ---------------------------------------------------------------
+          Builder(
+            builder: (BuildContext context) {
+              final EdgeInsets inset = assistantBubbleInset;
+              return Positioned(
+                right: inset.right,
+                bottom: inset.bottom,
+                child: const BgAssistantBubble(),
+              );
+            },
+          ),
         ],
       ),
       bottomNavigationBar: expanded
