@@ -24,6 +24,7 @@ import '../auth/pairing_service.dart';
 import '../config.dart';
 import '../providers.dart';
 import '../pwa/pwa_install.dart';
+import '../widgets/bg_disclosure.dart';
 import 'widgets/section.dart';
 import 'widgets/service_badge.dart';
 import 'widgets/status_notes.dart';
@@ -49,7 +50,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _exchangingManual = false;
 
   late final PwaInstallBridge _pwaBridge;
-  bool _showInstallHowTo = false;
 
   /// Anchors for the deep links set by the account menu and the header
   /// connection badges (`settingsFocusProvider`).
@@ -397,20 +397,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Section(
             key: _installKey,
             eyebrow: 'INSTALL',
-            child: _InstallCard(
-              bridge: _pwaBridge,
-              showHowTo: _showInstallHowTo,
-              onToggleHowTo: () =>
-                  setState(() => _showInstallHowTo = !_showInstallHowTo),
-            ),
+            child: _InstallCard(bridge: _pwaBridge),
           ),
           const SizedBox(height: BgSpace.xxl),
         ],
 
-        // --- Backend --------------------------------------------------
-        Section(
-          eyebrow: 'BACKEND',
-          child: Card(
+        // --- Backend ----------------------------------------------------
+        // §3.5 row 5: diagnostics, not settings — rung 1, collapsed on a
+        // phone and open from 900 px up.
+        //
+        // §2 rule 2 keeps the degraded notes out of it: an error is never
+        // collapsed, so it renders above the tile rather than inside it.
+        if (health != null && health.degraded.isNotEmpty) ...<Widget>[
+          DegradedNotes(
+            title: 'Degraded right now',
+            notes: health.degraded,
+          ),
+          const SizedBox(height: BgSpace.lg),
+        ],
+        BgDisclosure(
+          label: 'Backend',
+          initiallyExpanded: BgBreak.disclosureDefaultOpen(context),
+          builder: (BuildContext context) => Card(
             child: Padding(
               padding: const EdgeInsets.all(BgSpace.lg),
               child: Column(
@@ -438,23 +446,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           .join(', '),
                     ),
                   ],
-                  if (health != null && health.degraded.isNotEmpty) ...<Widget>[
-                    const SizedBox(height: BgSpace.lg),
-                    DegradedNotes(
-                      title: 'Degraded right now',
-                      notes: health.degraded,
-                    ),
-                  ],
                 ],
               ),
             ),
           ),
         ),
 
-        const SizedBox(height: BgSpace.xxl),
+        const SizedBox(height: BgSpace.xl),
 
-        // --- About ----------------------------------------------------
-        const Section(eyebrow: 'ABOUT', child: _AboutCard()),
+        // --- About ------------------------------------------------------
+        // §3.5 row 6: also rung 1.
+        BgDisclosure(
+          label: 'About',
+          initiallyExpanded: BgBreak.disclosureDefaultOpen(context),
+          builder: (BuildContext context) => const _AboutCard(),
+        ),
 
         const SizedBox(height: BgSpace.xxl),
       ],
@@ -466,15 +472,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 /// the platform-by-platform instructions are rung 1, because they are long
 /// and are needed exactly once.
 class _InstallCard extends StatelessWidget {
-  const _InstallCard({
-    required this.bridge,
-    required this.showHowTo,
-    required this.onToggleHowTo,
-  });
+  const _InstallCard({required this.bridge});
 
   final PwaInstallBridge bridge;
-  final bool showHowTo;
-  final VoidCallback onToggleHowTo;
 
   @override
   Widget build(BuildContext context) {
@@ -527,59 +527,45 @@ class _InstallCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: BgSpace.md),
-            Divider(color: bg.hairline),
-            InkWell(
-              borderRadius: BgSpace.brSm,
-              onTap: onToggleHowTo,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: BgSpace.md),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Text(
-                        'HOW TO INSTALL',
-                        style: BgText.eyebrow(context),
-                      ),
-                    ),
-                    AnimatedRotation(
-                      turns: showHowTo ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 180),
-                      child: Icon(
-                        Icons.keyboard_arrow_down,
-                        size: BgIcon.inline,
-                        color: bg.inkSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            // Was a hand-rolled copy of the rung-1 chrome, with its open/closed
+            // flag lifted all the way into the screen's State. The shared
+            // widget draws the same header and owns the flag itself.
+            const BgDisclosure(
+              label: 'How to install',
+              builder: _installSteps,
             ),
-            if (showHowTo) ...<Widget>[
-              const _InstallStep(
-                icon: Icons.computer_outlined,
-                title: 'Desktop Chrome / Edge',
-                body: 'Use the install icon at the right of the address bar, '
-                    'or the browser menu → “Install page as app…”.',
-              ),
-              const SizedBox(height: BgSpace.sm),
-              const _InstallStep(
-                icon: Icons.phone_android_outlined,
-                title: 'Android Chrome',
-                body: 'Browser menu → “Add to Home screen” / “Install app”.',
-              ),
-              const SizedBox(height: BgSpace.sm),
-              const _InstallStep(
-                icon: Icons.phone_iphone_outlined,
-                title: 'iOS Safari',
-                body: 'Share → “Add to Home Screen”.',
-              ),
-            ],
           ],
         ),
       ),
     );
   }
 }
+
+/// The three platform recipes, built only once `HOW TO INSTALL` is opened.
+Widget _installSteps(BuildContext context) => const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        _InstallStep(
+          icon: Icons.computer_outlined,
+          title: 'Desktop Chrome / Edge',
+          body: 'Use the install icon at the right of the address bar, '
+              'or the browser menu → “Install page as app…”.',
+        ),
+        SizedBox(height: BgSpace.sm),
+        _InstallStep(
+          icon: Icons.phone_android_outlined,
+          title: 'Android Chrome',
+          body: 'Browser menu → “Add to Home screen” / “Install app”.',
+        ),
+        SizedBox(height: BgSpace.sm),
+        _InstallStep(
+          icon: Icons.phone_iphone_outlined,
+          title: 'iOS Safari',
+          body: 'Share → “Add to Home Screen”.',
+        ),
+      ],
+    );
 
 class _InstallStep extends StatelessWidget {
   const _InstallStep({
@@ -896,7 +882,7 @@ class _SpotifySetupBox extends StatelessWidget {
                   child: TextField(
                     controller: manualController,
                     style: text.bodySmall,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       isDense: true,
                       hintText:
                           'Paste full callback URL (e.g. http://localhost:8080/callback?code=...)',
@@ -965,9 +951,9 @@ class _LastfmQuickLinkBox extends StatelessWidget {
                 child: TextField(
                   controller: controller,
                   style: text.bodyMedium,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     isDense: true,
-                    prefixIcon: const Icon(Icons.person_outline, size: 18),
+                    prefixIcon: Icon(Icons.person_outline, size: 18),
                     hintText: 'Last.fm username (e.g. jpaquay)',
                     border: OutlineInputBorder(
                       borderRadius: BgSpace.brSm,

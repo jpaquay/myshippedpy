@@ -481,7 +481,7 @@ class _TelemetryInspectorPanelState
               borderRadius: BgSpace.brSm,
               border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
             ),
-            child: Icon(Icons.radar, color: colors.primary, size: 20),
+            child: Icon(Icons.monitor_heart_outlined, color: colors.primary, size: 20),
           ),
           const SizedBox(width: BgSpace.md),
           Expanded(
@@ -758,7 +758,7 @@ class _TelemetryInspectorPanelState
                       },
                     )
                   : null,
-              border: OutlineInputBorder(borderRadius: BgSpace.brSm),
+              border: const OutlineInputBorder(borderRadius: BgSpace.brSm),
             ),
           ),
         ),
@@ -1765,7 +1765,7 @@ class _TrajectoryRowCard extends StatelessWidget {
                           ),
                           child: Row(
                             children: <Widget>[
-                              Icon(
+                              const Icon(
                                 Icons.check_circle_outline,
                                 size: 15,
                                 color: BgPalette.ok,

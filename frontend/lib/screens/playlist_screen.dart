@@ -329,16 +329,25 @@ class _SetHeader extends StatelessWidget {
     final double trend = playlist.sky.pressureTrend6h;
     final String trendStr =
         '${trend >= 0 ? '+' : ''}${(trend * 12.0).toStringAsFixed(1)} hPa/6h';
-    final String cityLabel = playlist.subtitle?.contains('curated for ') == true
-        ? playlist.subtitle!
+    // §2 rule 4 — no placeholder values. This meta line used to default the
+    // city to "Brussels" and the theme to "petrichor" whenever the payload did
+    // not carry them: both read as facts about the set, and both were guesses.
+    // An unknown segment is dropped instead of invented.
+    final String cityLabel = playlist.subtitle.contains('curated for ')
+        ? playlist.subtitle
             .split('curated for ')
             .last
             .split(' under ')
             .first
             .trim()
-        : 'Brussels';
+        : '';
     final String themeLabel =
-        (playlist.themeId ?? 'petrichor').replaceAll('_', ' ').toUpperCase();
+        playlist.themeId.replaceAll('_', ' ').toUpperCase();
+    final String meta = <String>[
+      if (cityLabel.isNotEmpty) cityLabel,
+      if (themeLabel.isNotEmpty) themeLabel,
+      trendStr,
+    ].join(' • ');
 
     return Container(
       padding: const EdgeInsets.all(BgSpace.lg),
@@ -413,7 +422,7 @@ class _SetHeader extends StatelessWidget {
                   border: Border.all(color: colors.outlineVariant),
                 ),
                 child: Text(
-                  '$cityLabel • $themeLabel • $trendStr',
+                  meta,
                   style: text.labelSmall?.copyWith(
                     color: colors.onSurface,
                     fontWeight: FontWeight.w600,

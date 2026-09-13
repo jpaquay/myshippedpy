@@ -136,7 +136,10 @@ class AuthService {
       final GoogleSignInAccount? account =
           await GoogleSignIn.instance.attemptLightweightAuthentication();
       if (account == null) return null;
-      return _exchange(account);
+      // Awaited on purpose: a bare `return _exchange(...)` escapes this try,
+      // so a failing exchange would surface as an unhandled error instead of
+      // the silent fall-through to the sign-in screen below.
+      return await _exchange(account);
     } catch (_) {
       // A silent restore that fails is not worth reporting; the user simply
       // sees the sign-in screen.

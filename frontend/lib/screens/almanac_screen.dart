@@ -17,6 +17,15 @@ import '../providers.dart';
 import 'shell.dart';
 import 'widgets/netdev_footer.dart';
 
+/// What a KPI shows when the number behind it is not known yet.
+///
+/// `UX_IA_SPEC.md` §2 rule 4: empty states are honest and never show a
+/// placeholder number. This is the Almanac's one spelling of "no data", so a
+/// reader can tell a missing figure from a real one at a glance — the same
+/// em-dash the Data Viz charts use, and the same refusal to guess that makes
+/// the connection badges say "unknown" instead of "unlinked".
+const String _kNoValue = '—';
+
 enum _AlmanacMode {
   forged('Forged Daylists', Icons.history_edu_rounded),
   catalog('Scrobble Catalog', Icons.library_music_rounded),
@@ -321,7 +330,9 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
               BgSpace.lg,
               BgSpace.md,
               BgSpace.lg,
-              BgSpace.xxl,
+              // §7.2 / §6.2 — every destination's scroll view reserves this so
+              // the floating assistant bubble can never cover content.
+              BgSpace.bubbleClearance,
             ),
             sliver: SliverList(
               delegate: SliverChildListDelegate(<Widget>[
@@ -390,7 +401,7 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
             'Data Viz & Live QnA →',
             style: text.labelMedium?.copyWith(
               color: colors.primary,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
             ),
           ),
           backgroundColor: colors.primary.withValues(alpha: 0.1),
@@ -406,6 +417,7 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
     ColorScheme colors,
     TextTheme text,
   ) {
+    final BgColors roles = Theme.of(context).bg;
     return Wrap(
       alignment: WrapAlignment.spaceBetween,
       crossAxisAlignment: WrapCrossAlignment.center,
@@ -439,7 +451,10 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
                     duration: const Duration(milliseconds: 180),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
-                      color: active ? colors.primary : Colors.transparent,
+                      // §7.3 rule 3 — the accent budget is one filled element
+                      // per viewport, and it is the primary CTA. Selection is
+                      // a wash with an accent label, not a filled block.
+                      color: active ? roles.accentWash : Colors.transparent,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
@@ -448,14 +463,14 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
                         Icon(
                           m.icon,
                           size: 16,
-                          color: active ? colors.onPrimary : colors.onSurfaceVariant,
+                          color: active ? roles.accent : colors.onSurfaceVariant,
                         ),
                         const SizedBox(width: 6),
                         Text(
                           labelText,
                           style: text.labelMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: active ? colors.onPrimary : colors.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                            color: active ? roles.accent : colors.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -507,8 +522,21 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
     TextTheme text,
   ) {
     final ScrobbleAnalytics stats = _scrobbleData.analytics;
-    final int totalScrobbles = stats.totalScrobbles > 0 ? stats.totalScrobbles : 160717;
-    final int uniqueTracks = stats.uniqueTracks > 0 ? stats.uniqueTracks : 2649;
+
+    // §2 rule 4 — an empty state is honest, and never shows a placeholder
+    // number. This strip used to substitute 160717 scrobbles and 2649 unique
+    // tracks whenever the analytics call had not landed: figures that read as
+    // measurements and were not. Absent data now renders as an em-dash, the
+    // same treatment the Cohort pills below already use, the same one the Data
+    // Viz charts use for an unknown, and the same instinct as the connection
+    // badges, which report "unknown" rather than claim "unlinked" when all
+    // they really know is that they do not know yet.
+    final String totalScrobbles = stats.totalScrobbles > 0
+        ? '${stats.totalScrobbles} Scrobbles'
+        : _kNoValue;
+    final String uniqueTracks = stats.uniqueTracks > 0
+        ? '${stats.uniqueTracks} Unique Tracks'
+        : _kNoValue;
 
     if (_mode == _AlmanacMode.forged) {
       return Wrap(
@@ -524,9 +552,11 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
           _KpiPill(
             icon: Icons.wb_cloudy_rounded,
             label: 'FAVORITE SKY THEME',
+            // Same defect, same fix: with no forge history there is no
+            // favourite, and inventing "Petrichor" is not an answer.
             value: _history.isNotEmpty
                 ? _formatThemeName(_history.first.themeId)
-                : 'Petrichor',
+                : _kNoValue,
             accent: const Color(0xFF38BDF8),
           ),
           if (_retro.items.isNotEmpty)
@@ -536,11 +566,11 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
               value: _retro.items.first.detail,
               accent: const Color(0xFFF59E0B),
             ),
-          _KpiPill(
+          const _KpiPill(
             icon: Icons.storage_rounded,
             label: 'PERSISTENCE',
             value: 'Firestore + BQ OLAP',
-            accent: const Color(0xFF10B981),
+            accent: Color(0xFF10B981),
           ),
         ],
       );
@@ -554,13 +584,13 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
           _KpiPill(
             icon: Icons.headphones_rounded,
             label: '15-YEAR COHORT',
-            value: '$totalScrobbles Scrobbles',
+            value: totalScrobbles,
             accent: colors.primary,
           ),
           _KpiPill(
             icon: Icons.album_rounded,
             label: 'INDEXED CATALOG',
-            value: '$uniqueTracks Unique Tracks',
+            value: uniqueTracks,
             accent: const Color(0xFF38BDF8),
           ),
           _KpiPill(
@@ -590,19 +620,22 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
           label: 'COHORT OVERLAP',
           value: cohort != null
               ? '${cohort.cohortOverlapPct.toStringAsFixed(1)}% Familiar'
-              : '—',
+              : _kNoValue,
           accent: const Color(0xFF10B981),
         ),
         _KpiPill(
           icon: Icons.favorite_rounded,
           label: 'CORE FAVORITES',
-          value: cohort != null ? '${cohort.exactMatchesCount} Tracks' : '—',
+          value:
+              cohort != null ? '${cohort.exactMatchesCount} Tracks' : _kNoValue,
           accent: colors.primary,
         ),
         _KpiPill(
           icon: Icons.explore_rounded,
           label: 'FRESH DISCOVERIES',
-          value: cohort != null ? '${cohort.newDiscoveryCount} New Tracks' : '—',
+          value: cohort != null
+              ? '${cohort.newDiscoveryCount} New Tracks'
+              : _kNoValue,
           accent: const Color(0xFFF59E0B),
         ),
         _KpiPill(
@@ -610,7 +643,7 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
           label: 'DOMINANT MOOD',
           value: cohort != null
               ? _formatThemeName(cohort.dominantWeatherTheme)
-              : 'Petrichor',
+              : _kNoValue,
           accent: const Color(0xFF38BDF8),
         ),
       ],
@@ -657,7 +690,7 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
               const SizedBox(height: BgSpace.md),
               Text(
                 'No forged sets in your Almanac yet',
-                style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 6),
               Text(
@@ -826,7 +859,7 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
                     Text(
                       'GENRE:',
                       style: text.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                         color: colors.onSurfaceVariant,
                       ),
                     ),
@@ -1261,7 +1294,7 @@ class _ForgedSetCard extends StatelessWidget {
                       '+${entry.trackCount - 3} more',
                       style: text.labelSmall?.copyWith(
                         color: colors.primary,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                         fontSize: 11,
                       ),
                     ),
@@ -1358,7 +1391,7 @@ class _ScrobbleTrackRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: text.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -1392,7 +1425,7 @@ class _ScrobbleTrackRow extends StatelessWidget {
                       '${entry.bpmEstimate} BPM • ${_formatThemeName(entry.weatherTheme)}',
                       style: text.labelSmall?.copyWith(
                         color: moodColor,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                         fontSize: 10,
                       ),
                     ),
@@ -1503,7 +1536,7 @@ class _CohortDonutCard extends StatelessWidget {
                   Text(
                     '${slice.count} tracks (${slice.percentage.toStringAsFixed(0)}%)',
                     style: text.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                       color: colors.onSurfaceVariant,
                     ),
                   ),
@@ -1626,7 +1659,7 @@ class _CohortTrackListCard extends StatelessWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: text.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                               Text(
@@ -1654,7 +1687,7 @@ class _CohortTrackListCard extends StatelessWidget {
                             badgeLabel,
                             style: text.labelSmall?.copyWith(
                               color: badgeColor,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w600,
                               fontSize: 10,
                             ),
                           ),
@@ -1815,7 +1848,7 @@ class _CohortDonutPainter extends CustomPainter {
         style: TextStyle(
           color: textColor.withValues(alpha: 0.65),
           fontSize: 10,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w600,
           letterSpacing: 0.8,
         ),
       ),
@@ -1837,7 +1870,9 @@ class _CohortDonutPainter extends CustomPainter {
 // =============================================================================
 
 String _formatThemeName(String raw) {
-  if (raw.isEmpty) return 'Petrichor';
+  // A formatter does not get to invent a theme. An unnamed theme is unknown,
+  // and says so.
+  if (raw.isEmpty) return _kNoValue;
   return raw
       .split('_')
       .map((String w) =>
