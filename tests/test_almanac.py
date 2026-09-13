@@ -998,7 +998,13 @@ def test_learning_tunables_are_sane():
 def test_scrobbles_search_full_15_year_catalog():
     from backend.app.almanac.scrobbles import search_scrobbles
 
-    res = search_scrobbles(query="", weather_theme="warm_front_haze", limit=10)
+    # search_scrobbles requires an explicit uid (tenancy audit finding 9); the
+    # seed corpus owner is named rather than silently defaulted.
+    from backend.app.almanac.scrobbles import SEED_CORPUS_USER_ID
+
+    res = search_scrobbles(
+        SEED_CORPUS_USER_ID, query="", weather_theme="warm_front_haze", limit=10
+    )
     assert res.analytics.total_scrobbles >= 160000
     assert res.analytics.unique_tracks >= 44000
     assert res.analytics.avg_bpm > 90.0

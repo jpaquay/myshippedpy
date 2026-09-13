@@ -143,7 +143,12 @@ class TrajectoryRecord(TelemetryBaseModel):
     trajectory_id: str = Field(default_factory=lambda: f"traj_{uuid.uuid4().hex[:12]}")
     session_id: str = ""
     conversation_id: str = ""
-    user_id: str = "demo"
+    # TENANCY (audit finding 8). No default. A default identity is how
+    # misattribution happens silently: a caller that forgets to say who it is
+    # gets somebody's records filed under "demo" and nothing anywhere fails.
+    # Required means the omission is a loud construction error at the call
+    # site, which is where the caller actually knows the answer.
+    user_id: str
     surface: str = Field(default="advisor", description="'advisor', 'dataviz', 'forge', 'a2ui', 'mcp'")
     endpoint: str = Field(default="POST /api/advisor/live")
     created_at: datetime = Field(default_factory=_utc_now)
@@ -173,7 +178,7 @@ class TrajectoryRecord(TelemetryBaseModel):
 
 class SessionRecord(TelemetryBaseModel):
     session_id: str = Field(default_factory=lambda: f"sess_{uuid.uuid4().hex[:12]}")
-    user_id: str = "demo"
+    user_id: str  # required -- see TrajectoryRecord.user_id (audit finding 8)
     client_surface: str = Field(default="web-flutter", description="'web-flutter', 'a2ui', 'mcp', 'api'")
     started_at: datetime = Field(default_factory=_utc_now)
     last_active_at: datetime = Field(default_factory=_utc_now)
@@ -215,7 +220,7 @@ class ConversationTurn(TelemetryBaseModel):
 class ConversationRecord(TelemetryBaseModel):
     conversation_id: str = Field(default_factory=lambda: f"conv_{uuid.uuid4().hex[:12]}")
     session_id: str = ""
-    user_id: str = "demo"
+    user_id: str  # required -- see TrajectoryRecord.user_id (audit finding 8)
     surface: str = "advisor"
     title: str = "Atmospheric Session"
     summary: str = ""
@@ -237,7 +242,7 @@ MemoryCategory = Literal[
 
 class MemoryRecord(TelemetryBaseModel):
     memory_id: str = Field(default_factory=lambda: f"mem_{uuid.uuid4().hex[:12]}")
-    user_id: str = "demo"
+    user_id: str  # required -- see TrajectoryRecord.user_id (audit finding 8)
     conversation_id: str | None = None
     trajectory_id: str | None = None
     source_type: str = "conversation_turn"
@@ -260,7 +265,10 @@ class MemoryRecord(TelemetryBaseModel):
 
 
 class MemoryCreateRequest(TelemetryBaseModel):
-    user_id: str = "demo"
+    # Required on the wire too (audit finding 8). This is a request body, so
+    # the old ``= "demo"`` meant a client could create a memory without saying
+    # whose it was and have it silently filed against the demo tenant.
+    user_id: str
     content: str
     category: str = "musical_preference"
     subject: str | None = None

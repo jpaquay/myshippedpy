@@ -744,11 +744,15 @@ class AdvisorEngine:
             trajectory_id=trajectory_id,
         )
 
+        # ``user_id`` is only consulted if the conversation went missing between
+        # resolve and append; passing it means such a turn stays attributed to
+        # this caller instead of minting a demo-owned conversation.
         store.append_conversation_turn(
             conversation_id=conv.conversation_id,
             role="user",
             content=user_prompt_text,
             trajectory_id=trajectory_id,
+            user_id=uid,
         )
         store.append_conversation_turn(
             conversation_id=conv.conversation_id,
@@ -757,6 +761,7 @@ class AdvisorEngine:
             spoken_summary=spoken_summary,
             actions_executed=[a.model_dump() for a in actions],
             trajectory_id=trajectory_id,
+            user_id=uid,
         )
 
         tool_steps = [

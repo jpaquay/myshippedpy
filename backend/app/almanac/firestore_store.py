@@ -148,9 +148,16 @@ class FirestoreAlmanac:
         Rows that no longer validate against the current :class:`Playlist`
         model are dropped rather than failing the whole request -- a schema
         change should cost you the oldest entries, not the endpoint.
+
+        An unresolvable caller gets ``[]``. Refusing is the only safe answer:
+        substituting a concrete uid here is the defect class the tenancy audit
+        was written about.
         """
         playlists: list[Playlist] = []
         seen_ids: set[str] = set()
+
+        if not user_id:
+            return []
 
         try:
             rows = await self._repos.forges.list_for_user(user_id, limit=limit)
@@ -162,15 +169,35 @@ class FirestoreAlmanac:
         except Exception:
             logger.exception("history query failed for %s", user_id)
 
-        # Merge in-memory buffer so recently forged Daylists appear immediately
-        # even if Firestore index propagation or auth uid differs.
+        # Merge the in-memory buffer so a Daylist forged seconds ago appears
+        # immediately, before Firestore's index has propagated.
+        #
+        # TENANCY (audit finding 1). The buffer is process-global: it holds the
+        # last N playlists forged by *anyone* sharing this container. The
+        # ownership test is therefore unconditional and exact.
+        #
+        # What used to be here was:
+        #
+        #     if pl_uid in {user_id, "demo", None} or not playlists:
+        #
+        # and every clause of it leaked. ``or not playlists`` short-circuited
+        # the ownership test entirely, so any user with an empty Firestore
+        # history -- which is *every brand-new user* -- was served the whole
+        # process-wide buffer. ``"demo"`` and ``None`` leaked independently:
+        # anything forged anonymously, or with no uid stamped, was handed to
+        # whoever asked next.
+        #
+        # An empty history is a legitimate empty history. It is not a reason to
+        # show someone else's forges.
         for pl in _PROCESS_FORGE_HISTORY:
             pl_id = getattr(pl, "id", None)
             pl_uid = getattr(pl, "user_id", None)
-            if pl_id and pl_id not in seen_ids:
-                if pl_uid in {user_id, "demo", None} or not playlists:
-                    playlists.append(pl)
-                    seen_ids.add(pl_id)
+            if not pl_id or pl_id in seen_ids:
+                continue
+            if pl_uid != user_id:
+                continue
+            playlists.append(pl)
+            seen_ids.add(pl_id)
 
         playlists.sort(
             key=lambda p: getattr(p, "created_at", None) or "",

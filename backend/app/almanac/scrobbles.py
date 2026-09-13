@@ -34,7 +34,47 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ID = "netdev-firebase"
 BQ_DATASET = "barogroove_analytics"
-LASTFM_USER = "jpaquay"
+
+# ===========================================================================
+# TENANCY: this module is single-tenant by construction (audit finding 9)
+# ===========================================================================
+#
+# WHAT THIS MODULE IS. ``data/scrobbles/`` holds one real listening history --
+# 160,717 scrobbles over 15 years, hydrated from one Last.fm account. It is the
+# **seed corpus**: the demo data, the thing that makes an empty install look
+# like an almanac instead of a blank page. Every catalog index below
+# (``_CATALOG_DICTS_CACHE``, ``_CATALOG_INDEX_BY_NORM``, ``_ARTIST_PLAYS_INDEX``,
+# ``_SUMMARY_CACHE``, the BigQuery caches) is process-global with no uid in any
+# key, because there is exactly one corpus to index.
+#
+# WHAT WAS WRONG. The uid of the human whose history this is was spelled
+# ``"jpaquay"`` as a silent default in four places -- a model field default, a
+# dict-read fallback, and two function signatures. Read in passing, each looked
+# like "the current user"; what it actually meant was "the seed corpus owner".
+# A caller that forgot to pass a uid therefore got somebody's real listening
+# history back under the impression it was getting their own.
+#
+# WHAT CHANGED. Nothing about the data, the indexes or the single-tenancy. The
+# defaults are gone: ``search_scrobbles`` now *requires* a caller-supplied uid,
+# and the two remaining occurrences name this constant, so the choice reads as
+# deliberate at every site.
+#
+# WHAT DID **NOT** CHANGE, DELIBERATELY. This is not a multi-corpus rewrite.
+# The corpus is still shared and still returned to every caller regardless of
+# their uid -- ``search_scrobbles`` takes a uid for attribution and API
+# symmetry, it does not filter by it, and the indexes are still global. Another
+# item of this rework depends on this corpus staying readable as a seed, so
+# partitioning it per user is explicitly out of scope here. The honest summary
+# is: the seed corpus is now *labelled* rather than *disguised*.
+SEED_CORPUS_USER_ID = "jpaquay"
+
+# The Last.fm account the seed corpus was hydrated from. Used to build the
+# ``scrobble_summaries/{user}`` document path, so it is a data location, not an
+# identity to authorise against.
+SEED_CORPUS_LASTFM_USER = SEED_CORPUS_USER_ID
+
+# Back-compatible alias; the document path above still reads better as this.
+LASTFM_USER = SEED_CORPUS_LASTFM_USER
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DATA_SCROBBLES_DIR = REPO_ROOT / "data/scrobbles"
 CACHE_DIR = DATA_SCROBBLES_DIR if DATA_SCROBBLES_DIR.exists() else (REPO_ROOT / ".cache/scrobbles")
@@ -45,7 +85,8 @@ class ScrobbleEntry(BaseModel):
     """A scrobble or catalog track with Sonic DNA & BaroGroove weather theme metadata."""
 
     id: str
-    user_id: str = "jpaquay"
+    # Seed corpus rows belong to the seed corpus owner. Named, not implied.
+    user_id: str = SEED_CORPUS_USER_ID
     title: str
     artist: str
     album: str | None = None
@@ -532,7 +573,8 @@ def _ensure_catalog_and_indexes() -> list[dict[str, Any]]:
 def _dict_to_entry(d: dict[str, Any]) -> ScrobbleEntry:
     return ScrobbleEntry(
         id=str(d.get("catalog_id") or d.get("id") or ""),
-        user_id=str(d.get("user_id") or "jpaquay"),
+        # A catalog row with no uid is a seed corpus row; say so by name.
+        user_id=str(d.get("user_id") or SEED_CORPUS_USER_ID),
         title=str(d.get("title") or d.get("track") or ""),
         artist=str(d.get("artist") or ""),
         album=d.get("album"),
@@ -779,7 +821,7 @@ def get_15year_analytics() -> ScrobbleAnalytics:
 
 
 def search_scrobbles(
-    user_id: str = "jpaquay",
+    user_id: str,
     *,
     query: str | None = None,
     tag: str | None = None,
@@ -787,7 +829,18 @@ def search_scrobbles(
     weather_theme: str | None = None,
     limit: int = 50,
 ) -> ScrobbleSearchResponse:
-    """Search 44,361 unique tracks & return 160,717-scrobble 15-year analytics in <5ms warm."""
+    """Search 44,361 unique tracks & return 160,717-scrobble 15-year analytics in <5ms warm.
+
+    ``user_id`` is **required** (audit finding 9). It used to default to the
+    seed corpus owner's real uid, which read like "the current user" and meant
+    "somebody else's listening history".
+
+    Be clear about what it does and does not do: this function serves the
+    shared seed corpus and does **not** filter by ``user_id``. Requiring it
+    makes every call site state whose request this is instead of silently
+    inheriting a real person's identity; it is not an access control boundary,
+    and the corpus is deliberately still shared. See ``SEED_CORPUS_USER_ID``.
+    """
     t0 = time.perf_counter()
     analytics = get_15year_analytics()
     catalog_dicts = _ensure_catalog_and_indexes()
@@ -1343,7 +1396,7 @@ def analyze_playlist_cohort(req: PlaylistCohortRequest) -> PlaylistCohortRespons
 
 
 async def sync_scrobbles_from_lastfm(
-    user_id: str, lastfm_username: str = "jpaquay"
+    user_id: str, lastfm_username: str = SEED_CORPUS_LASTFM_USER
 ) -> ScrobbleSearchResponse:
     """Triggers incremental sync and returns updated 15-year scrobble search response."""
     _SUMMARY_CACHE["ts"] = 0.0

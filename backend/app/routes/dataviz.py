@@ -11,6 +11,7 @@ from backend.app.dataviz.engine import (
     get_dataviz_engine,
 )
 from backend.app.firebase.auth import current_user_optional
+from backend.app.identity import ANONYMOUS_USER_ID
 
 router = APIRouter(prefix="/api/dataviz", tags=["dataviz"])
 
@@ -18,9 +19,17 @@ _engine = get_dataviz_engine()
 
 
 async def _resolve_uid(request: Request) -> str:
-    """Return authenticated user UID or 'jpaquay' fallback."""
+    """Return the authenticated caller's uid, or the reserved anonymous scope.
+
+    TENANCY. This used to fall back to the literal uid ``"jpaquay"`` -- a real,
+    named human being -- so every signed-out visitor read and wrote dataviz
+    telemetry as him. The advisor route fell back to ``"demo"`` instead, and
+    the telemetry store's ``demo`` <-> ``jpaquay`` alias (audit finding 7)
+    papered over the disagreement. Both now name the same reserved, empty
+    scope. See ``identity.ANONYMOUS_USER_ID``.
+    """
     user = await current_user_optional(request)
-    return user.uid if user and user.uid else "jpaquay"
+    return user.uid if user and user.uid else ANONYMOUS_USER_ID
 
 
 @router.get(

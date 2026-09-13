@@ -1330,14 +1330,24 @@ class TestFlutterA2uiTransformAndLivePairing:
         th_comps = th_data[1]["updateComponents"]["components"]
         assert all(c["component"] not in ("Stack", "ThemeChip", "GenreOption") for c in th_comps)
 
-        # 3. Forge a playlist and verify showPlaylist and showAlmanac return clean Flutter A2UI
-        forge_res = client.post("/api/forge", json={"theme_id": "petrichor"})
+        # 3. Forge a playlist and verify showPlaylist and showAlmanac return clean Flutter A2UI.
+        #
+        # The caller identifies itself on *both* halves. /api/surfaces/action
+        # resolves the caller with the same resolver /api/forge stamps with, so
+        # a playlist forged as this user is readable back by this user and by
+        # nobody else; an anonymous read would correctly 404 rather than being
+        # mapped onto the demo tenant. Cross-tenant refusal itself is covered
+        # in tests/test_tenancy.py -- here we only need a consistent identity
+        # so the component-shape assertions have something to render.
+        who = {"X-Barogroove-User": "a2ui_shape_probe"}
+        forge_res = client.post("/api/forge", json={"theme_id": "petrichor"}, headers=who)
         assert forge_res.status_code == 200
         pl_id = forge_res.json()["playlist"]["id"]
 
         pl_surface_res = client.post(
             "/api/surfaces/action",
             json={"actionResponse": {"surfaceId": "playlist", "actionId": "showPlaylist", "payload": {"playlist_id": pl_id}}},
+            headers=who,
         )
         assert pl_surface_res.status_code == 200
         pl_data = pl_surface_res.json()
@@ -1348,6 +1358,7 @@ class TestFlutterA2uiTransformAndLivePairing:
         alm_surface_res = client.post(
             "/api/surfaces/action",
             json={"actionResponse": {"surfaceId": "almanac", "actionId": "showAlmanac"}},
+            headers=who,
         )
         assert alm_surface_res.status_code == 200
         alm_data = alm_surface_res.json()

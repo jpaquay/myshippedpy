@@ -22,6 +22,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.identity import ANONYMOUS_USER_ID
 from backend.app.main import create_app
 
 
@@ -568,11 +569,18 @@ def test_r3_almanac_feedback_creates_memories_with_almanac_feedback_source(clien
 
 def test_r3_extracted_memories_injected_into_subsequent_ai_system_prompt(client: TestClient) -> None:
     """R3: Extracted semantic memories are surfaced into TrajectoryRecord.system_instruction of subsequent AI calls."""
-    # Create a distinctive semantic memory for the user
+    # Create a distinctive semantic memory for the user.
+    #
+    # The advisor turn below is unauthenticated, so it reads the reserved
+    # anonymous scope -- not the "demo" tenant it used to be silently mapped
+    # onto (tenancy audit findings 7 and 11). Seeding the memory under the same
+    # scope keeps this test about memory injection, which is what it is for.
+    # That the anonymous caller can no longer see "demo"'s memories is the
+    # point of the fix, and tests/test_tenancy.py asserts it directly.
     create_resp = client.post(
         "/api/telemetry/memories",
         json={
-            "user_id": "demo",
+            "user_id": ANONYMOUS_USER_ID,
             "content": "Listener adores Boards of Canada analog synths during 994 hPa cyclonic storms",
             "category": "artist_affinity",
             "tags": ["boards-of-canada", "storm"],
@@ -904,10 +912,13 @@ def test_r5_get_sessions_and_conversations_and_memories_filtering(client: TestCl
     assert any(c["conversation_id"] == conv_id for c in convs)
     assert client.get(f"/api/telemetry/conversations/{conv_id}").status_code == 200
 
-    # Seed distinct memories for tag, category, and query filtering
+    # Seed distinct memories for tag, category, and query filtering.
+    # ``user_id`` is required on the wire (tenancy audit finding 8): a memory
+    # has to say whose it is rather than defaulting into the demo tenant.
     client.post(
         "/api/telemetry/memories",
         json={
+            "user_id": "r5_filter_probe",
             "content": "Loves Shibuya jazz bars on rainy nights",
             "category": "location_affinity",
             "tags": ["shibuya", "jazz"],
@@ -916,6 +927,7 @@ def test_r5_get_sessions_and_conversations_and_memories_filtering(client: TestCl
     client.post(
         "/api/telemetry/memories",
         json={
+            "user_id": "r5_filter_probe",
             "content": "Dislikes harsh industrial noise at dawn",
             "category": "sentiment_dislike",
             "tags": ["industrial", "dawn"],

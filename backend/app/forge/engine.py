@@ -51,6 +51,7 @@ from ..contracts import (
     normalise,
 )
 from ..errors import DegradationLedger, ThemeNotFound
+from ..identity import ANONYMOUS_USER_ID
 from ..sinks.registry import write_playlist
 from ..sky.extract import extract_sky_vector
 from ..sonic.corridors import get_corridor
@@ -890,7 +891,11 @@ class PlaylistForge:
                 trajectory_id=traj_id,
                 session_id=f"sess_explain_{uuid.uuid4().hex[:8]}",
                 conversation_id=f"conv_explain_{uuid.uuid4().hex[:8]}",
-                user_id=playlist.user_id or "demo",
+                # TENANCY. Was ``playlist.user_id or "demo"``: an unattributed
+                # playlist had its explain-trajectory filed against the demo
+                # tenant. The reserved anonymous scope owns nothing and cannot
+                # be read as a real user. See ``identity.ANONYMOUS_USER_ID``.
+                user_id=playlist.user_id or ANONYMOUS_USER_ID,
                 surface="forge",
                 endpoint="POST /api/forge/explain",
                 trace_id=get_trace_id(),

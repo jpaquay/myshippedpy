@@ -386,6 +386,7 @@ async def _guard(
         return _pack(payload, headline=f"BAROGROOVE could not complete {tool_name}.")
     finally:
         with contextlib.suppress(Exception):
+            from ..identity import ANONYMOUS_USER_ID
             from ..telemetry.models import TokenUsageMetrics, ToolExecutionStep, TrajectoryRecord
             from ..telemetry.store import get_telemetry_store
             from ..telemetry.tracing import emit_telemetry_log, get_gcp_trace, get_span_id, get_trace_id
@@ -398,7 +399,12 @@ async def _guard(
                 trajectory_id=f"traj_mcp_{uuid.uuid4().hex[:12]}",
                 session_id=f"sess_mcp_{uuid.uuid4().hex[:8]}",
                 conversation_id=f"conv_mcp_{uuid.uuid4().hex[:8]}",
-                user_id="demo",
+                # TENANCY. Was a hardcoded ``"demo"``, so every MCP tool call
+                # in the process was filed against the demo tenant regardless
+                # of who triggered it. This transport carries no end-user
+                # identity, so say that explicitly instead of naming a real
+                # tenant. If MCP ever gains a caller identity, thread it here.
+                user_id=ANONYMOUS_USER_ID,
                 surface="mcp",
                 endpoint=f"MCP {tool_name}",
                 trace_id=get_trace_id(),

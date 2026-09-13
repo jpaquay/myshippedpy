@@ -541,6 +541,10 @@ class ForgeRepository(_BaseRepository):
         """
         capped = max(1, min(int(limit), MAX_HISTORY_LIMIT))
 
+        if not user_id:
+            # No caller to scope the query to. Refuse rather than guess.
+            return []
+
         async def _query_uid(uid: str) -> list[dict[str, Any]]:
             from google.cloud.firestore_v1.base_query import (  # noqa: PLC0415
                 FieldFilter,
@@ -561,10 +565,16 @@ class ForgeRepository(_BaseRepository):
                 return docs[:capped]
 
         async def _op() -> list[dict[str, Any]]:
-            rows = await _query_uid(user_id)
-            if not rows and user_id != "demo":
-                rows = await _query_uid("demo")
-            return rows
+            # TENANCY (audit finding 2). There used to be a retry here:
+            #
+            #     if not rows and user_id != "demo":
+            #         rows = await _query_uid("demo")
+            #
+            # An empty result is a legitimate empty result -- a new user simply
+            # has no forges yet. It is not a reason to hand them the demo
+            # tenant's rows. One query, for the caller, and whatever it returns
+            # is the answer.
+            return await _query_uid(user_id)
 
         return await _guard(
             _op, what=f"forges.list_for_user({user_id})", default=[]

@@ -7,7 +7,7 @@ import uuid
 from typing import Any, Sequence
 
 from .models import ConversationTurn, MemoryRecord
-from .store import get_telemetry_store
+from .store import _require_user_id, get_telemetry_store
 
 _KNOWN_ARTISTS = [
     "Massive Attack",
@@ -74,8 +74,13 @@ def extract_memories_from_turn(
     conversation_id: str | None = None,
     trajectory_id: str | None = None,
 ) -> list[MemoryRecord]:
-    """Extract and persist semantic memories across 7 categories from an AI turn."""
-    uid = user_id or "demo"
+    """Extract and persist semantic memories across 7 categories from an AI turn.
+
+    TENANCY (audit finding 8). ``uid = user_id or "demo"`` used to sit here, so
+    an empty uid filed a real person's extracted preferences against the demo
+    tenant. Refuse instead: an unattributable memory is not written at all.
+    """
+    uid = _require_user_id(user_id, "extract_memories_from_turn")
     text = (prompt or "").strip()
     text_lower = text.lower()
     store = get_telemetry_store()
@@ -247,8 +252,11 @@ def extract_memory_from_feedback(
     theme_id: str = "",
     genre_id: str = "",
 ) -> MemoryRecord:
-    """Synthesize and persist a semantic MemoryRecord from Almanac loved/skipped feedback."""
-    uid = user_id or "demo"
+    """Synthesize and persist a semantic MemoryRecord from Almanac loved/skipped feedback.
+
+    Refuses an empty ``user_id`` rather than defaulting it (audit finding 8).
+    """
+    uid = _require_user_id(user_id, "extract_memory_from_feedback")
     sig = (signal or "loved").lower()
     track_label = f"{artist} — {title}".strip(" —") if (artist or title) else track_key
     theme_label = theme_id or "atmospheric"

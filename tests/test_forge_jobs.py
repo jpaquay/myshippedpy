@@ -520,7 +520,14 @@ def test_http_a_finished_job_lands_in_recent_playlists(client: Any) -> None:
     job_id = client.post("/api/forge/jobs", json=payload).json()["job_id"]
     final = _poll(client, job_id)
     assert final["status"] == "done", final.get("error")
-    assert final["playlist_id"] in surfaces._RECENT_PLAYLISTS
+
+    # The recent-playlist buffer is keyed by uid (tenancy audit finding 3), so
+    # "it landed" means "it landed in *its owner's* bucket". This job was
+    # forged anonymously, which `_prepare_request` stamps as "demo".
+    assert surfaces.recent_playlist_for("demo", final["playlist_id"]) is not None
+    # ...and nowhere else. Another user must not see it, and there is no
+    # process-global bucket left to find it in.
+    assert surfaces.recent_playlist_for("somebody_else", final["playlist_id"]) is None
 
 
 def test_http_unknown_job_is_a_404_not_a_crash(client: Any) -> None:

@@ -153,7 +153,11 @@ async def create_memory(body: MemoryCreateRequest) -> dict[str, Any]:
     store = get_telemetry_store()
     mem = MemoryRecord(
         memory_id=f"mem_{uuid.uuid4().hex[:12]}",
-        user_id=body.user_id or "demo",
+        # TENANCY (audit finding 8). Was ``body.user_id or "demo"``. The field
+        # is required on the wire now, so a client that does not say whose
+        # memory this is gets a 422 instead of silently writing into the demo
+        # tenant. There is nothing left here to fall back to.
+        user_id=body.user_id,
         conversation_id=body.conversation_id,
         trajectory_id=body.trajectory_id,
         source_type="manual",

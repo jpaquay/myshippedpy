@@ -25,6 +25,29 @@ COL_AI_CONVERSATIONS = "ai_conversations"
 COL_AI_MEMORIES = "ai_memories"
 
 
+def _require_user_id(user_id: str | None, what: str) -> str:
+    """Return ``user_id``, or raise. Never substitutes one.
+
+    TENANCY (audit finding 8). The telemetry surface used to carry
+    ``user_id: str = "demo"`` on about eight signatures and model fields, plus
+    ``uid = user_id or "demo"`` inside the bodies. A caller that forgot to say
+    who it was got its records filed against the demo tenant and nothing
+    anywhere failed -- which is precisely how AI conversation history and
+    extracted memories end up misattributed in a way no test notices.
+
+    Raising is the point. A path that raises on an unresolvable identity fails
+    loudly, in the test, at the call site that actually knows the answer. A
+    path that substitutes ``"demo"`` returns a cheerful 200 with somebody
+    else's records in it.
+    """
+    if isinstance(user_id, str) and user_id:
+        return user_id
+    raise ValueError(
+        f"{what}: user_id is required and must be non-empty; "
+        "refusing to attribute this record to a substitute identity"
+    )
+
+
 class DualSinkTelemetryStore:
     """Thread-safe In-Memory primary store + lazy Firestore persistent dual sink."""
 
@@ -80,14 +103,19 @@ class DualSinkTelemetryStore:
     def resolve_or_create_session(
         self,
         session_id: str | None = None,
-        user_id: str = "demo",
+        *,
+        user_id: str,
         client_surface: str = "web-flutter",
         geocache_id: str | None = None,
         theme_id: str | None = None,
         genre_id: str | None = None,
         increment_turn: bool = True,
     ) -> SessionRecord:
-        uid = user_id or "demo"
+        # TENANCY (audit finding 8). ``user_id`` was ``= "demo"`` and the body
+        # then did ``uid = user_id or "demo"`` -- two chances to file a session
+        # against the demo tenant without anybody noticing. It is now a
+        # required keyword, and an empty one is refused rather than replaced.
+        uid = _require_user_id(user_id, "resolve_or_create_session")
         with self._lock:
             sid = session_id or f"sess_{uuid.uuid4().hex[:12]}"
             existing = self._sessions.get(sid)
@@ -127,8 +155,19 @@ class DualSinkTelemetryStore:
             return self._sessions.get(session_id)
 
     def _match_user(self, target_user_id: str, record_user_id: str) -> bool:
-        if target_user_id in ("demo", "jpaquay"):
-            return record_user_id in ("demo", "jpaquay")
+        """Does this record belong to the user being asked about?
+
+        TENANCY (audit finding 7). This used to read:
+
+            if target_user_id in ("demo", "jpaquay"):
+                return record_user_id in ("demo", "jpaquay")
+
+        -- an explicit, symmetric, two-way tenant alias. Asking as ``demo``
+        returned ``jpaquay``'s records and asking as ``jpaquay`` returned
+        ``demo``'s, so AI conversation history and extracted memories crossed
+        freely between the demo tenant and a real named user in both
+        directions. Identity is identity; there are no aliases.
+        """
         return target_user_id == record_user_id
 
     def list_sessions(
@@ -157,11 +196,14 @@ class DualSinkTelemetryStore:
         self,
         conversation_id: str | None = None,
         session_id: str = "",
-        user_id: str = "demo",
+        *,
+        user_id: str,
         surface: str = "advisor",
         title: str | None = None,
     ) -> ConversationRecord:
-        uid = user_id or "demo"
+        # TENANCY (audit finding 8). Required keyword; see
+        # ``resolve_or_create_session``.
+        uid = _require_user_id(user_id, "resolve_or_create_conversation")
         with self._lock:
             cid = conversation_id or f"conv_{uuid.uuid4().hex[:12]}"
             existing = self._conversations.get(cid)
@@ -207,11 +249,26 @@ class DualSinkTelemetryStore:
         audio_transcript: str | None = None,
         actions_executed: list[dict[str, Any]] | None = None,
         trajectory_id: str | None = None,
+        user_id: str | None = None,
     ) -> ConversationTurn:
+        """Append a turn. ``user_id`` is only consulted if the conversation is unknown.
+
+        TENANCY (audit finding 8). The auto-create branch below used to call
+        ``resolve_or_create_conversation(conversation_id=...)`` with no uid at
+        all, so a turn appended against an unrecognised conversation minted a
+        conversation owned by the demo tenant and quietly filed a real user's
+        words in it. There is now nothing to substitute: either the caller
+        names the owner, or the append is refused.
+        """
         with self._lock:
             conv = self._conversations.get(conversation_id)
             if conv is None:
-                conv = self.resolve_or_create_conversation(conversation_id=conversation_id)
+                conv = self.resolve_or_create_conversation(
+                    conversation_id=conversation_id,
+                    user_id=_require_user_id(
+                        user_id, "append_conversation_turn (unknown conversation)"
+                    ),
+                )
             turn_idx = len(conv.turns)
             turn = ConversationTurn(
                 turn_id=f"turn_{uuid.uuid4().hex[:8]}",
@@ -293,7 +350,8 @@ class DualSinkTelemetryStore:
     def get_or_create_session_sync(
         self,
         session_id: str | None = None,
-        user_id: str = "demo",
+        *,
+        user_id: str,  # required -- audit finding 8
         client_surface: str = "web-flutter",
     ) -> SessionRecord:
         return self.resolve_or_create_session(

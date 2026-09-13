@@ -51,6 +51,7 @@ from ..a2ui.palette import (
 )
 from ..a2ui.protocol import A2UI_MIME_TYPE, A2UIProtocolError
 from ..errors import ThemeNotFound
+from ..identity import ANONYMOUS_USER_ID
 from ..a2ui.surfaces import (
     agent_function_response,
     build_almanac_surface,
@@ -72,9 +73,20 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/surfaces", tags=["a2ui"])
 
 
-def _record_a2ui_trajectory(endpoint: str, summary: str, latency_ms: float = 1.5) -> None:
+def _record_a2ui_trajectory(
+    endpoint: str, summary: str, user_id: str, latency_ms: float = 1.5
+) -> None:
+    """Record one A2UI render as a trajectory, attributed to a stated caller.
+
+    ``user_id`` is a required positional argument on purpose (audit finding 8).
+    ``TrajectoryRecord.user_id`` no longer defaults to ``"demo"``, so every
+    call site has to answer "whose render is this?" -- and the surface renders
+    that genuinely have no caller say so explicitly with ``ANONYMOUS_USER_ID``
+    rather than being quietly filed against a real tenant.
+    """
     try:
         traj = TrajectoryRecord(
+            user_id=user_id,
             surface="a2ui",
             endpoint=endpoint,
             trace_id=get_trace_id(),
@@ -622,7 +634,12 @@ async def get_sky_surface(
     ),
 ) -> JSONResponse:
     """Read the sky and return the SkyDial surface stream."""
-    _record_a2ui_trajectory("GET /api/surfaces/sky", f"Rendered SkyDial surface for ({lat}, {lon})")
+    # A public surface render; there is no caller to attribute it to.
+    _record_a2ui_trajectory(
+        "GET /api/surfaces/sky",
+        f"Rendered SkyDial surface for ({lat}, {lon})",
+        ANONYMOUS_USER_ID,
+    )
     try:
         sky = await _read_sky(lat, lon)
     except Exception as exc:
@@ -655,9 +672,11 @@ def get_themes_surface(
     single: bool = Query(False),
 ) -> JSONResponse:
     """The two orthogonal axes. Loads even if the sonic layer is not deployed yet."""
+    # A public surface render; there is no caller to attribute it to.
     _record_a2ui_trajectory(
         "GET /api/surfaces/themes",
         f"Rendered Themes surface (theme={theme}, genre={genre})",
+        ANONYMOUS_USER_ID,
     )
     themes, corridors, degraded = _load_themes()
     if degraded:
@@ -683,9 +702,11 @@ def get_telemetry_surface(
     single: bool = Query(False),
 ) -> JSONResponse:
     """Return the live AI Observability Telemetry Inspector A2UI surface stream."""
+    # A public surface render; there is no caller to attribute it to.
     _record_a2ui_trajectory(
         "GET /api/surfaces/telemetry",
         "Rendered AI Observability TelemetryInspector surface",
+        ANONYMOUS_USER_ID,
     )
     return _a2ui(
         _to_flutter_a2ui(
@@ -804,7 +825,22 @@ class ActionRequest(BaseModel):
 
 
 _LAST_SELECTION: dict[str, dict[str, Any]] = {}
-_RECENT_PLAYLISTS: dict[str, Any] = {}
+
+# TENANCY (audit finding 3). This used to be ``dict[playlist_id, playlist]``:
+# one process-global bucket that every forge in the container wrote into and
+# that the A2UI actions read back without ever asking who was asking. The
+# almanac action iterated all of its values; the detail action served any
+# playlist id a client cared to name, and failing that ``list(...)[-1]`` --
+# literally "the last playlist anyone forged".
+#
+# It is now keyed by uid first. A playlist with no owner is not recorded at
+# all, and every read goes through the accessors below, which take a uid and
+# cannot be made to answer for a different one.
+_RECENT_PLAYLISTS: dict[str, dict[str, Any]] = {}
+
+# Per-uid cap. The old global buffer was unbounded; keyed by uid it would be
+# unbounded per user, which is worse. Recent-forge display never needs more.
+_RECENT_PLAYLISTS_PER_USER = 50
 
 
 def get_last_selection(user_key: str) -> dict[str, Any]:
@@ -812,8 +848,35 @@ def get_last_selection(user_key: str) -> dict[str, Any]:
 
 
 def record_recent_playlist(playlist: Any) -> None:
-    if playlist is not None and getattr(playlist, "id", None):
-        _RECENT_PLAYLISTS[playlist.id] = playlist
+    """Remember a freshly forged playlist, under its owner's uid.
+
+    A playlist that carries no ``user_id`` is dropped rather than filed in some
+    shared bucket: an unattributable write is not the same thing as a write
+    belonging to everybody.
+    """
+    if playlist is None or not getattr(playlist, "id", None):
+        return
+    uid = getattr(playlist, "user_id", None)
+    if not isinstance(uid, str) or not uid:
+        return
+    bucket = _RECENT_PLAYLISTS.setdefault(uid, {})
+    bucket[playlist.id] = playlist
+    while len(bucket) > _RECENT_PLAYLISTS_PER_USER:
+        bucket.pop(next(iter(bucket)))
+
+
+def recent_playlists_for(user_id: str | None) -> list[Any]:
+    """This user's recently forged playlists, oldest first. Never anyone else's."""
+    if not user_id:
+        return []
+    return list(_RECENT_PLAYLISTS.get(user_id, {}).values())
+
+
+def recent_playlist_for(user_id: str | None, playlist_id: str | None) -> Any | None:
+    """One recent playlist, by id, **only** if this user owns it."""
+    if not user_id or not playlist_id:
+        return None
+    return _RECENT_PLAYLISTS.get(user_id, {}).get(playlist_id)
 
 
 @router.post("/action", summary="A2UI action / callAgentFunction endpoint")
@@ -828,18 +891,44 @@ async def post_action(
     ``updateDataModel`` alone -- no components are resent -- which is exactly the
     dividend of keeping data out of the component tree.
     """
-    _record_a2ui_trajectory(
-        f"POST /api/surfaces/action ({request.action})",
-        f"Executed A2UI surface action {request.action}",
-    )
     surface_id = request.surface_id
     raw_payload = request.payload()
 
-    from ..firebase.auth import current_user_optional
+    # TENANCY. Resolve the caller with ``routes.pairing.current_user_id`` --
+    # the *one* intended resolver, and the same one ``/api/forge`` uses to
+    # stamp ``playlist.user_id``. This endpoint used to call
+    # ``current_user_optional`` directly, which only ever looks at the bearer
+    # token; a client identified by ``request.state`` or the
+    # ``X-Barogroove-User`` dev header therefore wrote under its own uid and
+    # read under a different one. That is precisely the read/write split
+    # commit 9820091 fixed for the almanac route, still open here.
+    from .pairing import current_user_id
 
-    user = await current_user_optional(http_request)
-    uid = user.uid if user else "demo"
-    user_key = user.uid if user else (http_request.client.host if http_request.client else "default")
+    # TENANCY (audit finding 11). This used to be ``user.uid if user else
+    # "demo"``, which silently mapped every unauthenticated caller onto the
+    # demo tenant's *real* rows -- its Firestore history, its recent forges,
+    # its playlists. ``None`` means "nobody resolved", and every read below
+    # treats that as "no rows", not as "somebody else's rows".
+    #
+    # Giving signed-out visitors something to look at is demo mode, and demo
+    # mode is a separate concern handled by its own item of this rework. When
+    # it lands it must hand out a *synthetic* corpus, not a real tenant's uid.
+    uid: str | None = await current_user_id(
+        http_request, http_request.headers.get("X-Barogroove-User")
+    )
+    # Purely a UI-state key (last theme/genre chip), never a data scope: an
+    # anonymous caller keyed by client host may share selections with another
+    # anonymous caller behind the same NAT, which is a cosmetic collision.
+    user_key = uid or (http_request.client.host if http_request.client else "default")
+
+    # Recorded *after* the caller is resolved, so the trajectory carries the
+    # real uid instead of a defaulted one (audit finding 8). A signed-out
+    # caller is recorded as the reserved anonymous scope, not as a tenant.
+    _record_a2ui_trajectory(
+        f"POST /api/surfaces/action ({request.action})",
+        f"Executed A2UI surface action {request.action}",
+        uid or ANONYMOUS_USER_ID,
+    )
 
     if request.action == "showAlmanac":
         from ..container import get_container
@@ -849,7 +938,10 @@ async def post_action(
         except Exception:
             entries = []
         seen_ids = {getattr(e, "id", None) for e in entries}
-        for pl in reversed(list(_RECENT_PLAYLISTS.values())):
+        # Only this caller's recent forges. ``recent_playlists_for`` returns []
+        # for an unresolved caller, so a signed-out visitor gets an empty
+        # almanac rather than the last thing somebody else forged.
+        for pl in reversed(recent_playlists_for(uid)):
             if getattr(pl, "id", None) not in seen_ids:
                 entries.insert(0, pl)
                 seen_ids.add(getattr(pl, "id", None))
@@ -879,10 +971,22 @@ async def post_action(
         from ..container import get_container
 
         playlist_id = raw_payload.get("playlist_id") or raw_payload.get("playlistId")
-        found_entry = None
-        if playlist_id and playlist_id in _RECENT_PLAYLISTS:
-            found_entry = _RECENT_PLAYLISTS[playlist_id]
-        if found_entry is None:
+        # TENANCY (audit findings 3 and 4). Three separate leaks lived here:
+        #
+        #   * ``playlist_id in _RECENT_PLAYLISTS`` served any playlist id a
+        #     client named, from the process-wide buffer, with no ownership
+        #     test at all -- guess an id, get the playlist;
+        #   * on a miss it retried ``history("demo", ...)``, handing the demo
+        #     tenant's rows to a signed-in user;
+        #   * and failing even that it fell back to ``list(...)[-1]``, "the
+        #     last playlist anyone forged", which is not the requested
+        #     playlist by any definition.
+        #
+        # Now: this user's recent buffer, then this user's almanac history, and
+        # then a 404. A playlist we cannot show this caller is absent, and
+        # "absent" is a 404 -- not somebody else's playlist.
+        found_entry = recent_playlist_for(uid, playlist_id)
+        if found_entry is None and uid:
             try:
                 entries = await get_container().almanac().history(uid, limit=50)
                 for entry in entries:
@@ -891,17 +995,6 @@ async def post_action(
                         break
             except Exception:
                 pass
-        if found_entry is None and uid != "demo":
-            try:
-                entries = await get_container().almanac().history("demo", limit=50)
-                for entry in entries:
-                    if entry.id == playlist_id:
-                        found_entry = entry
-                        break
-            except Exception:
-                pass
-        if found_entry is None and _RECENT_PLAYLISTS:
-            found_entry = list(_RECENT_PLAYLISTS.values())[-1]
         if found_entry is not None:
             target_sid = surface_id or "playlist"
             return _a2ui(

@@ -40,6 +40,7 @@ from backend.app.advisor.engine import (
     get_advisor_suggestions,
 )
 from backend.app.firebase.auth import current_user_optional
+from backend.app.identity import ANONYMOUS_USER_ID
 from backend.app.mcp.gateway import capabilities, perform
 
 router = APIRouter(prefix="/api/advisor", tags=["advisor"])
@@ -48,9 +49,18 @@ _engine = AdvisorEngine()
 
 
 async def _resolve_uid(request: Request) -> str:
-    """Return authenticated user UID or 'demo' fallback."""
+    """Return the authenticated caller's uid, or the reserved anonymous scope.
+
+    TENANCY. This used to fall back to the literal uid ``"demo"`` -- a real
+    tenant with real conversations and real extracted memories -- while the
+    sibling dataviz route fell back to ``"jpaquay"``, another real user. The
+    two only appeared to agree because the telemetry store carried an explicit
+    ``demo`` <-> ``jpaquay`` alias (audit finding 7). With that alias gone, the
+    honest fix is for both surfaces to name the *same reserved, empty* scope
+    for a caller nobody could identify.
+    """
     user = await current_user_optional(request)
-    return user.uid if user and user.uid else "demo"
+    return user.uid if user and user.uid else ANONYMOUS_USER_ID
 
 
 @router.get(
