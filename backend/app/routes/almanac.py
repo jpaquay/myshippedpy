@@ -23,7 +23,7 @@ from collections import Counter
 from datetime import datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -57,10 +57,30 @@ logger = logging.getLogger("barogroove.routes.almanac")
 router = APIRouter(prefix="/api/almanac", tags=["almanac"])
 
 
-def _resolve_user(user: AuthUser | None = Depends(current_user_optional)) -> AuthUser:
-    """Resolve authenticated user or default to the shared 'demo' identity."""
+def _resolve_user(
+    user: AuthUser | None = Depends(current_user_optional),
+    x_barogroove_user: str | None = Header(default=None, alias="X-Barogroove-User"),
+) -> AuthUser:
+    """Resolve the caller, using the *same* precedence as the write path.
+
+    This must agree with ``routes.pairing.current_user_id``, which is what
+    ``/api/forge`` uses to stamp ``playlist.user_id`` before the engine files
+    the record in the Almanac. That resolver checks a Firebase bearer token,
+    then ``request.state``, then the ``X-Barogroove-User`` header.
+
+    Reading only the bearer token here used to leave the two halves of the
+    compounding loop disagreeing about who the user is: a client that
+    identified itself with ``X-Barogroove-User`` (the local-dev path, and the
+    Flutter app before Firebase sign-in completes) would forge under its own
+    uid and then read history under the hard-coded ``demo`` uid -- so every
+    forge it made was invisible to ``/history``, ``/forges/{id}``, ``/nudge``
+    and ``/retrospective``. Purely anonymous callers landed on ``demo`` on both
+    sides and so never noticed, which is why the suite stayed green.
+    """
     if user is not None:
         return user
+    if x_barogroove_user:
+        return AuthUser(uid=x_barogroove_user, name="BaroGroove Listener", is_dev=True)
     return AuthUser(uid="demo", name="BaroGroove Listener", is_dev=True)
 
 
@@ -227,6 +247,65 @@ async def post_clear_cache() -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 
+def _qna_unavailable(req: DataQnARequest, exc: Exception) -> DataQnAResponse:
+    """A neutral, well-formed answer for when the QnA pipeline cannot produce one.
+
+    ``ask_data_qna`` already degrades from the live BigQuery agent to a local
+    OLAP synthesizer when the network is gone. This is the *next* rung down:
+    the synthesizer itself failing. The house rule is that something always
+    comes back, so the client gets a real ``DataQnAResponse`` it can render --
+    empty series, no SQL, an honest message -- instead of a 500.
+    """
+    return DataQnAResponse(
+        question=req.question,
+        answer_markdown=(
+            "I could not analyse that question right now -- the Almanac's analytics backend is "
+            "unavailable on this deployment. Your scrobble history is unaffected; try again once "
+            "BigQuery connectivity is restored."
+        ),
+        thoughts=[f"Data QnA pipeline unavailable ({type(exc).__name__})."],
+        sql_query="",
+        rows=[],
+        chart_spec=QnAChartSpec(
+            chart_type=req.preferred_chart_type if req.preferred_chart_type != "auto" else "bar",
+            title="Analytics unavailable",
+            subtitle="No data could be retrieved for this question.",
+            series=[],
+        ),
+        suggestions=[],
+        engine="unavailable",
+        cache_status="MISS",
+    )
+
+
+def _guarded_qna_sse(req: DataQnARequest):
+    """Wrap the SSE generator so a mid-stream failure ends the stream cleanly.
+
+    Without this, an exception raised while the generator is being consumed
+    aborts the HTTP response in place: the browser sees a truncated
+    ``text/event-stream`` with no terminating event and the Flutter client
+    hangs on its reader. Emitting a FINAL_RESPONSE carrying the neutral answer
+    keeps the stream well-formed.
+    """
+    import json as _json
+
+    try:
+        yield from stream_data_qna_sse(req)
+    except Exception as exc:  # noqa: BLE001 - a stream must never tear down
+        logger.warning("data QnA stream failed (%s); closing stream cleanly", type(exc).__name__, exc_info=True)
+        fallback = _qna_unavailable(req, exc)
+        payload = {
+            "type": "FINAL_RESPONSE",
+            "content": fallback.answer_markdown,
+            "cache_status": fallback.cache_status,
+            "execution_ms": fallback.execution_ms,
+        }
+        yield f"data: {_json.dumps(payload)}\n\n"
+        # Same terminating sentinel the happy path emits -- the client keys on
+        # the literal string, not on a JSON event.
+        yield "data: [DONE]\n\n"
+
+
 @router.get(
     "/qna/status",
     response_model=DataQnAStatusResponse,
@@ -247,7 +326,11 @@ async def post_data_qna_ask(
     user: AuthUser = Depends(_resolve_user),
 ) -> DataQnAResponse:
     """Executes a conversational BigQuery Data QnA turn and returns answer markdown, SQL, tabular rows, and QnAChartSpec."""
-    return ask_data_qna(req)
+    try:
+        return ask_data_qna(req)
+    except Exception as exc:  # noqa: BLE001 - a QnA turn must never 500
+        logger.warning("data QnA turn failed (%s); serving neutral answer", type(exc).__name__, exc_info=True)
+        return _qna_unavailable(req, exc)
 
 
 @router.post(
@@ -259,7 +342,7 @@ async def post_data_qna_stream(
     user: AuthUser = Depends(_resolve_user),
 ) -> StreamingResponse:
     """Streams THOUGHT, SQL, CHART, FINAL_RESPONSE, and SUGGESTION events in real time."""
-    return StreamingResponse(stream_data_qna_sse(req), media_type="text/event-stream")
+    return StreamingResponse(_guarded_qna_sse(req), media_type="text/event-stream")
 
 
 @router.post(
