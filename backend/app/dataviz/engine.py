@@ -146,6 +146,59 @@ class DataVizQnAResponse(BaseModel):
         default_factory=dict,
         description="Token usage metrics (prompt_tokens, candidate_tokens, total_tokens, is_estimated).",
     )
+    # --- BigQuery Data QnA provenance (UX_IA_SPEC.md §3.4 answer card) -------
+    # The answer card needs three things the narrative alone cannot supply: the
+    # SQL that was run (the `SOURCE QUERY` trust affordance), the chart geometry
+    # to draw, and a row count so the client can tell "no rows" apart from
+    # "error". All three come from the BigQuery Data QnA agent
+    # (`backend/app/almanac/data_qna.py`), which already produces them; this
+    # block just carries them on the Data Viz turn so the surface needs exactly
+    # one round trip. Every field degrades to empty, never to a fabrication.
+    generated_sql: str = Field(
+        default="",
+        description="SQL the Data QnA agent ran (or synthesised offline). Empty when no query was produced.",
+    )
+    chart_spec: dict[str, Any] | None = Field(
+        default=None,
+        description="QnAChartSpec for the answer card chart: chart_type/title/subtitle/x_label/y_label/series.",
+    )
+    row_count: int = Field(
+        default=0,
+        description="Rows the query returned. 0 with a non-empty generated_sql means a genuine no-rows answer.",
+    )
+    data_engine: str = Field(
+        default="",
+        description="Which engine produced the query: 'bigquery_data_qna_v1beta', 'local_olap_synthesizer', or ''.",
+    )
+
+
+def _source_query_payload(question: str) -> dict[str, Any]:
+    """Run the BigQuery Data QnA agent for `question` and extract card provenance.
+
+    Blocking and best-effort: any failure yields an empty payload so a Data Viz
+    turn never fails because the source-query lookup did. Imported lazily to
+    keep `backend.app.dataviz` free of an import-time dependency on the almanac
+    QnA stack.
+    """
+    try:
+        from backend.app.almanac.data_qna import DataQnARequest, ask_data_qna
+
+        qna = ask_data_qna(DataQnARequest(question=question))
+        spec = qna.chart_spec.model_dump(mode="json") if qna.chart_spec else None
+        if spec is not None and not spec.get("series"):
+            # An empty series is not a chart; let the client render its no-rows
+            # state instead of an axis with nothing on it.
+            spec = None
+        return {
+            "generated_sql": qna.sql_query or "",
+            "chart_spec": spec,
+            "row_count": len(qna.rows or []),
+            "data_engine": qna.engine or "",
+            "suggestions": list(qna.suggestions or []),
+        }
+    except Exception:  # noqa: BLE001 - provenance is additive; never fail the turn
+        logger.debug("source-query lookup unavailable for Data Viz turn", exc_info=True)
+        return {}
 
 
 _DEFAULT_CURATED_SCROBBLES: list[MatchingScrobbleItem] = [
@@ -869,6 +922,20 @@ class DataVizEngine:
         res.user_id = uid
         res.latency_ms = latency_ms
         res.token_usage = tok_metrics.model_dump(mode="json")
+
+        # Attach SOURCE QUERY / chart geometry / row count from the BigQuery
+        # Data QnA agent so the Data Viz answer card is one round trip. Runs
+        # off the event loop because `ask_data_qna` is blocking.
+        import asyncio
+
+        provenance = await asyncio.to_thread(_source_query_payload, req.question)
+        if provenance:
+            res.generated_sql = provenance.get("generated_sql", "")
+            res.chart_spec = provenance.get("chart_spec")
+            res.row_count = int(provenance.get("row_count", 0) or 0)
+            res.data_engine = provenance.get("data_engine", "")
+            if not res.suggested_followups:
+                res.suggested_followups = list(provenance.get("suggestions") or [])[:3]
         return res
 
 
