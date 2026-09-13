@@ -95,6 +95,12 @@ ThemeId = Literal[
     "sirocco",
 ]
 
+#: THE canonical theme ids. Every other module -- the sonic themes, the A2UI
+#: palette, the surfaces router, the Flutter client -- derives from this tuple
+#: rather than keeping a second list of its own. (It did once: the A2UI palette
+#: carried a divergent set of design-time names, so the theme chips could offer
+#: an id that ``selectTheme`` then rejected as invalid. One list now, with an
+#: import-time guard in ``app.a2ui.palette``.)
 THEME_IDS: tuple[str, ...] = (
     "petrichor",
     "golden_hour",
@@ -105,6 +111,45 @@ THEME_IDS: tuple[str, ...] = (
     "first_frost",
     "sirocco",
 )
+
+#: Retired spellings -> the canonical id that replaced them. These were the A2UI
+#: palette's design-time working names for four of the eight; translating them
+#: keeps a stale client or a cached data model working instead of 422-ing.
+RETIRED_THEME_ALIASES: dict[str, str] = {
+    # The A2UI palette's design-time names for four of the eight.
+    "gale_warning": "storm_front",
+    "blanket_grey": "nordic_fog",
+    "heat_shimmer": "heatwave_cruise",
+    "long_dusk": "blue_hour",
+    # An earlier product-era naming round, still present in older clients and in
+    # the data-viz demo series. The surfaces router used to translate these in a
+    # table of its own; it now defers here so there is exactly one table.
+    "low_pressure_front": "storm_front",
+    "midnight_thermal": "heatwave_cruise",
+    "solar_zenith": "golden_hour",
+}
+
+#: Retired with NO successor, deliberately. ``high_pressure_blue`` was the
+#: untinted house chassis rather than a weather state (its palette was the base
+#: token map verbatim), and an unthemed surface already renders exactly that.
+#: ``clear_high`` is the same idea under the older naming round, and the router
+#: used to "translate" it to ``clear_cold``, an id that has never existed in any
+#: list. Both resolve to "no theme" rather than to a wrong one.
+RETIRED_THEME_IDS: tuple[str, ...] = ("high_pressure_blue", "clear_high")
+
+
+def resolve_theme_id(theme_id: str | None) -> str | None:
+    """Canonical id for ``theme_id``, or ``None`` if it names no theme.
+
+    Canonical ids pass through, retired spellings are translated, and anything
+    else returns ``None`` so the caller can fail soft with the valid set in
+    hand rather than raising on a string a user cannot correct.
+    """
+    if not theme_id:
+        return None
+    if theme_id in THEME_IDS:
+        return theme_id
+    return RETIRED_THEME_ALIASES.get(theme_id)
 
 
 # --------------------------------------------------------------------------

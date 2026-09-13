@@ -42,8 +42,15 @@ from ..a2ui.catalog import (
     catalog_json,
     validate_action,
 )
-from ..a2ui.palette import THEME_IDS, THEME_INTENT, THEME_PALETTES
+from ..a2ui.palette import (
+    RETIRED_THEME_ALIASES,
+    THEME_IDS,
+    THEME_INTENT,
+    THEME_PALETTES,
+    resolve_theme_id,
+)
 from ..a2ui.protocol import A2UI_MIME_TYPE, A2UIProtocolError
+from ..errors import ThemeNotFound
 from ..a2ui.surfaces import (
     agent_function_response,
     build_almanac_surface,
@@ -408,6 +415,48 @@ def _a2ui(messages: list[dict[str, Any]], *, single: bool = False) -> JSONRespon
     return JSONResponse(content=payload, media_type=A2UI_MIME_TYPE)
 
 
+def _invalid_theme_response(theme_id: Any) -> JSONResponse:
+    """422 that hands the caller the valid set instead of just saying 'no'.
+
+    A bare "themeId 'x' is not valid" is unactionable for a renderer that got
+    the id from us in the first place, so the body carries the canonical eight
+    (and the retired spellings we still translate) in machine-readable form.
+    The ``error``/``detail`` envelope is the one ``app.errors`` establishes and
+    ``app.main`` uses for every other domain error.
+    """
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": ThemeNotFound.__name__,
+            "detail": (
+                f"themeId {theme_id!r} is not one of BAROGROOVE's eight themes. "
+                f"Valid ids: {', '.join(THEME_IDS)}."
+            ),
+            "themeId": theme_id if isinstance(theme_id, str) else None,
+            "validThemeIds": list(THEME_IDS),
+            "retiredThemeIds": dict(RETIRED_THEME_ALIASES),
+        },
+    )
+
+
+def _canonical_theme_payload(action: str, payload: dict[str, Any]) -> JSONResponse | None:
+    """Rewrite a retired theme spelling in place; answer 422 for a real unknown.
+
+    Returns ``None`` when there is nothing to complain about (the common case),
+    otherwise the error response the caller should return unchanged.
+    """
+    if action != FN_SELECT_THEME:
+        return None
+    raw = payload.get("themeId")
+    if raw is None:
+        return None  # "themeId is required" is validate_action's job, not ours.
+    canonical = resolve_theme_id(raw) if isinstance(raw, str) else None
+    if canonical is None:
+        return _invalid_theme_response(raw)
+    payload["themeId"] = canonical
+    return None
+
+
 # --------------------------------------------------------------------------- #
 # Defensive service / domain resolution
 # --------------------------------------------------------------------------- #
@@ -734,15 +783,15 @@ class ActionRequest(BaseModel):
         for snake_key, camel_key in key_aliases.items():
             if snake_key in merged and camel_key not in merged:
                 merged[camel_key] = merged[snake_key]
-        theme_aliases = {
-            "blue_hour": "long_dusk",
-            "low_pressure_front": "storm_front",
-            "clear_high": "clear_cold",
-            "midnight_thermal": "heat_shimmer",
-            "solar_zenith": "golden_hour",
-        }
-        if "themeId" in merged and merged["themeId"] in theme_aliases:
-            merged["themeId"] = theme_aliases[merged["themeId"]]
+        # This used to hold a third theme table of its own, which mapped
+        # canonical ids ONTO the palette's old design-time names (blue_hour ->
+        # long_dusk) to get them past a validator built from the wrong list.
+        # The list is unified now, so translation runs one way only and out of
+        # app.contracts: retired spelling -> canonical id. Unknown ids are left
+        # alone here so the handler can answer with the valid set.
+        raw_theme = merged.get("themeId")
+        if isinstance(raw_theme, str):
+            merged["themeId"] = resolve_theme_id(raw_theme) or raw_theme
         return merged
 
 
@@ -855,6 +904,12 @@ async def post_action(
                 )
             )
         raise HTTPException(status_code=404, detail="playlist not in almanac")
+
+    # Theme ids first, so a retired spelling is translated rather than rejected
+    # and a genuinely unknown one comes back with the valid set attached.
+    theme_error = _canonical_theme_payload(request.action, raw_payload)
+    if theme_error is not None:
+        return theme_error
 
     try:
         payload = validate_action(request.action, raw_payload)

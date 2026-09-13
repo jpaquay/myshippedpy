@@ -12,6 +12,16 @@ orthogonal axis (see :mod:`app.a2ui.catalog`).  "Petrichor x krautrock" is a
 crossing of two independent knobs, and the palette exists to make the theme axis
 legible at a glance without shouting.
 
+THEME IDS ARE NOT OWNED HERE
+----------------------------
+:data:`app.contracts.THEME_IDS` is the single canonical list; this module only
+*tints* it.  It used to carry a second, divergent list of its own (a set of
+design-time working names), which is how the theme chips could offer an id that
+``selectTheme`` then rejected as invalid.  :data:`THEME_IDS` below is now a
+re-export of the contract, :data:`THEME_PALETTES` and :data:`THEME_INTENT` are
+keyed by it, and an import-time guard (:func:`_assert_no_theme_drift`) refuses to
+load the module if the three ever diverge again.
+
 CONTRAST
 --------
 Every theme declares four pairs that are asserted to clear WCAG 2.1 AA:
@@ -33,6 +43,22 @@ from __future__ import annotations
 
 from typing import Final
 
+# Canonical ids and their retired spellings live in app.contracts -- this module
+# only tints them.  Re-exported so existing ``from .palette import THEME_IDS``
+# call sites keep working and can never pick up a second, divergent list.
+from ..contracts import (
+    RETIRED_THEME_ALIASES as RETIRED_THEME_ALIASES,
+)
+from ..contracts import (
+    RETIRED_THEME_IDS as RETIRED_THEME_IDS,
+)
+from ..contracts import (
+    THEME_IDS as THEME_IDS,
+)
+from ..contracts import (
+    resolve_theme_id as resolve_theme_id,
+)
+
 __all__ = [
     "BASE",
     "TYPOGRAPHY",
@@ -42,6 +68,10 @@ __all__ = [
     "MOTION",
     "THEME_PALETTES",
     "THEME_IDS",
+    "THEME_INTENT",
+    "RETIRED_THEME_ALIASES",
+    "RETIRED_THEME_IDS",
+    "resolve_theme_id",
     "PALETTE_KEYS",
     "CONTRAST_PAIRS",
     "SURFACE_PROPERTIES",
@@ -189,6 +219,24 @@ CONTRAST_PAIRS: Final[tuple[tuple[str, str, float], ...]] = (
 # feel the weather without ever losing the executive register, and a screenshot
 # of any two themes side by side should still look like the same product.
 
+# RETIRED IDS (2026-09, theme-id reconciliation)
+# ----------------------------------------------
+# This table used to be keyed by design-time working names that never existed
+# anywhere else in the product.  They are not aliases of a second theme system:
+# they are earlier NAMES for four of the canonical eight, so they are mapped
+# here (see RETIRED_THEME_ALIASES) and their tints kept verbatim:
+#     gale_warning  -> storm_front
+#     blanket_grey  -> nordic_fog
+#     heat_shimmer  -> heatwave_cruise
+#     long_dusk     -> blue_hour
+# The fifth, ``high_pressure_blue``, had NO successor and no tint of its own --
+# its palette was literally ``{**BASE}``, i.e. the untinted house chassis that
+# ``surface_properties_for`` already serves as the default.  It is therefore
+# DELETED rather than aliased; nothing is lost because asking for it and asking
+# for "no theme" produced byte-identical surface properties.
+# ``sirocco`` is canonical but had never been tinted here, so it gets a real
+# palette below (dust and kiln, off the Sahara -- deliberately nothing blue).
+
 THEME_PALETTES: Final[dict[str, dict[str, str]]] = {
     # Falling pressure, rain arriving on warm stone.  The signature theme.
     # Wet slate-green accent: damp, not gloomy.
@@ -205,41 +253,6 @@ THEME_PALETTES: Final[dict[str, dict[str, str]]] = {
         "goldSoft": "#F7EDD3",
         "goldInk": "#5C4409",
     },
-    # First hard frost: clear, low sun, air like glass.  Coldest blue we allow.
-    "first_frost": {
-        **BASE,
-        "canvas": "#F2F6FB",
-        "surfaceSunken": "#E6EDF7",
-        "border": "#C4D3E6",
-        "accent": "#1D4ED8",
-        "accentStrong": "#1E3A8A",
-        "accentSoft": "#DDE7FE",
-        "accentInk": "#1E3A8A",
-        "gold": "#94660B",
-        "goldSoft": "#FBEED0",
-        "goldInk": "#653F05",
-    },
-    # Stable high, deep clear sky, nothing happening and that IS the story.
-    # This is the house palette, unmodified -- the baseline other themes bend from.
-    "high_pressure_blue": {
-        **BASE,
-    },
-    # Gust variance spiking, pressure collapsing.  Urgent without being an alarm:
-    # a hard indigo, and the only theme where the semantic warning colour is
-    # allowed near the accent.
-    "gale_warning": {
-        **BASE,
-        "canvas": "#F4F4F8",
-        "surfaceSunken": "#E9E9F2",
-        "border": "#CACAD9",
-        "accent": "#4338CA",
-        "accentStrong": "#312E81",
-        "accentSoft": "#E4E1FB",
-        "accentInk": "#312E81",
-        "gold": "#9A5B08",
-        "goldSoft": "#FBE9CF",
-        "goldInk": "#6B3D04",
-    },
     # Sun elevation low, golden-hour proximity high.  The one theme where gold
     # leads -- still a bronze-gold, never a highlighter yellow.
     "golden_hour": {
@@ -255,9 +268,10 @@ THEME_PALETTES: Final[dict[str, dict[str, str]]] = {
         "goldSoft": "#F7EDD3",
         "goldInk": "#5C4409",
     },
-    # Deep cloud depth, flat pressure, no light.  Lowest-chroma theme; carries
-    # its weight with typography rather than colour.
-    "blanket_grey": {
+    # Deep cloud depth, flat pressure, no light and no wind.  Lowest-chroma
+    # theme; carries its weight with typography rather than colour.
+    # (Tint formerly published under the retired id ``blanket_grey``.)
+    "nordic_fog": {
         **BASE,
         "canvas": "#F4F5F6",
         "surfaceSunken": "#EAECEE",
@@ -270,9 +284,27 @@ THEME_PALETTES: Final[dict[str, dict[str, str]]] = {
         "goldSoft": "#F5EEDC",
         "goldInk": "#5C4409",
     },
+    # Gust variance spiking, pressure collapsing.  Urgent without being an alarm:
+    # a hard indigo, and the only theme where the semantic warning colour is
+    # allowed near the accent.
+    # (Tint formerly published under the retired id ``gale_warning``.)
+    "storm_front": {
+        **BASE,
+        "canvas": "#F4F4F8",
+        "surfaceSunken": "#E9E9F2",
+        "border": "#CACAD9",
+        "accent": "#4338CA",
+        "accentStrong": "#312E81",
+        "accentSoft": "#E4E1FB",
+        "accentInk": "#312E81",
+        "gold": "#9A5B08",
+        "goldSoft": "#FBE9CF",
+        "goldInk": "#6B3D04",
+    },
     # Temperature far above norm, sun high, air standing still.  Warm canvas,
     # burnt-red accent, deliberately dry rather than tropical.
-    "heat_shimmer": {
+    # (Tint formerly published under the retired id ``heat_shimmer``.)
+    "heatwave_cruise": {
         **BASE,
         "canvas": "#FBF6F3",
         "surfaceSunken": "#F4E9E3",
@@ -285,9 +317,10 @@ THEME_PALETTES: Final[dict[str, dict[str, str]]] = {
         "goldSoft": "#F8EED6",
         "goldInk": "#5C4409",
     },
-    # Daylight delta shrinking fast; the long autumn dusk.  Muted violet-slate,
-    # the most reflective of the eight.
-    "long_dusk": {
+    # The sun has gone and the lights are not on yet; daylight delta shrinking
+    # fast.  Muted violet-slate, the most reflective of the eight.
+    # (Tint formerly published under the retired id ``long_dusk``.)
+    "blue_hour": {
         **BASE,
         "canvas": "#F7F5FA",
         "surfaceSunken": "#EEEAF4",
@@ -300,33 +333,77 @@ THEME_PALETTES: Final[dict[str, dict[str, str]]] = {
         "goldSoft": "#F6EDD6",
         "goldInk": "#5C4409",
     },
+    # First hard frost: clear, low sun, air like glass.  Coldest blue we allow.
+    "first_frost": {
+        **BASE,
+        "canvas": "#F2F6FB",
+        "surfaceSunken": "#E6EDF7",
+        "border": "#C4D3E6",
+        "accent": "#1D4ED8",
+        "accentStrong": "#1E3A8A",
+        "accentSoft": "#DDE7FE",
+        "accentInk": "#1E3A8A",
+        "gold": "#94660B",
+        "goldSoft": "#FBEED0",
+        "goldInk": "#653F05",
+    },
+    # A warm wind off the Sahara, arriving ten degrees too warm for the season
+    # and carrying the desert with it.  Dust and kiln: the one theme with no
+    # blue in it at all, because nothing is blue during a sirocco.
+    "sirocco": {
+        **BASE,
+        "canvas": "#FAF7EF",
+        "surfaceSunken": "#F2ECDC",
+        "border": "#DCD2B9",
+        "accent": "#7A5B14",
+        "accentStrong": "#573F0B",
+        "accentSoft": "#F6EBCC",
+        "accentInk": "#4E390A",
+        "gold": "#8A6A12",
+        "goldSoft": "#F7EDD3",
+        "goldInk": "#5C4409",
+    },
 }
-
-#: Stable, ordered theme ids.  The ThemeChips component renders them in this order.
-THEME_IDS: Final[tuple[str, ...]] = (
-    "petrichor",
-    "first_frost",
-    "high_pressure_blue",
-    "gale_warning",
-    "golden_hour",
-    "blanket_grey",
-    "heat_shimmer",
-    "long_dusk",
-)
 
 #: Human-facing one-liners, kept next to the colours so the intent travels with
 #: the tint.  ``app.sonic.themes`` owns the authoritative Theme objects; these are
 #: only used when that module is unavailable (see the surfaces router).
 THEME_INTENT: Final[dict[str, str]] = {
     "petrichor": "Pressure is falling and rain is close. Wet slate-green, held low.",
-    "first_frost": "Clear, cold and bright. The coldest blue in the system.",
-    "high_pressure_blue": "A settled high. The unmodified house palette.",
-    "gale_warning": "Gusts spiking, pressure collapsing. Urgent, not alarming.",
     "golden_hour": "Sun low, light long. The one theme where gold leads.",
-    "blanket_grey": "Deep cloud, flat pressure. Lowest chroma; typography carries it.",
-    "heat_shimmer": "Far above the norm, air standing still. Dry heat, not tropics.",
-    "long_dusk": "Daylight shrinking fast. Muted violet-slate, reflective.",
+    "nordic_fog": "Deep cloud, no wind, no light. Lowest chroma; typography carries it.",
+    "storm_front": "Gusts spiking, pressure collapsing. Urgent, not alarming.",
+    "heatwave_cruise": "Far above the norm, air standing still. Dry heat, not tropics.",
+    "blue_hour": "The sun has gone and the lights aren't on. Muted violet-slate.",
+    "first_frost": "Clear, cold and bright. The coldest blue in the system.",
+    "sirocco": "A warm wind from the wrong direction. Dust and kiln, nothing blue.",
 }
+
+def _assert_no_theme_drift() -> None:
+    """Refuse to import if the tints and the contract have drifted apart.
+
+    This module and :mod:`app.contracts` used to keep two different lists, which
+    let the theme chips offer an id that ``selectTheme`` rejected.  One list, one
+    import-time check, no second chance.
+    """
+    canonical = set(THEME_IDS)
+    for name, keys in (("THEME_PALETTES", set(THEME_PALETTES)), ("THEME_INTENT", set(THEME_INTENT))):
+        missing = sorted(canonical - keys)
+        extra = sorted(keys - canonical)
+        if missing or extra:
+            raise RuntimeError(
+                f"palette.{name} has drifted from contracts.THEME_IDS: "
+                f"missing={missing} unexpected={extra}"
+            )
+    overlap = (set(RETIRED_THEME_ALIASES) | set(RETIRED_THEME_IDS)) & canonical
+    if overlap:
+        raise RuntimeError(f"retired theme ids collide with canonical ids: {sorted(overlap)}")
+    bad_targets = sorted(set(RETIRED_THEME_ALIASES.values()) - canonical)
+    if bad_targets:
+        raise RuntimeError(f"retired theme aliases point at unknown ids: {bad_targets}")
+
+
+_assert_no_theme_drift()
 
 
 # --------------------------------------------------------------------------- #
@@ -351,13 +428,15 @@ def surface_properties_for(theme_id: str | None = None) -> dict[str, object]:
 
     Unknown theme ids fall back to the base palette rather than raising -- a
     surface must always render, even if the sonic layer invents a theme we have
-    not styled yet.
+    not styled yet.  Retired ids (``gale_warning`` and friends) resolve to their
+    canonical successor first, so an old client still gets the right tint.
     """
+    canonical = resolve_theme_id(theme_id)
     props = {
         "colorScheme": "light",
         "contrast": "high",
         "density": "comfortable",
-        "palette": dict(THEME_PALETTES.get(theme_id or "", BASE)),
+        "palette": dict(THEME_PALETTES.get(canonical or "", BASE)),
         "typography": TYPOGRAPHY,
         "spacing": dict(SPACING),
         "radius": dict(RADIUS),
@@ -365,7 +444,9 @@ def surface_properties_for(theme_id: str | None = None) -> dict[str, object]:
         "motion": MOTION,
     }
     if theme_id:
-        props["themeId"] = theme_id
+        # Always publish the canonical spelling: the renderer compares this
+        # against the ids the chips carry.
+        props["themeId"] = canonical or theme_id
     return props
 
 
