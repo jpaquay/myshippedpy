@@ -76,6 +76,73 @@ final class ApiFailure<T> extends ApiResult<T> {
 
 enum ApiFailureKind { network, timeout, unauthorized, notFound, server, decode }
 
+/// Lifecycle of a server-side forge run.
+enum ForgeJobStatus {
+  queued,
+  running,
+  done,
+  failed;
+
+  static ForgeJobStatus parse(Object? raw) => switch ('$raw') {
+        'running' => ForgeJobStatus.running,
+        'done' => ForgeJobStatus.done,
+        'failed' => ForgeJobStatus.failed,
+        _ => ForgeJobStatus.queued,
+      };
+
+  bool get isTerminal =>
+      this == ForgeJobStatus.done || this == ForgeJobStatus.failed;
+}
+
+/// A forge the server is running on our behalf.
+///
+/// Declared here rather than in `models.dart` because it is a property of the
+/// transport — how a long job is tracked across reconnects — not part of the
+/// domain the A2UI surfaces describe.
+class ForgeJob {
+  const ForgeJob({
+    required this.id,
+    required this.status,
+    this.resumed = false,
+    this.error,
+    this.playlistId,
+    this.result,
+    this.createdAt,
+  });
+
+  final String id;
+  final ForgeJobStatus status;
+
+  /// True when the server handed back a run that already existed — i.e. our
+  /// start was absorbed as a duplicate. Not an error; the happy path for a
+  /// reconnect or a retried request.
+  final bool resumed;
+
+  final String? error;
+  final String? playlistId;
+
+  /// Populated only once [status] is [ForgeJobStatus.done].
+  final ForgeResult? result;
+
+  final DateTime? createdAt;
+
+  bool get isTerminal => status.isTerminal;
+  bool get isDone => status == ForgeJobStatus.done;
+
+  factory ForgeJob.fromJson(JsonMap json) {
+    final JsonMap? resultJson = asJsonMap(json['result']);
+    return ForgeJob(
+      id: '${json['job_id'] ?? json['id'] ?? ''}',
+      status: ForgeJobStatus.parse(json['status']),
+      resumed: json['resumed'] == true,
+      error: json['error'] as String?,
+      playlistId: json['playlist_id'] as String?,
+      result: resultJson == null ? null : ForgeResult.fromJson(resultJson),
+      createdAt: DateTime.tryParse('${json['created_at']}'),
+    );
+  }
+}
+
 /// The client. One instance per app; created in `main` and shared via
 /// Riverpod.
 class BarogrooveApi {
@@ -182,6 +249,66 @@ class BarogrooveApi {
         ForgeResult.fromJson,
         timeout: const Duration(seconds: 30),
       );
+
+  // =========================================================================
+  // Forge jobs
+  //
+  // The forge as a tracked server-side run rather than a request we have to
+  // babysit. Start it, get an id, poll. Navigate away, background the tab or
+  // drop the connection and the job still finishes on the server; come back
+  // and you rejoin it instead of forging a second time.
+  //
+  // Server-side caveat worth knowing here: the registry is in-process, so a
+  // backend restart loses the *job*, not the playlist. A 404 from
+  // [forgeJobStatus] means "unknown on this instance" and the right response
+  // is to start again, not to show an error.
+  // =========================================================================
+
+  /// Starts a forge job. [jobId] is an idempotency key you generate.
+  ///
+  /// Sending the same [jobId] twice is explicitly safe: the server returns
+  /// the existing job with `resumed == true` rather than forging again. That
+  /// is what makes this the one POST in this client that may be retried.
+  Future<ApiResult<ForgeJob>> startForgeJob(
+    ForgeRequest request, {
+    required String jobId,
+  }) =>
+      _postJson(
+        '/api/forge/jobs',
+        request.toJson(),
+        ForgeJob.fromJson,
+        query: <String, String>{'job_id': jobId},
+        timeout: const Duration(seconds: 20),
+      );
+
+  /// Polls one job. Pure read; safe to call as often as you like.
+  Future<ApiResult<ForgeJob>> forgeJobStatus(String jobId) => _getJson(
+        '/api/forge/jobs/${Uri.encodeComponent(jobId)}',
+        ForgeJob.fromJson,
+        timeout: const Duration(seconds: 10),
+      );
+
+  /// Jobs still queued or running for this caller.
+  ///
+  /// The reconnect path for a client that lost its job id entirely — a hard
+  /// reload, say. Finds the run already in flight instead of starting one.
+  Future<ApiResult<List<ForgeJob>>> activeForgeJobs() => _getJsonList(
+        '/api/forge/jobs',
+        ForgeJob.fromJson,
+        query: const <String, String>{'active_only': 'true', 'limit': '3'},
+        timeout: const Duration(seconds: 10),
+      );
+
+  /// Watches a job to completion, emitting every status change.
+  ///
+  /// Polling rather than a socket, deliberately: a poll is stateless, so
+  /// "reconnecting" is just the next tick. A failed tick does not end the
+  /// stream — see [_watchForgeJob] for the budget that stops it eventually.
+  Stream<ForgeJob> watchForgeJob(
+    String jobId, {
+    Duration interval = const Duration(milliseconds: 900),
+  }) =>
+      _watchForgeJob(jobId, interval: interval);
 
   // =========================================================================
   // A2UI surfaces — the important ones
@@ -584,8 +711,10 @@ class BarogrooveApi {
     String path,
     T Function(JsonMap json) decode, {
     Map<String, String>? query,
+    Duration? timeout,
   }) async {
-    final ApiResult<http.Response> res = await _get(path, query: query);
+    final ApiResult<http.Response> res =
+        await _get(path, query: query, timeout: timeout);
     return res.when(
       ok: (http.Response r) {
         try {
@@ -627,10 +756,11 @@ class BarogrooveApi {
     String path,
     JsonMap body,
     T Function(JsonMap json) decode, {
+    Map<String, String>? query,
     Duration? timeout,
   }) async {
     final ApiResult<http.Response> res =
-        await _post(path, body, timeout: timeout);
+        await _post(path, body, query: query, timeout: timeout);
     return res.when(
       ok: (http.Response r) => _decodeObject(r.body, decode, path),
       failed: (ApiFailure<http.Response> f) => f.cast<T>(),
@@ -702,10 +832,12 @@ class BarogrooveApi {
   Future<ApiResult<http.Response>> _post(
     String path,
     JsonMap body, {
+    Map<String, String>? query,
     Duration? timeout,
   }) =>
       _send(
         path: path,
+        query: query,
         timeout: timeout,
         retryable: true,
         perform: (Uri uri, Map<String, String> headers) => _client.post(
@@ -714,6 +846,31 @@ class BarogrooveApi {
           body: jsonEncode(body),
         ),
       );
+
+  /// Polls [jobId] until it reaches a terminal state, yielding each snapshot.
+  ///
+  /// The stream ends when the job is done or failed. A poll that itself fails
+  /// ends the stream with an [ApiFailure] error — the caller decides whether
+  /// that is worth restarting for.
+  Stream<ForgeJob> _watchForgeJob(
+    String jobId, {
+    required Duration interval,
+  }) async* {
+    while (true) {
+      final ApiResult<ForgeJob> res = await forgeJobStatus(jobId);
+
+      final ApiFailure<ForgeJob>? failure = res.failureOrNull;
+      if (failure != null) {
+        throw failure;
+      }
+
+      final ForgeJob job = res.valueOrNull!;
+      yield job;
+      if (job.isTerminal) return;
+
+      await Future<void>.delayed(interval);
+    }
+  }
 
   Future<ApiResult<http.Response>> _send({
     required String path,

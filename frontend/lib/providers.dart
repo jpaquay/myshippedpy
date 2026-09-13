@@ -319,6 +319,17 @@ final StateNotifierProvider<ForgeSelectionNotifier, ForgeSelection>
 final StateProvider<ForgeResult?> lastForgeProvider =
     StateProvider<ForgeResult?>((Ref ref) => null);
 
+/// The server-side forge job this client is currently following, if any.
+///
+/// Lives here rather than in the home screen's State because that is the
+/// whole point: the screen can be disposed — navigated away from, rebuilt,
+/// dropped by the IndexedStack — and the id survives, so coming back rejoins
+/// the run instead of starting a second one. A full page reload does clear
+/// it; the home screen recovers from that by asking the backend for any job
+/// still active (`activeForgeJobs`).
+final StateProvider<String?> forgeJobIdProvider =
+    StateProvider<String?>((Ref ref) => null);
+
 /// Currently active track or set in the in-app embedded player.
 class ActivePlayerTrack {
   const ActivePlayerTrack({

@@ -50,7 +50,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
     // Fetch after the first frame so the controllers exist.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSurfaces());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSurfaces();
+      // A forge may already be running on the server from before this screen
+      // existed. Rejoin it rather than offering to start a second one.
+      _resumeForgeJob();
+    });
   }
 
   /// Pulls both surfaces and feeds them straight into their controllers.
@@ -131,21 +136,91 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           seedScrobbles: seedSet.toList(),
         );
 
-    final ApiResult<ForgeResult> result =
-        await api.forge(selection.toRequest());
+    // Reuse the id of a run we are already following, so a double tap or a
+    // rebuild cannot start a second forge. Otherwise mint a fresh one: it is
+    // the idempotency key the backend dedupes on, so a retried start (ours or
+    // the transport's) is absorbed rather than duplicated.
+    final String jobId = ref.read(forgeJobIdProvider) ?? _newJobId();
+    ref.read(forgeJobIdProvider.notifier).state = jobId;
+
+    final ApiResult<ForgeJob> started =
+        await api.startForgeJob(selection.toRequest(), jobId: jobId);
 
     if (!mounted) return;
 
-    result.when(
-      ok: (ForgeResult r) {
-        ref.read(lastForgeProvider.notifier).state = r;
-        AppShell.of(context)?.go(BgDestination.playlist);
-      },
-      failed: (ApiFailure<ForgeResult> f) =>
-          setState(() => _forgeError = f.message),
-    );
+    final ApiFailure<ForgeJob>? failure = started.failureOrNull;
+    if (failure != null) {
+      ref.read(forgeJobIdProvider.notifier).state = null;
+      setState(() {
+        _forgeError = failure.message;
+        _forging = false;
+      });
+      return;
+    }
 
-    if (mounted) setState(() => _forging = false);
+    await _followForgeJob(started.valueOrNull!.id);
+  }
+
+  /// An idempotency key. Only needs to be unique per client, not globally.
+  String _newJobId() =>
+      'bg-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}'
+      '-${identityHashCode(this).toRadixString(36)}';
+
+  /// Rejoins a forge that was already running when this screen appeared.
+  ///
+  /// Two ways back in: the id we kept in [forgeJobIdProvider] (survives
+  /// navigation and backgrounding), or — after a reload wiped that — whatever
+  /// the backend still has in flight for this caller.
+  Future<void> _resumeForgeJob() async {
+    if (_forging) return;
+
+    String? jobId = ref.read(forgeJobIdProvider);
+    if (jobId == null) {
+      final ApiResult<List<ForgeJob>> active =
+          await ref.read(apiProvider).activeForgeJobs();
+      final List<ForgeJob> jobs = active.valueOrNull ?? const <ForgeJob>[];
+      if (jobs.isEmpty) return;
+      jobId = jobs.first.id;
+      if (!mounted) return;
+      ref.read(forgeJobIdProvider.notifier).state = jobId;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _forging = true;
+      _forgeError = null;
+    });
+    await _followForgeJob(jobId);
+  }
+
+  /// Polls one job to completion and lands the result.
+  Future<void> _followForgeJob(String jobId) async {
+    try {
+      await for (final ForgeJob job
+          in ref.read(apiProvider).watchForgeJob(jobId)) {
+        if (!mounted) return;
+        if (!job.isTerminal) continue;
+
+        ref.read(forgeJobIdProvider.notifier).state = null;
+        if (job.isDone && job.result != null) {
+          ref.read(lastForgeProvider.notifier).state = job.result;
+          AppShell.of(context)?.go(BgDestination.playlist);
+        } else {
+          setState(() => _forgeError = job.error ?? 'The forge failed.');
+        }
+      }
+    } on ApiFailure<ForgeJob> catch (f) {
+      if (!mounted) return;
+      // A 404 means this backend no longer knows the job — it restarted, or
+      // we polled a different instance. Forget it so the button offers a
+      // fresh run rather than pinning us to a ghost.
+      if (f.kind == ApiFailureKind.notFound) {
+        ref.read(forgeJobIdProvider.notifier).state = null;
+      }
+      setState(() => _forgeError = f.message);
+    } finally {
+      if (mounted) setState(() => _forging = false);
+    }
   }
 
   @override

@@ -148,6 +148,19 @@ class Container:
             )
         return self._cache["forge"]
 
+    # -- forge jobs ---------------------------------------------------------
+
+    def forge_jobs(self) -> Any:
+        """The in-process registry of background forge runs.
+
+        A process singleton rather than a per-container object: the jobs are
+        tied to the event loop, not to the service graph, and resetting the
+        container between tests must not orphan a running task.
+        """
+        from .forge.jobs import get_forge_jobs
+
+        return get_forge_jobs()
+
     # -- telemetry ----------------------------------------------------------
 
     def telemetry(self) -> Any:
@@ -176,5 +189,11 @@ def reset_container() -> None:
         from .telemetry.store import reset_telemetry_store
 
         reset_telemetry_store()
+    except Exception:
+        pass
+    try:
+        from .forge.jobs import reset_forge_jobs
+
+        reset_forge_jobs()
     except Exception:
         pass
