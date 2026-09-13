@@ -57,7 +57,15 @@ class _PendingPairing:
     """One in-flight authorisation. Holds the PKCE verifier, which must never
     leave the server."""
 
-    __slots__ = ("provider", "user_id", "verifier", "created_at", "return_to", "redirect_uri")
+    __slots__ = (
+        "provider",
+        "user_id",
+        "verifier",
+        "created_at",
+        "created_wall",
+        "return_to",
+        "redirect_uri",
+    )
 
     def __init__(
         self,
@@ -66,50 +74,210 @@ class _PendingPairing:
         verifier: str | None,
         return_to: str | None = None,
         redirect_uri: str | None = None,
+        created_wall: float | None = None,
     ) -> None:
         self.provider = provider
         self.user_id = user_id
         self.verifier = verifier
-        self.created_at = time.monotonic()
+        now_wall = time.time()
+        now_mono = time.monotonic()
+        if created_wall is not None:
+            self.created_wall = created_wall
+            self.created_at = now_mono - (now_wall - created_wall)
+        else:
+            self.created_wall = now_wall
+            self.created_at = now_mono
         self.return_to = return_to
         self.redirect_uri = redirect_uri
 
     def expired(self, ttl_s: int = STATE_TTL_S) -> bool:
-        return (time.monotonic() - self.created_at) > ttl_s
+        return (time.monotonic() - self.created_at) > ttl_s or (time.time() - self.created_wall) > ttl_s
 
     def __repr__(self) -> str:  # never leak the verifier
         return f"_PendingPairing(provider={self.provider!r}, verifier=<redacted>)"
 
 
-class _StateStore:
-    """In-memory, TTL'd, single-use.
+def _get_state_fernet() -> Any | None:
+    """Return a Fernet cipher shared across all Cloud Run instances."""
+    try:
+        import base64
+        import hashlib
+        from cryptography.fernet import Fernet  # noqa: PLC0415
 
-    PRODUCTION WANTS FIRESTORE. This dict is per-process: with more than one
-    Cloud Run instance, the callback can land on an instance that never saw the
-    ``/start``, and the user gets a spurious "unknown state". Acceptable for a
-    single-instance demo; a short-TTL Firestore collection (or Memorystore) is
-    the real answer, and the interface below is deliberately the three methods
-    such a backend would implement.
+        settings = get_settings()
+        raw_key = str(getattr(settings, "token_encryption_key", "") or "")
+        if raw_key:
+            try:
+                from ..config import resolve_secret  # noqa: PLC0415
+
+                resolved = resolve_secret(raw_key, settings)
+                if resolved:
+                    raw_key = str(resolved)
+            except Exception:
+                pass
+        if raw_key:
+            try:
+                return Fernet(raw_key.encode("utf-8"))
+            except Exception:
+                pass
+        seed = (
+            raw_key
+            or str(getattr(settings, "spotify_client_secret", "") or "")
+            or str(getattr(settings, "lastfm_api_secret", "") or "")
+            or str(getattr(settings, "firebase_project_id", "") or "")
+            or "barogroove-oauth-state-default-key"
+        )
+        derived = base64.urlsafe_b64encode(hashlib.sha256(seed.encode("utf-8")).digest())
+        return Fernet(derived)
+    except Exception:
+        return None
+
+
+class _StateStore:
+    """Multi-instance OAuth state store backed by Firestore and stateless
+    Fernet-sealed tokens.
+
+    With more than one Cloud Run instance (or across rolling deployments),
+    the OAuth callback frequently lands on an instance that never saw ``/start``.
+    By persisting states to Firestore ``oauth_states`` AND sealing the PKCE
+    verifier inside ``bg1.<fernet>`` state tokens, callbacks succeed on any
+    instance while preserving single-use replay protection and 10-minute TTL.
     """
 
     def __init__(self) -> None:
         self._items: dict[str, _PendingPairing] = {}
+        self._consumed: dict[str, float] = {}
+        self._fs_client: Any = None
+
+    def _fs_collection(self) -> Any | None:
+        try:
+            settings = get_settings()
+            if not getattr(settings, "has_firestore", False):
+                return None
+            if self._fs_client is None:
+                from google.cloud import firestore  # noqa: PLC0415
+
+                project = getattr(settings, "firebase_project_id", None) or None
+                database = getattr(settings, "firestore_database", "(default)")
+                if database and database != "(default)":
+                    self._fs_client = firestore.Client(project=project, database=database)
+                else:
+                    self._fs_client = firestore.Client(project=project)
+            return self._fs_client.collection("oauth_states")
+        except Exception:
+            return None
+
+    @staticmethod
+    def _doc_id(state: str) -> str:
+        import hashlib
+
+        return hashlib.sha256(state.encode("utf-8")).hexdigest()
+
+    def mint(self, pending: _PendingPairing) -> str:
+        """Mint a self-contained sealed state token and persist it."""
+        state = self._encode_token(pending)
+        if not state:
+            state = generate_state()
+        self.put(state, pending)
+        return state
+
+    @staticmethod
+    def _encode_token(pending: _PendingPairing) -> str | None:
+        import json
+        import secrets
+
+        fernet = _get_state_fernet()
+        if fernet is None:
+            return None
+        try:
+            payload = {
+                "p": pending.provider,
+                "u": pending.user_id,
+                "v": pending.verifier,
+                "rt": pending.return_to,
+                "ru": pending.redirect_uri,
+                "ts": round(pending.created_wall, 2),
+                "n": secrets.token_urlsafe(6),
+            }
+            raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+            token = fernet.encrypt(raw).decode("ascii")
+            return f"bg1.{token}"
+        except Exception:
+            return None
+
+    @staticmethod
+    def _decode_token(state: str) -> _PendingPairing | None:
+        import json
+
+        if not state or not state.startswith("bg1."):
+            return None
+        fernet = _get_state_fernet()
+        if fernet is None:
+            return None
+        try:
+            raw = fernet.decrypt(state[4:].encode("ascii"), ttl=STATE_TTL_S + 60)
+            data = json.loads(raw.decode("utf-8"))
+            if not isinstance(data, dict):
+                return None
+            pending = _PendingPairing(
+                provider=str(data.get("p") or ""),
+                user_id=str(data.get("u") or ""),
+                verifier=data.get("v"),
+                return_to=data.get("rt"),
+                redirect_uri=data.get("ru"),
+                created_wall=float(data.get("ts") or time.time()),
+            )
+            if pending.expired():
+                return None
+            return pending
+        except Exception:
+            return None
 
     def put(self, state: str, pending: _PendingPairing) -> None:
         self._sweep()
         if len(self._items) >= STATE_MAX:
             # Drop the oldest rather than refuse a legitimate new pairing.
-            oldest = min(self._items, key=lambda k: self._items[k].created_at)
+            oldest = min(self._items, key=lambda k: self._items[k].created_wall)
             self._items.pop(oldest, None)
         self._items[state] = pending
+
+        col = self._fs_collection()
+        if col is not None:
+            try:
+                col.document(self._doc_id(state)).set(
+                    {
+                        "state": state,
+                        "provider": pending.provider,
+                        "user_id": pending.user_id,
+                        "verifier": pending.verifier,
+                        "return_to": pending.return_to,
+                        "redirect_uri": pending.redirect_uri,
+                        "created_wall": pending.created_wall,
+                        "consumed": False,
+                    }
+                )
+            except Exception as exc:
+                logger.debug("oauth state firestore put degraded: %s", type(exc).__name__)
 
     def take(self, state: str) -> _PendingPairing | None:
         """Single-use by construction: retrieving a state consumes it, so a
         replayed callback cannot re-run the exchange."""
-        self._sweep()
-        pending = self._items.pop(state, None)
-        if pending is None or pending.expired():
+        pending = self.peek(state)
+        if pending is None:
             return None
+
+        self._items.pop(state, None)
+        self._consumed[state] = time.time()
+
+        col = self._fs_collection()
+        if col is not None:
+            try:
+                col.document(self._doc_id(state)).set(
+                    {"consumed": True, "consumed_at": time.time()}, merge=True
+                )
+            except Exception as exc:
+                logger.debug("oauth state firestore take degraded: %s", type(exc).__name__)
+
         return pending
 
     def peek(self, state: str | None) -> _PendingPairing | None:
@@ -122,10 +290,47 @@ class _StateStore:
         if not state:
             return None
         self._sweep()
-        pending = self._items.get(state)
-        if pending is None or pending.expired():
+        if state in self._consumed:
             return None
-        return pending
+
+        pending = self._items.get(state)
+        if pending is not None:
+            if pending.expired():
+                self._items.pop(state, None)
+                return None
+            return pending
+
+        # Check Firestore for cross-instance state
+        col = self._fs_collection()
+        if col is not None:
+            try:
+                snap = col.document(self._doc_id(state)).get()
+                if snap.exists:
+                    data = snap.to_dict() or {}
+                    if data.get("consumed"):
+                        self._consumed[state] = time.time()
+                        return None
+                    fs_pending = _PendingPairing(
+                        provider=str(data.get("provider") or ""),
+                        user_id=str(data.get("user_id") or ""),
+                        verifier=data.get("verifier"),
+                        return_to=data.get("return_to"),
+                        redirect_uri=data.get("redirect_uri"),
+                        created_wall=float(data.get("created_wall") or time.time()),
+                    )
+                    if not fs_pending.expired():
+                        self._items[state] = fs_pending
+                        return fs_pending
+            except Exception as exc:
+                logger.debug("oauth state firestore peek degraded: %s", type(exc).__name__)
+
+        # Stateless fallback: decrypt self-contained bg1 token
+        decoded = self._decode_token(state)
+        if decoded is not None and not decoded.expired():
+            self._items[state] = decoded
+            return decoded
+
+        return None
 
     def peek_for_user(self, user_id: str, provider: str) -> tuple[str, _PendingPairing] | None:
         """Return the most recent non-expired pending state for (user_id, provider) without consuming it."""
@@ -133,15 +338,54 @@ class _StateStore:
         candidates = [
             (k, v)
             for k, v in self._items.items()
-            if v.user_id == user_id and v.provider == provider and not v.expired()
+            if v.user_id == user_id
+            and v.provider == provider
+            and not v.expired()
+            and k not in self._consumed
         ]
-        if not candidates:
-            return None
-        return max(candidates, key=lambda item: item[1].created_at)
+        if candidates:
+            return max(candidates, key=lambda item: item[1].created_wall)
+
+        col = self._fs_collection()
+        if col is not None:
+            try:
+                query = (
+                    col.where("user_id", "==", user_id)
+                    .where("provider", "==", provider)
+                    .where("consumed", "==", False)
+                    .limit(10)
+                )
+                fs_candidates: list[tuple[str, _PendingPairing]] = []
+                for snap in query.stream():
+                    data = snap.to_dict() or {}
+                    st = str(data.get("state") or "")
+                    if not st or st in self._consumed:
+                        continue
+                    p = _PendingPairing(
+                        provider=str(data.get("provider") or ""),
+                        user_id=str(data.get("user_id") or ""),
+                        verifier=data.get("verifier"),
+                        return_to=data.get("return_to"),
+                        redirect_uri=data.get("redirect_uri"),
+                        created_wall=float(data.get("created_wall") or 0.0),
+                    )
+                    if not p.expired():
+                        fs_candidates.append((st, p))
+                if fs_candidates:
+                    best = max(fs_candidates, key=lambda item: item[1].created_wall)
+                    self._items[best[0]] = best[1]
+                    return best
+            except Exception as exc:
+                logger.debug("oauth state firestore peek_for_user degraded: %s", type(exc).__name__)
+
+        return None
 
     def _sweep(self) -> None:
+        now = time.time()
         for key in [k for k, v in self._items.items() if v.expired()]:
             self._items.pop(key, None)
+        for key in [k for k, ts in self._consumed.items() if (now - ts) > (STATE_TTL_S * 2)]:
+            self._consumed.pop(key, None)
 
     def __len__(self) -> int:
         return len(self._items)
@@ -943,8 +1187,7 @@ async def configure_provider(
                 )
             uid = pending.user_id
             pkce = PkcePair()
-            new_state = generate_state()
-            _states.put(new_state, _PendingPairing("spotify", uid, pkce.verifier, None))
+            new_state = _states.mint(_PendingPairing("spotify", uid, pkce.verifier, None))
             return RedirectResponse(
                 url=new_auth.build_authorize_url(new_state, SPOTIFY_SCOPES, pkce=pkce),
                 status_code=302,
@@ -1081,10 +1324,8 @@ async def spotify_start(
     chosen_redirect = (redirect_uri or body_redirect or "").strip() or None
 
     pkce = PkcePair()
-    state = generate_state()
-    _states.put(
-        state,
-        _PendingPairing("spotify", user_id, pkce.verifier, return_to, redirect_uri=chosen_redirect),
+    state = _states.mint(
+        _PendingPairing("spotify", user_id, pkce.verifier, return_to, redirect_uri=chosen_redirect)
     )
 
     if not auth.configured:
@@ -1411,8 +1652,7 @@ async def lastfm_start(
 
     helper, error = _load_lastfm_auth()
     if helper is None:
-        state = generate_state()
-        _states.put(state, _PendingPairing("lastfm", user_id, None, return_to))
+        state = _states.mint(_PendingPairing("lastfm", user_id, None, return_to))
         base = _external_base_url(request)
         return StartLastfmResponse(
             authorize_url=f"{base}/api/pair/lastfm/demo-authorize?state={state}",

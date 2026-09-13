@@ -34,6 +34,7 @@ def pairing(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
 
     def _clear() -> None:
         module._states._items.clear()
+        module._states._consumed.clear()
         module._demo_pairings.clear()
         module._in_memory_lastfm.clear()
         module._in_memory_spotify_meta.clear()
@@ -263,3 +264,37 @@ class TestStatusIsPerUser:
 
         mine = client.get("/api/pair/status", headers=_as("user_a")).json()
         assert mine["lastfm"]["account"] != "jpaquay"
+
+
+class TestCrossInstanceStateStore:
+    def test_spotify_state_survives_routing_to_a_different_cloud_run_instance(
+        self, client, pairing
+    ) -> None:  # noqa: ANN001
+        """When /start lands on Cloud Run Instance A and /callback lands on
+        Instance B (where in-memory _items is empty), the Fernet-sealed state token
+        is decrypted statelessly on Instance B while preventing replay."""
+        start = client.post("/api/pair/spotify/start", headers=_as("user_a"))
+        assert start.status_code == 200
+        state = start.json()["state"]
+        assert state.startswith("bg1.")
+
+        # Simulate landing on a brand new Cloud Run instance whose in-memory store is empty
+        pairing._states._items.clear()
+
+        # Callback on Instance B must succeed
+        done = client.get(
+            f"/api/pair/spotify/demo-complete?state={state}&account=cross-instance-spotify"
+        )
+        assert done.status_code == 200
+
+        status = client.get("/api/pair/status", headers=_as("user_a")).json()
+        assert status["spotify"]["connected"] is True
+        assert status["spotify"]["account"] == "cross-instance-spotify"
+
+        # Replay on Instance B must fail with bad_state
+        replay = client.get(
+            f"/api/pair/spotify/demo-complete?state={state}&account=attacker"
+        )
+        assert replay.status_code == 400
+        assert replay.json()["error"] == "bad_state"
+
