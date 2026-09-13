@@ -27,6 +27,7 @@ import 'dataviz_screen.dart';
 import 'home_screen.dart';
 import 'playlist_screen.dart';
 import 'settings_screen.dart';
+import 'widgets/service_badge.dart';
 import 'widgets/telemetry_inspector_panel.dart';
 
 /// The five destinations.
@@ -103,6 +104,13 @@ class AppShellState extends ConsumerState<AppShell> {
       appBar: AppBar(
         title: const BarogrooveWordmark(compact: true),
         actions: <Widget>[
+          // Badges are desktop-only. On compact and medium the header budget
+          // is wordmark + status + avatar, so they live in Settings and in
+          // the account sheet instead (spec §7.5).
+          if (expanded) ...<Widget>[
+            const ServiceBadgeStrip(),
+            const SizedBox(width: BgSpace.md),
+          ],
           const _HealthPip(),
           const SizedBox(width: BgSpace.sm),
           const _AccountMenu(),
@@ -642,6 +650,19 @@ class _AccountMenu extends ConsumerWidget {
                 BgSpace.md,
               ),
               child: _Identity(user: user),
+            ),
+            // Not in the header at this width — here instead.
+            const Padding(
+              padding: EdgeInsets.fromLTRB(
+                BgSpace.xl,
+                0,
+                BgSpace.xl,
+                BgSpace.md,
+              ),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: ServiceBadgeStrip(),
+              ),
             ),
             Divider(color: Theme.of(sheetContext).bg.hairline),
             for (final _AccountAction a in _AccountAction.navigable)

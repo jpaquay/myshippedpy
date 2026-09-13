@@ -25,6 +25,7 @@ import '../config.dart';
 import '../providers.dart';
 import '../pwa/pwa_install.dart';
 import 'widgets/section.dart';
+import 'widgets/service_badge.dart';
 import 'widgets/status_notes.dart';
 import 'widgets/theme_mode_control.dart';
 
@@ -305,6 +306,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 const SizedBox(height: BgSpace.md),
               ],
+              // Status row first: two monochrome badges that tell the truth
+              // in all three states, including while the status request is
+              // still in flight. Same source of truth as the cards below —
+              // this is a second view, not a second store.
+              for (final BgService service in BgService.values)
+                ServiceStatusRow(
+                  service: service,
+                  link: BgServiceLink.of(pairing, service),
+                  onConnect: () => _connect(
+                    service.provider,
+                    redirectUri: service == BgService.spotify
+                        ? _spotifyRedirectUri
+                        : null,
+                  ),
+                  onDisconnect: () => _disconnect(service.provider),
+                ),
+              const SizedBox(height: BgSpace.md),
+
               pairing.when(
                 loading: () => const Padding(
                   padding: EdgeInsets.all(BgSpace.xl),
