@@ -55,6 +55,8 @@ __all__ = [
     "FUNCTIONS",
     "AGENT_FUNCTIONS",
     "RENDERER_FUNCTIONS",
+    "WRITE_FUNCTION_IDS",
+    "function_writes",
     "FN_SELECT_THEME",
     "FN_SELECT_GENRE",
     "FN_SET_CORRIDOR_WIDTH",
@@ -385,6 +387,63 @@ RENDERER_FUNCTIONS: Final[dict[str, FunctionDefinition]] = {
 }
 
 FUNCTIONS: Final[dict[str, FunctionDefinition]] = {**AGENT_FUNCTIONS, **RENDERER_FUNCTIONS}
+
+# --------------------------------------------------------------------------- #
+# Which functions WRITE -- declared here, once, in Python
+# --------------------------------------------------------------------------- #
+#
+# Plan item 11, UX_IA_SPEC.md 6.5. The user's policy is: read and select
+# freely, confirm before anything that writes. Two things follow from putting
+# the classification *here* rather than in Dart:
+#
+#   1. There is no list of function names in the Flutter app. The renderer asks
+#      the backend which functions write (``GET /api/advisor/tools``, and
+#      ``metadata.extensions.barogroove.functionWrites`` in this catalog) and
+#      renders a confirmation card for the ones that do. Adding a sixth write
+#      is a Python change and nothing else.
+#   2. The flag is *advisory to the UI only*. It decides whether the client
+#      expects to be asked; it does not decide whether the write happens. The
+#      refusal lives in ``backend/app/mcp/confirm.py`` and fires on the server
+#      for every transport, so a client that ignores this flag entirely still
+#      cannot execute a write without a server-issued ticket.
+#
+# MCP *tools* carry the same flag on their own declaration -- ``ToolSpec`` in
+# ``backend/app/mcp/manifest.py`` already has ``read_only``, and
+# ``ToolSpec.writes`` is its inverse. ``forge_playlist`` is a tool, not an
+# agent function, and is covered there.
+WRITE_FUNCTION_IDS: Final[frozenset[str]] = frozenset(
+    {
+        # Taste feedback is persisted and steers the next forge.
+        FN_TRACK_FEEDBACK,
+        # Produces and stores a playlist.
+        FN_FORGE,
+    }
+)
+
+
+def function_writes(name: str) -> bool:
+    """True when invoking ``name`` changes state the user would want to approve.
+
+    Accepts the catalog id (``barogroove.trackFeedback``), the bare camelCase
+    spelling (``trackFeedback``) or the snake_case one (``track_feedback``), so
+    the answer does not depend on which vocabulary the caller happens to use.
+    Unknown names are reported as writes: the safe default when nobody has
+    declared otherwise.
+    """
+    if name in WRITE_FUNCTION_IDS:
+        return True
+    if name in FUNCTIONS:
+        return False
+
+    def _norm(value: str) -> str:
+        tail = value.rsplit(".", 1)[-1]
+        return tail.replace("_", "").lower()
+
+    target = _norm(name)
+    for declared in FUNCTIONS:
+        if _norm(declared) == target:
+            return declared in WRITE_FUNCTION_IDS
+    return True
 
 
 def function_definition(name: str) -> FunctionDefinition:
@@ -982,6 +1041,16 @@ CATALOG: Final[dict[str, Any]] = {
                 "themeIntent": dict(THEME_INTENT),
                 "agentFunctions": sorted(AGENT_FUNCTIONS),
                 "rendererFunctions": sorted(RENDERER_FUNCTIONS),
+                # Item 11 / spec 6.5. Carried in the catalog so the renderer
+                # never has to know a list of names: `writeFunctions` is the
+                # short answer, `functionWrites` the per-function one. The
+                # actual gate is server-side (backend/app/mcp/confirm.py) --
+                # these are what let the UI put a confirmation card in front
+                # of a write instead of discovering the refusal afterwards.
+                "writeFunctions": sorted(WRITE_FUNCTION_IDS),
+                "functionWrites": {
+                    name: name in WRITE_FUNCTION_IDS for name in sorted(FUNCTIONS)
+                },
             }
         },
     },

@@ -508,6 +508,16 @@ class AgentFunction:
     handler: Callable[[Any], Awaitable[list[dict[str, Any]]]]
     aliases: tuple[str, ...] = field(default=())
 
+    #: Does running this change state the user would want to approve first?
+    #:
+    #: Plan item 11 / ``docs/UX_IA_SPEC.md`` 6.5. Declared per function, right
+    #: next to the handler, so the classification cannot drift away from the
+    #: thing being classified -- and carried into the manifest, so the Flutter
+    #: renderer reads it off the wire instead of keeping a list of names.
+    #: ``tests/test_mcp_writes.py`` asserts it agrees with the A2UI catalog's
+    #: ``WRITE_FUNCTION_IDS``; the two vocabularies must not disagree.
+    writes: bool = False
+
     @property
     def argument_schema(self) -> dict[str, Any]:
         """JSON Schema for the payload, by alias - the camelCase the renderer sends."""
@@ -540,6 +550,9 @@ _FUNCTIONS: Final[tuple[AgentFunction, ...]] = (
         model=SelectThemeArgs,
         handler=handle_select_theme,  # type: ignore[arg-type]
         aliases=("barogroove.selectTheme", "select_theme", "onThemeSelected"),
+        # A selection. Retargets the sonic vector and re-renders; nothing is
+        # persisted that the user would want to be asked about first.
+        writes=False,
     ),
     AgentFunction(
         name="selectGenre",
@@ -547,6 +560,8 @@ _FUNCTIONS: Final[tuple[AgentFunction, ...]] = (
         model=SelectGenreArgs,
         handler=handle_select_genre,  # type: ignore[arg-type]
         aliases=("barogroove.selectGenre", "select_genre", "onGenreSelected"),
+        # Also a selection, on an axis orthogonal to theme.
+        writes=False,
     ),
     AgentFunction(
         name="rateTrack",
@@ -554,6 +569,10 @@ _FUNCTIONS: Final[tuple[AgentFunction, ...]] = (
         model=RateTrackArgs,
         handler=handle_rate_track,  # type: ignore[arg-type]
         aliases=("barogroove.rateTrack", "rate_track", "loveTrack", "skipTrack"),
+        # WRITES. A verdict is persisted against the user's taste profile and
+        # steers every subsequent forge. The user's policy names this one
+        # explicitly: confirm before it runs.
+        writes=True,
     ),
     AgentFunction(
         name="reforge",
@@ -561,6 +580,9 @@ _FUNCTIONS: Final[tuple[AgentFunction, ...]] = (
         model=ReforgeArgs,
         handler=handle_reforge,  # type: ignore[arg-type]
         aliases=("barogroove.reforge", "re_forge", "forgeAgain"),
+        # WRITES. Produces and stores a new playlist, replacing what is on
+        # screen. Named explicitly in the user's policy.
+        writes=True,
     ),
 )
 
@@ -631,13 +653,27 @@ async def dispatch(
     *,
     call_id: str | None = None,
     surface_id: str | None = None,
+    confirmation_token: str | None = None,
+    principal: str | None = None,
 ) -> DispatchResult:
-    """Validate, run, and package one ``callAgentFunction``.
+    """Validate, gate, run, and package one ``callAgentFunction``.
 
     Never raises. Every failure - unknown function, bad payload, dead subsystem,
     unexpected exception in a handler - comes back as a ``DispatchResult`` with
     ``ok=False`` and an ``agentFunctionResponse`` carrying an error body. The renderer
     always gets a well-formed answer to its call, which is the entire contract.
+
+    **The write gate (plan item 11).** A function declared ``writes=True`` does
+    not run without a ticket. Called without ``confirmation_token`` it returns
+    ``ok=False`` with error code ``confirmation_required`` and a freshly minted
+    single-use ticket in ``error["confirmation"]``; the caller shows the user
+    an inline action card and calls again with the token. Reads and selects are
+    not gated and pay nothing for this.
+
+    This is the *shared* dispatcher -- MCP and the REST surface endpoint both
+    land here -- so the refusal is not something a particular client can route
+    around by choosing a different transport. See
+    :mod:`backend.app.mcp.confirm`.
     """
     try:
         function = resolve(name)
@@ -672,6 +708,57 @@ async def dispatch(
         )
 
     effective_surface = getattr(args, "surface_id", None) or surface_id
+
+    # ------------------------------------------------------------------
+    # THE WRITE GATE. Nothing below this point runs for a write without a
+    # server-issued, single-use, principal-bound ticket.
+    # ------------------------------------------------------------------
+    if function.writes:
+        from .confirm import ConfirmationInvalid, ConfirmationRequired
+        from .confirm import require_confirmation as _require
+
+        try:
+            _require(
+                function.name,
+                arguments=payload,
+                token=confirmation_token,
+                principal=principal,
+                title=function.description,
+            )
+        except ConfirmationRequired as need:
+            error = {
+                "code": need.code,
+                "message": need.message,
+                "confirmation": need.ticket.as_payload(title=function.description),
+            }
+            return DispatchResult(
+                ok=False,
+                function=function.name,
+                surface_id=effective_surface,
+                call_id=call_id,
+                error=error,
+                response=agent_function_response(
+                    function.name,
+                    surface_id=effective_surface,
+                    call_id=call_id,
+                    error=error,
+                ),
+            )
+        except ConfirmationInvalid as bad:
+            error = {"code": bad.code, "message": bad.message}
+            return DispatchResult(
+                ok=False,
+                function=function.name,
+                surface_id=effective_surface,
+                call_id=call_id,
+                error=error,
+                response=agent_function_response(
+                    function.name,
+                    surface_id=effective_surface,
+                    call_id=call_id,
+                    error=error,
+                ),
+            )
 
     try:
         messages = await function.handler(args)

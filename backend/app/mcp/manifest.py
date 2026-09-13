@@ -410,6 +410,22 @@ class ToolSpec(BaseModel):
     open_world: bool = True
 
     @property
+    def writes(self) -> bool:
+        """Does calling this change state the user would want to approve first?
+
+        The inverse of ``read_only``, named the way the product policy names it
+        (plan item 11, ``docs/UX_IA_SPEC.md`` 6.5) and published on the wire so
+        the Flutter renderer can decide to show a confirmation card without
+        keeping a list of function names in Dart. ``forge_playlist`` and
+        ``save_playlist`` are the two that answer ``True``.
+
+        Advisory to the UI only. The refusal itself is
+        :func:`backend.app.mcp.confirm.require_confirmation`, and it fires
+        whether or not anybody read this flag.
+        """
+        return not self.read_only
+
+    @property
     def input_schema(self) -> dict[str, Any]:
         """JSON Schema for the tool arguments, straight from pydantic v2."""
         return self.input_model.model_json_schema(mode="validation")
@@ -438,6 +454,13 @@ class ToolSpec(BaseModel):
                     "catalogId": a2ui_catalog_descriptor()["id"],
                     "mediaType": A2UI_MEDIA_TYPE,
                     "messagesMetaKey": A2UI_MESSAGES_META_KEY,
+                    # Item 11 / spec 6.5. `readOnlyHint` above is the MCP
+                    # spelling and stays exactly as it was; this is the same
+                    # fact under the name the product policy uses, carried in
+                    # the manifest so a renderer reads it off the wire instead
+                    # of hardcoding which functions write.
+                    "writes": self.writes,
+                    "requiresConfirmation": self.writes,
                 }
             },
         }
@@ -526,6 +549,12 @@ class AgentFunctionSpec(BaseModel):
     argument_schema: dict[str, Any]
     aliases: list[str] = Field(default_factory=list)
 
+    #: Reflected from ``AgentFunction.writes``. Item 11 / spec 6.5: the client
+    #: learns which functions need a confirmation card from here, not from a
+    #: list of names compiled into the app.
+    writes: bool = False
+    requires_confirmation: bool = Field(default=False, alias="requiresConfirmation")
+
 
 def agent_function_specs() -> list[AgentFunctionSpec]:
     """Reflect the live registry in ``functions.py`` into manifest rows.
@@ -544,6 +573,8 @@ def agent_function_specs() -> list[AgentFunctionSpec]:
             description=fn.description,
             argument_schema=fn.argument_schema,
             aliases=list(fn.aliases),
+            writes=fn.writes,
+            requiresConfirmation=fn.writes,
         )
         for fn in REGISTRY.values()
     ]

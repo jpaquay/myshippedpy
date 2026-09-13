@@ -366,14 +366,22 @@ def test_selection_round_trips_return_a_renderable_surface(name: str, payload: d
 
 @requires_a2ui
 def test_rate_track_emits_a_single_data_model_patch() -> None:
-    """A heart tap must not re-forge the playlist; it patches the data model and stops."""
-    result = _run(
-        fx.dispatch(
-            "rateTrack",
-            {"playlistId": "p1", "trackId": "t1", "verdict": "love", "surfaceId": "s-play"},
-            call_id="c2",
-        )
-    )
+    """A heart tap must not re-forge the playlist; it patches the data model and stops.
+
+    ``rateTrack`` writes (plan item 11), so the first dispatch is refused and
+    hands back a ticket. That refusal is asserted properly in
+    ``tests/test_mcp_writes.py``; here we spend the ticket and go on checking
+    the thing this test is actually about -- the shape of the patch.
+    """
+    args = {"playlistId": "p1", "trackId": "t1", "verdict": "love", "surfaceId": "s-play"}
+
+    refused = _run(fx.dispatch("rateTrack", dict(args), call_id="c2"))
+    assert refused.ok is False
+    assert refused.error is not None
+    assert refused.error["code"] == "confirmation_required"
+    token = refused.error["confirmation"]["token"]
+
+    result = _run(fx.dispatch("rateTrack", dict(args), call_id="c2", confirmation_token=token))
     assert result.ok is True
     assert len(result.messages) == 1
     assert list(result.messages[0].keys()) == ["updateDataModel"]

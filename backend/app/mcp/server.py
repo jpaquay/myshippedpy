@@ -732,6 +732,56 @@ async def _run_save_playlist(args: SavePlaylistInput) -> Any:
 # ======================================================================================
 
 
+def _confirmation_refusal(
+    tool_name: str,
+    arguments: dict[str, Any],
+    token: str | None,
+) -> Any:
+    """Refuse a write that has not been confirmed, or return ``None`` to proceed.
+
+    Plan item 11. The MCP transport is a first-class client of this server --
+    an agent runtime holding a valid bearer token can call ``tools/call`` with
+    no BAROGROOVE UI anywhere in the picture. If the confirmation step only
+    existed in Flutter, that caller would forge and save at will. So the same
+    gate that the REST assistant path uses is applied here, to the two tools
+    whose ``ToolSpec.writes`` is ``True``.
+
+    The refusal is a normal, well-formed tool result with ``ok=False`` and
+    ``error.code == "confirmation_required"``, carrying the single-use ticket.
+    A caller that wants the write asks the user and calls again with
+    ``confirmation_token``. There is no flag that switches this off.
+    """
+    from .confirm import ConfirmationInvalid, ConfirmationRequired, require_confirmation
+
+    spec = tool_spec(tool_name)
+    try:
+        require_confirmation(
+            tool_name,
+            arguments=arguments,
+            token=token,
+            title=spec.title,
+        )
+    except ConfirmationRequired as need:
+        payload = spec.output_model(
+            ok=False,
+            tool=tool_name,
+            error=ToolError(
+                code=need.code,
+                message=need.message,
+                detail=need.ticket.token,
+            ),
+        )
+        return _pack(payload, f"{spec.title} — confirmation required")
+    except ConfirmationInvalid as bad:
+        payload = spec.output_model(
+            ok=False,
+            tool=tool_name,
+            error=ToolError(code=bad.code, message=bad.message),
+        )
+        return _pack(payload, f"{spec.title} — not confirmed")
+    return None
+
+
 def _register_tools(server: Any) -> None:
     """Attach the five tools.
 
@@ -798,9 +848,32 @@ def _register_tools(server: Any) -> None:
         length: int = 18,
         label: str | None = None,
         seed: int | None = None,
+        confirmation_token: str | None = None,
     ):
         # No `lastfm_user` parameter: taste is resolved from the authenticated
         # principal's paired account inside _run_forge_playlist.
+        #
+        # `confirmation_token` is the write gate (plan item 11). Forging is a
+        # write, so the first call is refused with a single-use ticket and the
+        # second call spends it. The gate is on the WRAPPER, which is what an
+        # MCP client reaches, rather than in `_run_forge_playlist`, which is
+        # the tool body and is also reached by the confirmed paths.
+        refusal = _confirmation_refusal(
+            "forge_playlist",
+            {
+                "lat": lat,
+                "lon": lon,
+                "theme": theme,
+                "genre": genre,
+                "length": length,
+                "label": label,
+                "seed": seed,
+            },
+            confirmation_token,
+        )
+        if refusal is not None:
+            return refusal
+
         return await _run_forge_playlist(
             ForgePlaylistInput.model_validate(
                 {
@@ -826,9 +899,21 @@ def _register_tools(server: Any) -> None:
     async def save_playlist(
         playlist_id: str,
         sink: str = "auto",
+        confirmation_token: str | None = None,
     ):
         # No `user_id` parameter. The owner is the verified bearer of the
         # request, resolved inside _run_save_playlist via require_principal().
+        #
+        # Writing to somebody's Spotify account is the most consequential
+        # thing this server does, so it carries the same gate as forging.
+        refusal = _confirmation_refusal(
+            "save_playlist",
+            {"playlist_id": playlist_id, "sink": sink},
+            confirmation_token,
+        )
+        if refusal is not None:
+            return refusal
+
         return await _run_save_playlist(
             SavePlaylistInput.model_validate({"playlist_id": playlist_id, "sink": sink})
         )

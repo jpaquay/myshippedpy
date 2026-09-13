@@ -2080,7 +2080,27 @@
         "rendererFunctions": [
           "barogroove.formatSigned",
           "barogroove.scrollToTrack"
-        ]
+        ],
+        "writeFunctions": [
+          "barogroove.forge",
+          "barogroove.trackFeedback"
+        ],
+        "functionWrites": {
+          "barogroove.explainDimension": false,
+          "barogroove.forge": true,
+          "barogroove.formatSigned": false,
+          "barogroove.openAlmanacEntry": false,
+          "barogroove.openTelemetryTrace": false,
+          "barogroove.openTrack": false,
+          "barogroove.refreshSky": false,
+          "barogroove.refreshTelemetry": false,
+          "barogroove.retry": false,
+          "barogroove.scrollToTrack": false,
+          "barogroove.selectGenre": false,
+          "barogroove.selectTheme": false,
+          "barogroove.setCorridorWidth": false,
+          "barogroove.trackFeedback": true
+        }
       }
     }
   }
