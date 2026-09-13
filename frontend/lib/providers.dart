@@ -23,6 +23,32 @@ final StateProvider<ThemeMode> themeModeProvider =
     StateProvider<ThemeMode>((Ref ref) => ThemeMode.dark);
 
 // ===========================================================================
+// Settings deep links
+// ===========================================================================
+
+/// The sections of Settings that something else in the app can point at.
+enum SettingsSection { account, appearance, connections, install }
+
+/// A one-shot request to open Settings somewhere specific.
+///
+/// The account menu and the header connection badges set this and then
+/// navigate; `SettingsScreen` consumes it, scrolls the section into view and
+/// clears it. It is a navigation intent, not state: nothing reads it twice.
+@immutable
+class SettingsFocus {
+  const SettingsFocus({required this.section, this.provider});
+
+  final SettingsSection section;
+
+  /// Which pairing card to bring into view, for
+  /// [SettingsSection.connections].
+  final PairingProvider? provider;
+}
+
+final StateProvider<SettingsFocus?> settingsFocusProvider =
+    StateProvider<SettingsFocus?>((Ref ref) => null);
+
+// ===========================================================================
 // Infrastructure
 // ===========================================================================
 

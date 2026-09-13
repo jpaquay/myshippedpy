@@ -23,6 +23,7 @@ import '../auth/auth_service.dart';
 import '../auth/pairing_service.dart';
 import '../config.dart';
 import '../providers.dart';
+import '../pwa/pwa_install.dart';
 import 'widgets/section.dart';
 import 'widgets/status_notes.dart';
 
@@ -45,11 +46,54 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _linkingUsername = false;
   bool _exchangingManual = false;
 
+  late final PwaInstallBridge _pwaBridge;
+  bool _showInstallHowTo = false;
+
+  /// Anchors for the deep links set by the account menu and the header
+  /// connection badges (`settingsFocusProvider`).
+  final GlobalKey _appearanceKey = GlobalKey();
+  final GlobalKey _connectionsKey = GlobalKey();
+  final GlobalKey _installKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    _pwaBridge = PwaInstallBridge(
+      onStateChanged: () {
+        if (mounted) setState(() {});
+      },
+    );
+  }
+
   @override
   void dispose() {
+    _pwaBridge.dispose();
     _lastfmUserCtrl.dispose();
     _spotifyManualCtrl.dispose();
     super.dispose();
+  }
+
+  /// Consumes a one-shot [SettingsFocus] and brings its section into view.
+  void _consumeFocus(SettingsFocus? focus) {
+    if (focus == null) return;
+    final GlobalKey key = switch (focus.section) {
+      SettingsSection.appearance => _appearanceKey,
+      SettingsSection.connections => _connectionsKey,
+      SettingsSection.install => _installKey,
+      SettingsSection.account => _appearanceKey,
+    };
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(settingsFocusProvider.notifier).state = null;
+      final BuildContext? target = key.currentContext;
+      if (target == null) return;
+      Scrollable.ensureVisible(
+        target,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+        alignment: 0.05,
+      );
+    });
   }
 
   Future<void> _connect(
@@ -165,14 +209,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final BgUser? user = ref.watch(authStateProvider).valueOrNull;
     final pairing = ref.watch(pairingStatusProvider);
     final health = ref.watch(healthProvider).valueOrNull;
+    _consumeFocus(ref.watch(settingsFocusProvider));
 
     return ListView(
-      padding: const EdgeInsets.symmetric(
-        horizontal: BgSpace.xl,
-        vertical: BgSpace.lg,
+      padding: EdgeInsets.fromLTRB(
+        BgBreak.gutter(context),
+        BgSpace.lg,
+        BgBreak.gutter(context),
+        BgSpace.bubbleClearance,
       ),
       children: <Widget>[
-        Text('Settings', style: Theme.of(context).textTheme.displaySmall),
+        Text('Settings', style: BgText.screenTitle(context)),
         const SizedBox(height: BgSpace.xxl),
 
         // --- Account --------------------------------------------------
@@ -229,6 +276,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
         // --- Pairing --------------------------------------------------
         Section(
+          key: _connectionsKey,
           eyebrow: 'CONNECTED SERVICES',
           trailing: IconButton(
             tooltip: 'Refresh',
@@ -310,6 +358,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
         const SizedBox(height: BgSpace.xxl),
 
+        // --- Install ---------------------------------------------------
+        // Relocated from the AppBar (spec §1, row 2). A one-time action does
+        // not earn permanent header space, and the three-step instructions
+        // are rung 1 here rather than a bottom sheet.
+        if (!_pwaBridge.isStandalone) ...<Widget>[
+          Section(
+            key: _installKey,
+            eyebrow: 'INSTALL',
+            child: _InstallCard(
+              bridge: _pwaBridge,
+              showHowTo: _showInstallHowTo,
+              onToggleHowTo: () =>
+                  setState(() => _showInstallHowTo = !_showInstallHowTo),
+            ),
+          ),
+          const SizedBox(height: BgSpace.xxl),
+        ],
+
         // --- Backend --------------------------------------------------
         Section(
           eyebrow: 'BACKEND',
@@ -360,6 +426,158 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const Section(eyebrow: 'ABOUT', child: _AboutCard()),
 
         const SizedBox(height: BgSpace.xxl),
+      ],
+    );
+  }
+}
+
+/// The relocated PWA install affordance. Rung 0 is one line and one button;
+/// the platform-by-platform instructions are rung 1, because they are long
+/// and are needed exactly once.
+class _InstallCard extends StatelessWidget {
+  const _InstallCard({
+    required this.bridge,
+    required this.showHowTo,
+    required this.onToggleHowTo,
+  });
+
+  final PwaInstallBridge bridge;
+  final bool showHowTo;
+  final VoidCallback onToggleHowTo;
+
+  @override
+  Widget build(BuildContext context) {
+    final BgColors bg = Theme.of(context).bg;
+    final bool ready = bridge.isInstallable;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(BgSpace.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Icon(
+                  Icons.add_to_home_screen,
+                  size: BgIcon.inline,
+                  color: bg.inkSecondary,
+                ),
+                const SizedBox(width: BgSpace.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        'Install BAROGROOVE',
+                        style: BgText.rowTitle(context),
+                      ),
+                      Text(
+                        ready
+                            ? 'Runs standalone, offline-capable, no browser chrome.'
+                            : 'Your browser has not offered an install prompt. '
+                                'The steps below always work.',
+                        style: BgText.caption(context),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: BgSpace.md),
+                if (ready)
+                  FilledButton(
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      unawaited(bridge.triggerInstall());
+                    },
+                    child: const Text('Install'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: BgSpace.md),
+            Divider(color: bg.hairline),
+            InkWell(
+              borderRadius: BgSpace.brSm,
+              onTap: onToggleHowTo,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: BgSpace.md),
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        'HOW TO INSTALL',
+                        style: BgText.eyebrow(context),
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: showHowTo ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      child: Icon(
+                        Icons.keyboard_arrow_down,
+                        size: BgIcon.inline,
+                        color: bg.inkSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (showHowTo) ...<Widget>[
+              const _InstallStep(
+                icon: Icons.computer_outlined,
+                title: 'Desktop Chrome / Edge',
+                body: 'Use the install icon at the right of the address bar, '
+                    'or the browser menu → “Install page as app…”.',
+              ),
+              const SizedBox(height: BgSpace.sm),
+              const _InstallStep(
+                icon: Icons.phone_android_outlined,
+                title: 'Android Chrome',
+                body: 'Browser menu → “Add to Home screen” / “Install app”.',
+              ),
+              const SizedBox(height: BgSpace.sm),
+              const _InstallStep(
+                icon: Icons.phone_iphone_outlined,
+                title: 'iOS Safari',
+                body: 'Share → “Add to Home Screen”.',
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InstallStep extends StatelessWidget {
+  const _InstallStep({
+    required this.icon,
+    required this.title,
+    required this.body,
+  });
+
+  final IconData icon;
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    final BgColors bg = Theme.of(context).bg;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Icon(icon, size: BgIcon.inline, color: bg.inkSecondary),
+        const SizedBox(width: BgSpace.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(title, style: BgText.rowSubtitle(context)),
+              Text(body, style: BgText.caption(context)),
+            ],
+          ),
+        ),
       ],
     );
   }

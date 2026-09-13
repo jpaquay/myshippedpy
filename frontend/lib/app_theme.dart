@@ -4,18 +4,25 @@ import 'package:flutter/services.dart';
 /// BAROGROOVE's visual register.
 ///
 /// The brief is an executive instrument panel, not a music app: slate,
-/// sky blue, a restrained gold accent, high contrast, light mode by default.
-/// The reference point is the EHDS portal — institutional, quiet, legible at
-/// a glance. Nothing here glows.
+/// sky blue, a restrained gold accent, high contrast, quiet. The reference
+/// point is the EHDS portal — institutional, legible at a glance. Nothing
+/// here glows.
+///
+/// **This file is the only place a colour, a font size, a padding, a radius
+/// or a breakpoint may be declared.** Screens read them back through
+/// [BgText], [BgSpace], [BgBreak] and `Theme.of(context).bg` ([BgColors]).
+/// See `docs/UX_IA_SPEC.md` §7.
 ///
 /// Theme palettes returned by `/api/themes` (petrichor, storm_front, …) *tint*
 /// this surface via [BgTheme.tinted]; they never replace it. A theme can move
 /// the accent and the faintest wash behind a card. It cannot make the app
-/// purple.
+/// purple. The A2UI renderer tints through the same entry point, so an
+/// agent-described surface and hand-built chrome share one token set.
 class BgPalette {
   const BgPalette._();
 
   // Slate — the structural colour. Text, chrome, borders.
+  static const Color slate950 = Color(0xFF0B1220);
   static const Color slate900 = Color(0xFF0F172A);
   static const Color slate800 = Color(0xFF1E293B);
   static const Color slate700 = Color(0xFF334155);
@@ -49,20 +56,344 @@ class BgPalette {
   static const Color white = Color(0xFFFFFFFF);
 }
 
-/// Spacing and radius scale. Four-point grid; nothing rounder than 10.
+/// Spacing and radius scale. Four-point grid.
+///
+/// Radius discipline: **nothing is rounder than 10** except [radiusSheet],
+/// which is the grab-edge of a rung-2 bottom sheet and is the single documented
+/// exemption (spec §7.2). `circular(20)` / `circular(16)` / `circular(14)` are
+/// not tokens and must not reappear.
 class BgSpace {
   const BgSpace._();
+  static const double xxs = 2; // icon-to-label only
   static const double xs = 4;
   static const double sm = 8;
   static const double md = 12;
   static const double lg = 16;
   static const double xl = 24;
   static const double xxl = 32;
+  static const double xxxl = 48; // destination bottom padding, empty states
 
   static const double radius = 10;
   static const double radiusSm = 6;
+
+  /// The ONLY radius above 10. Sheet tops only.
+  static const double radiusSheet = 16;
+
+  /// Bottom padding every destination's scroll view must reserve so the
+  /// floating assistant bubble never covers content (spec §6.2).
+  static const double bubbleClearance = 96;
+
+  /// Height of the floating mini-player, when visible. The assistant bubble
+  /// stacks above it.
+  static const double miniPlayerHeight = 64;
+
   static const BorderRadius br = BorderRadius.all(Radius.circular(radius));
   static const BorderRadius brSm = BorderRadius.all(Radius.circular(radiusSm));
+  static const BorderRadius brSheet =
+      BorderRadius.vertical(top: Radius.circular(radiusSheet));
+}
+
+/// Icon sizes. Spec §7.6: monochrome, outlined at rest, filled when selected.
+class BgIcon {
+  const BgIcon._();
+
+  /// Header, menus, any app chrome. Nothing in the header is bigger.
+  static const double chrome = 20;
+
+  /// Inline with text, inside cards and rows.
+  static const double inline = 18;
+
+  /// Tab bar / navigation rail only.
+  static const double nav = 24;
+
+  /// The health pip's visual dot.
+  static const double dot = 8;
+}
+
+/// The three — and only three — breakpoints (spec §4).
+///
+/// `shell.dart` used 900/600 and `dataviz_screen.dart` used 920. Unified here.
+/// No screen may hard-code a pixel breakpoint again.
+enum BgBreakpoint { compact, medium, expanded }
+
+class BgBreak {
+  const BgBreak._();
+
+  /// Below this width: bottom `NavigationBar`, tight gutter, no header badges.
+  static const double compact = 600;
+
+  /// At or above this width: `NavigationRail`, header badges, two columns.
+  static const double expanded = 900;
+
+  static BgBreakpoint of(BuildContext context) =>
+      forWidth(MediaQuery.sizeOf(context).width);
+
+  static BgBreakpoint forWidth(double width) {
+    if (width >= expanded) return BgBreakpoint.expanded;
+    if (width >= compact) return BgBreakpoint.medium;
+    return BgBreakpoint.compact;
+  }
+
+  /// `true` when the navigation rail replaces the bottom bar.
+  static bool isExpanded(BuildContext context) =>
+      of(context) == BgBreakpoint.expanded;
+
+  /// `true` on phones. Kept as a named helper so nobody writes `< 600` again.
+  static bool isCompact(BuildContext context) =>
+      of(context) == BgBreakpoint.compact;
+
+  /// Horizontal screen gutter: 12 on compact, 24 everywhere else.
+  static double gutter(BuildContext context) =>
+      isCompact(context) ? BgSpace.md : BgSpace.xl;
+
+  /// Vertical rhythm between sections: 24 compact, 32 expanded.
+  static double sectionGap(BuildContext context) =>
+      of(context) == BgBreakpoint.expanded ? BgSpace.xxl : BgSpace.xl;
+
+  /// The smallest phone we design for. Not a layout breakpoint — the one
+  /// width at which a secondary line of copy is allowed to shorten.
+  static const double narrowPhone = 390;
+
+  /// Content column ceiling. Single-column pages cap at 720; the shell caps
+  /// the whole content area at 1080.
+  static const double readingMaxWidth = 720;
+  static const double shellMaxWidth = 1080;
+
+  /// Rung-1 disclosures default open on desktop and closed on phones.
+  static bool disclosureDefaultOpen(BuildContext context) =>
+      isExpanded(context);
+}
+
+/// Named colour roles (spec §7.3).
+///
+/// Screens stop reaching into [BgPalette] and ask the theme instead:
+/// `Theme.of(context).bg.hairline`. Carried as a [ThemeExtension] so it
+/// survives `copyWith`, so it is available to the A2UI renderer's generic
+/// widgets, and so a tinted surface theme keeps every role but the accent.
+@immutable
+class BgColors extends ThemeExtension<BgColors> {
+  const BgColors({
+    required this.surfaceBase,
+    required this.surfaceRaised,
+    required this.surfaceSunken,
+    required this.hairline,
+    required this.inkPrimary,
+    required this.inkSecondary,
+    required this.inkTertiary,
+    required this.accent,
+    required this.onAccent,
+    required this.accentWash,
+    required this.markGold,
+    required this.statusOk,
+    required this.statusWarn,
+    required this.statusDanger,
+  });
+
+  /// Page background.
+  final Color surfaceBase;
+
+  /// Cards, sheets, the assistant bubble.
+  final Color surfaceRaised;
+
+  /// Input fields, skeletons, chart plot areas.
+  final Color surfaceSunken;
+
+  /// 1 px separators and card borders. The primary structuring device.
+  final Color hairline;
+
+  /// Headings, values.
+  final Color inkPrimary;
+
+  /// Body, labels.
+  final Color inkSecondary;
+
+  /// Disabled, unlinked, placeholders.
+  final Color inkTertiary;
+
+  /// Interaction only — filled buttons, selected segment, focus ring.
+  final Color accent;
+
+  /// Text on [accent].
+  final Color onAccent;
+
+  /// The faintest possible selected-row tint. One per screen.
+  final Color accentWash;
+
+  /// Rationed. Never more than one gold element per viewport.
+  final Color markGold;
+
+  /// Only in the health sheet and the linked-badge dot. Never a header dot.
+  final Color statusOk;
+  final Color statusWarn;
+  final Color statusDanger;
+
+  /// A linked connection badge is monochrome — *not* green.
+  Color get connected => inkPrimary;
+
+  /// An unlinked connection badge.
+  Color get disconnected => inkTertiary;
+
+  static const BgColors _light = BgColors(
+    surfaceBase: BgPalette.slate50,
+    surfaceRaised: BgPalette.white,
+    surfaceSunken: BgPalette.slate100,
+    hairline: BgPalette.slate200,
+    inkPrimary: BgPalette.slate900,
+    inkSecondary: BgPalette.slate600,
+    inkTertiary: BgPalette.slate400,
+    accent: BgPalette.sky600,
+    onAccent: BgPalette.white,
+    accentWash: BgPalette.sky50,
+    markGold: BgPalette.gold600,
+    statusOk: BgPalette.ok,
+    statusWarn: BgPalette.warn,
+    statusDanger: BgPalette.danger,
+  );
+
+  static const BgColors _dark = BgColors(
+    surfaceBase: BgPalette.slate900,
+    surfaceRaised: BgPalette.slate800,
+    surfaceSunken: BgPalette.slate950,
+    hairline: BgPalette.slate700,
+    inkPrimary: BgPalette.slate100,
+    inkSecondary: BgPalette.slate400,
+    inkTertiary: BgPalette.slate500,
+    accent: BgPalette.sky500,
+    onAccent: BgPalette.slate900,
+    // sky700 @ 14 % (alpha 0x24) — a wash, not a fill. Dark mode separates
+    // with hairlines, so the wash only has to be perceptible, not present.
+    accentWash: Color(0x240369A1),
+    markGold: BgPalette.gold500,
+    statusOk: BgPalette.ok,
+    statusWarn: BgPalette.warn,
+    statusDanger: BgPalette.danger,
+  );
+
+  static BgColors forBrightness(Brightness brightness) =>
+      brightness == Brightness.light ? _light : _dark;
+
+  @override
+  BgColors copyWith({
+    Color? surfaceBase,
+    Color? surfaceRaised,
+    Color? surfaceSunken,
+    Color? hairline,
+    Color? inkPrimary,
+    Color? inkSecondary,
+    Color? inkTertiary,
+    Color? accent,
+    Color? onAccent,
+    Color? accentWash,
+    Color? markGold,
+    Color? statusOk,
+    Color? statusWarn,
+    Color? statusDanger,
+  }) {
+    return BgColors(
+      surfaceBase: surfaceBase ?? this.surfaceBase,
+      surfaceRaised: surfaceRaised ?? this.surfaceRaised,
+      surfaceSunken: surfaceSunken ?? this.surfaceSunken,
+      hairline: hairline ?? this.hairline,
+      inkPrimary: inkPrimary ?? this.inkPrimary,
+      inkSecondary: inkSecondary ?? this.inkSecondary,
+      inkTertiary: inkTertiary ?? this.inkTertiary,
+      accent: accent ?? this.accent,
+      onAccent: onAccent ?? this.onAccent,
+      accentWash: accentWash ?? this.accentWash,
+      markGold: markGold ?? this.markGold,
+      statusOk: statusOk ?? this.statusOk,
+      statusWarn: statusWarn ?? this.statusWarn,
+      statusDanger: statusDanger ?? this.statusDanger,
+    );
+  }
+
+  @override
+  BgColors lerp(ThemeExtension<BgColors>? other, double t) {
+    if (other is! BgColors) return this;
+    Color mix(Color a, Color b) => Color.lerp(a, b, t) ?? a;
+    return BgColors(
+      surfaceBase: mix(surfaceBase, other.surfaceBase),
+      surfaceRaised: mix(surfaceRaised, other.surfaceRaised),
+      surfaceSunken: mix(surfaceSunken, other.surfaceSunken),
+      hairline: mix(hairline, other.hairline),
+      inkPrimary: mix(inkPrimary, other.inkPrimary),
+      inkSecondary: mix(inkSecondary, other.inkSecondary),
+      inkTertiary: mix(inkTertiary, other.inkTertiary),
+      accent: mix(accent, other.accent),
+      onAccent: mix(onAccent, other.onAccent),
+      accentWash: mix(accentWash, other.accentWash),
+      markGold: mix(markGold, other.markGold),
+      statusOk: mix(statusOk, other.statusOk),
+      statusWarn: mix(statusWarn, other.statusWarn),
+      statusDanger: mix(statusDanger, other.statusDanger),
+    );
+  }
+}
+
+/// `Theme.of(context).bg.hairline` — the ergonomic way to reach a colour role.
+extension BgThemeRoles on ThemeData {
+  BgColors get bg =>
+      extension<BgColors>() ?? BgColors.forBrightness(brightness);
+}
+
+/// Type scale aliases (spec §7.1). One name per role, so a screen never has to
+/// remember whether a card title is `titleLarge` or `headlineSmall`.
+///
+/// Hard rules enforced by the scale itself: no fractional sizes, nothing above
+/// 24 on the five destinations ([hero] is the sign-in screen only), and exactly
+/// two weights in product chrome — w400 and w600. w500 is reserved for [meta];
+/// w700 is banned.
+class BgText {
+  const BgText._();
+
+  /// 34 / w600. **Sign-in screen only.** Banned on the five destinations.
+  static TextStyle? hero(BuildContext c) => Theme.of(c).textTheme.displaySmall;
+
+  /// 24 / w600. The one H1 per destination.
+  static TextStyle? screenTitle(BuildContext c) =>
+      Theme.of(c).textTheme.headlineMedium;
+
+  /// 20 / w600.
+  static TextStyle? sectionTitle(BuildContext c) =>
+      Theme.of(c).textTheme.headlineSmall;
+
+  /// 18 / w600.
+  static TextStyle? cardTitle(BuildContext c) =>
+      Theme.of(c).textTheme.titleLarge;
+
+  /// 15 / w600.
+  static TextStyle? rowTitle(BuildContext c) =>
+      Theme.of(c).textTheme.titleMedium;
+
+  /// 13 / w600, muted.
+  static TextStyle? rowSubtitle(BuildContext c) =>
+      Theme.of(c).textTheme.titleSmall;
+
+  /// 16 / w400. Rationale prose only.
+  static TextStyle? bodyLead(BuildContext c) => Theme.of(c).textTheme.bodyLarge;
+
+  /// 14 / w400.
+  static TextStyle? body(BuildContext c) => Theme.of(c).textTheme.bodyMedium;
+
+  /// 13 / w400, muted.
+  static TextStyle? caption(BuildContext c) => Theme.of(c).textTheme.bodySmall;
+
+  /// 14 / w600. Buttons.
+  static TextStyle? action(BuildContext c) => Theme.of(c).textTheme.labelLarge;
+
+  /// 12 / w500. Badges, chips, receipts.
+  static TextStyle? meta(BuildContext c) => Theme.of(c).textTheme.labelMedium;
+
+  /// 11 / w600 / +0.9. UPPERCASE by convention.
+  static TextStyle? eyebrow(BuildContext c) =>
+      Theme.of(c).textTheme.labelSmall;
+
+  /// Tabular figures, so a value does not shift as it updates. Wrap any KPI,
+  /// telemetry counter or chart label.
+  static TextStyle numeric(TextStyle? base) =>
+      (base ?? const TextStyle()).copyWith(
+        fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+      );
 }
 
 class BgTheme {
@@ -84,13 +415,22 @@ class BgTheme {
   /// Applies a theme palette from `/api/themes` as a tint over the base
   /// scheme. The palette supplies a primary hex; we keep slate typography and
   /// slate chrome so the app stays in register.
+  ///
+  /// The [BgColors] extension is carried forward with only [BgColors.accent]
+  /// and [BgColors.accentWash] moved — an A2UI surface cannot acquire a private
+  /// palette by way of a tint.
   static ThemeData tinted(ThemeData base, Color accent) {
     final ColorScheme scheme = base.colorScheme.copyWith(
       primary: accent,
       secondary: accent,
     );
+    final BgColors roles = base.bg.copyWith(
+      accent: accent,
+      accentWash: accent.withValues(alpha: 0.12),
+    );
     return base.copyWith(
       colorScheme: scheme,
+      extensions: <ThemeExtension<dynamic>>[roles],
       // Deliberately narrow: we recolour interaction affordances only.
       // Backgrounds, text and dividers stay slate.
       filledButtonTheme: FilledButtonThemeData(
@@ -102,41 +442,46 @@ class BgTheme {
 
   static ThemeData _build(Brightness brightness, Color accent) {
     final bool isLight = brightness == Brightness.light;
+    final BgColors roles =
+        BgColors.forBrightness(brightness).copyWith(accent: accent);
 
     final ColorScheme scheme = ColorScheme(
       brightness: brightness,
       primary: accent,
-      onPrimary: BgPalette.white,
+      onPrimary: roles.onAccent,
       primaryContainer: isLight ? BgPalette.sky50 : BgPalette.slate800,
       onPrimaryContainer: isLight ? BgPalette.sky700 : BgPalette.sky200,
-      secondary: BgPalette.gold600,
-      onSecondary: BgPalette.white,
+      secondary: roles.markGold,
+      onSecondary: isLight ? BgPalette.white : BgPalette.slate900,
       secondaryContainer: isLight ? BgPalette.gold50 : BgPalette.slate800,
       onSecondaryContainer: isLight ? BgPalette.gold600 : BgPalette.gold300,
-      error: BgPalette.danger,
+      error: roles.statusDanger,
       onError: BgPalette.white,
-      surface: isLight ? BgPalette.white : BgPalette.slate900,
-      onSurface: isLight ? BgPalette.slate900 : BgPalette.slate100,
-      surfaceContainerLowest: isLight ? BgPalette.white : const Color(0xFF0B1220),
-      surfaceContainerLow: isLight ? BgPalette.slate50 : BgPalette.slate900,
+      surface: roles.surfaceRaised,
+      onSurface: roles.inkPrimary,
+      surfaceContainerLowest: roles.surfaceSunken,
+      surfaceContainerLow: roles.surfaceBase,
       surfaceContainer: isLight ? BgPalette.slate100 : BgPalette.slate800,
       surfaceContainerHigh: isLight ? BgPalette.slate200 : BgPalette.slate700,
-      surfaceContainerHighest: isLight ? BgPalette.slate200 : BgPalette.slate700,
-      onSurfaceVariant: isLight ? BgPalette.slate600 : BgPalette.slate400,
+      surfaceContainerHighest:
+          isLight ? BgPalette.slate200 : BgPalette.slate700,
+      onSurfaceVariant: roles.inkSecondary,
       outline: isLight ? BgPalette.slate300 : BgPalette.slate700,
-      outlineVariant: isLight ? BgPalette.slate200 : BgPalette.slate800,
+      outlineVariant: roles.hairline,
       inverseSurface: isLight ? BgPalette.slate900 : BgPalette.slate100,
       onInverseSurface: isLight ? BgPalette.slate50 : BgPalette.slate900,
-      shadow: const Color(0x14000000),
+      // Dark mode raises surfaces with a hairline, not with elevation, so
+      // there is nothing for a shadow to do (spec §7.3.4).
+      shadow: isLight ? const Color(0x14000000) : Colors.transparent,
       scrim: const Color(0x66000000),
     );
 
-    final Color ink = scheme.onSurface;
-    final Color muted = scheme.onSurfaceVariant;
+    final Color ink = roles.inkPrimary;
+    final Color muted = roles.inkSecondary;
 
     // Typography: confident and quiet. Tight tracking on display sizes,
     // generous line height on body copy — the rationale card is long-form and
-    // has to be genuinely readable, not decorative.
+    // has to be genuinely readable, not decorative. Whole numbers only.
     final TextTheme text = TextTheme(
       displaySmall: TextStyle(
         fontSize: 34,
@@ -146,14 +491,14 @@ class BgTheme {
         color: ink,
       ),
       headlineMedium: TextStyle(
-        fontSize: 26,
+        fontSize: 24,
         height: 1.2,
         fontWeight: FontWeight.w600,
         letterSpacing: -0.5,
         color: ink,
       ),
       headlineSmall: TextStyle(
-        fontSize: 21,
+        fontSize: 20,
         height: 1.25,
         fontWeight: FontWeight.w600,
         letterSpacing: -0.3,
@@ -179,7 +524,7 @@ class BgTheme {
         color: muted,
       ),
       bodyLarge: TextStyle(fontSize: 16, height: 1.55, color: ink),
-      bodyMedium: TextStyle(fontSize: 14.5, height: 1.55, color: ink),
+      bodyMedium: TextStyle(fontSize: 14, height: 1.55, color: ink),
       bodySmall: TextStyle(fontSize: 13, height: 1.5, color: muted),
       labelLarge: TextStyle(
         fontSize: 14,
@@ -187,6 +532,14 @@ class BgTheme {
         fontWeight: FontWeight.w600,
         letterSpacing: 0.1,
         color: ink,
+      ),
+      // Badges, chips, receipts. The one w500 in the scale.
+      labelMedium: TextStyle(
+        fontSize: 12,
+        height: 1.3,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0.2,
+        color: muted,
       ),
       // Small caps-ish label used for axis names and section eyebrows.
       labelSmall: TextStyle(
@@ -202,11 +555,14 @@ class BgTheme {
       useMaterial3: true,
       brightness: brightness,
       colorScheme: scheme,
-      scaffoldBackgroundColor: scheme.surfaceContainerLow,
+      extensions: <ThemeExtension<dynamic>>[roles],
+      scaffoldBackgroundColor: roles.surfaceBase,
       textTheme: text,
       splashFactory: InkSparkle.splashFactory,
+      // Chrome icons are monochrome and never larger than 20 (spec §7.6).
+      iconTheme: IconThemeData(size: BgIcon.chrome, color: muted),
       dividerTheme: DividerThemeData(
-        color: scheme.outlineVariant,
+        color: roles.hairline,
         thickness: 1,
         space: 1,
       ),
@@ -218,21 +574,23 @@ class BgTheme {
         scrolledUnderElevation: 0,
         centerTitle: false,
         titleTextStyle: text.titleLarge,
-        shape: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+        iconTheme: IconThemeData(size: BgIcon.chrome, color: muted),
+        actionsIconTheme: IconThemeData(size: BgIcon.chrome, color: muted),
+        shape: Border(bottom: BorderSide(color: roles.hairline)),
       ),
       cardTheme: CardThemeData(
-        color: scheme.surface,
+        color: roles.surfaceRaised,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BgSpace.br,
-          side: BorderSide(color: scheme.outlineVariant),
+          side: BorderSide(color: roles.hairline),
         ),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: scheme.surface,
-        selectedColor: scheme.primaryContainer,
+        selectedColor: roles.accentWash,
         side: BorderSide(color: scheme.outline),
         labelStyle: text.labelLarge,
         shape: const RoundedRectangleBorder(borderRadius: BgSpace.brSm),
@@ -272,9 +630,21 @@ class BgTheme {
           textStyle: text.labelLarge,
         ),
       ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: SegmentedButton.styleFrom(
+          // Selection is a wash plus an accent label, never a filled block.
+          backgroundColor: roles.surfaceRaised,
+          foregroundColor: muted,
+          selectedBackgroundColor: roles.accentWash,
+          selectedForegroundColor: scheme.primary,
+          side: BorderSide(color: roles.hairline),
+          textStyle: text.labelLarge,
+          shape: const RoundedRectangleBorder(borderRadius: BgSpace.brSm),
+        ),
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: scheme.surface,
+        fillColor: roles.surfaceSunken,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: BgSpace.lg,
           vertical: BgSpace.md,
@@ -292,17 +662,45 @@ class BgTheme {
           borderSide: BorderSide(color: scheme.primary, width: 1.6),
         ),
       ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: roles.surfaceRaised,
+        surfaceTintColor: Colors.transparent,
+        modalBackgroundColor: roles.surfaceRaised,
+        elevation: 0,
+        modalElevation: 0,
+        showDragHandle: true,
+        shape: const RoundedRectangleBorder(borderRadius: BgSpace.brSheet),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: roles.surfaceRaised,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BgSpace.br,
+          side: BorderSide(color: roles.hairline),
+        ),
+      ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: scheme.surface,
-        indicatorColor: scheme.primaryContainer,
+        indicatorColor: roles.accentWash,
+        selectedIconTheme:
+            IconThemeData(size: BgIcon.nav, color: scheme.primary),
+        unselectedIconTheme: IconThemeData(size: BgIcon.nav, color: muted),
         selectedLabelTextStyle: text.labelLarge,
         unselectedLabelTextStyle: text.bodySmall,
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: scheme.surface,
         surfaceTintColor: Colors.transparent,
-        indicatorColor: scheme.primaryContainer,
+        indicatorColor: roles.accentWash,
         elevation: 0,
+        iconTheme: WidgetStateProperty.resolveWith<IconThemeData>(
+          (Set<WidgetState> states) => IconThemeData(
+            size: BgIcon.nav,
+            color:
+                states.contains(WidgetState.selected) ? scheme.primary : muted,
+          ),
+        ),
         labelTextStyle: WidgetStatePropertyAll<TextStyle?>(text.labelSmall),
       ),
       tooltipTheme: TooltipThemeData(
@@ -310,7 +708,11 @@ class BgTheme {
           color: scheme.inverseSurface,
           borderRadius: BgSpace.brSm,
         ),
-        textStyle: TextStyle(color: scheme.onInverseSurface, fontSize: 12.5),
+        textStyle: TextStyle(
+          color: scheme.onInverseSurface,
+          fontSize: 12,
+          height: 1.3,
+        ),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: scheme.inverseSurface,
