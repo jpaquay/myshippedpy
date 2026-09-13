@@ -5,7 +5,7 @@ import '../../app_theme.dart';
 import '../../providers.dart';
 import 'console/console_coefficients.dart';
 import 'console/console_cursor_slider.dart';
-import 'console/console_disclosure.dart';
+import '../../widgets/bg_disclosure.dart';
 import 'console/console_mode.dart';
 import 'console/console_mode_control.dart';
 import 'console/console_outcome_card.dart';
@@ -153,7 +153,7 @@ class AtmosphericCursorsConsole extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: BgSpace.md),
-          ConsoleDisclosure(
+          BgDisclosure(
             key: ForgeKeys.whyTheseThree,
             label: 'Why these three',
             builder: (BuildContext context) => const _WhyTheseThree(),
@@ -214,7 +214,7 @@ class AtmosphericCursorsConsole extends ConsumerWidget {
           const SizedBox(height: BgSpace.md),
           const ConsoleTelemetryRow(),
           const SizedBox(height: BgSpace.md),
-          ConsoleDisclosure(
+          BgDisclosure(
             key: ForgeKeys.coefficients,
             label: 'Coefficients',
             builder: (BuildContext context) =>
@@ -236,7 +236,7 @@ class _CursorTriplet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (ForgeMetrics.isExpanded(context)) {
+    if (BgBreak.isExpanded(context)) {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[

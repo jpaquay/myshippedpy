@@ -1,41 +1,43 @@
-// Data Viz — spec tokens that do not exist in `app_theme.dart` *yet*.
+// Data Viz — deprecated forwarders to the real tokens.
 //
-// UX_IA_SPEC.md §4 and §7.2 put `BgBreak.compact/expanded` and
-// `BgSpace.bubbleClearance` in `frontend/lib/app_theme.dart`. That file belongs
-// to the design-system worker (items 12–14) and is off-limits to this one, so
-// the two values the Data Viz surface needs are declared here, verbatim from
-// the spec, in a single place.
+// This file used to declare `600` / `900` / `48` / `96` by hand, because the
+// Data Viz worker could not edit `app_theme.dart` while the design-system
+// worker owned it. Those tokens now exist for real: `BgBreak.compact`,
+// `BgBreak.expanded`, `BgSpace.xxxl` and `BgSpace.bubbleClearance`.
 //
-// MIGRATION: when the design-system worker lands `BgBreak` and
-// `BgSpace.bubbleClearance`, delete this file and replace the three references
-// to it (`dataviz_screen.dart`, `dataviz_dashboard.dart`,
-// `dataviz_conversation.dart`). Nothing here may grow: it is a shim, not a
-// second token system. No colours, no type, no radii — those all come from
-// `BgPalette` / `BgSpace` / `Theme.of(context).textTheme`.
+// Every number below is gone — what is left forwards, so the values cannot
+// drift from `app_theme.dart` by construction.
+//
+// MIGRATION (last step, not ours to take): the only remaining call site is
+// `frontend/lib/screens/dataviz_screen.dart` (the import, `DvBreak.isCompact`,
+// `DvBreak.isExpanded`, `DvSpace.bubbleClearance`), which belongs to the
+// assistant-overlay worker. When that file switches to `BgBreak.forWidth(...)`
+// and `BgSpace.bubbleClearance`, delete this file. The two `dataviz_dashboard`
+// / `dataviz_conversation` references the original note mentioned are already
+// gone.
 
-/// UX_IA_SPEC.md §4 — three breakpoints, and only three. The screen used to
-/// hard-code 920; the spec unifies the whole app on 600 / 900.
+import '../../app_theme.dart';
+
+/// Deprecated. Use [BgBreak] (`UX_IA_SPEC.md` §4 — three breakpoints, and only
+/// three). Kept as a forwarder because it takes a raw width where [BgBreak]
+/// takes a `BuildContext`.
 class DvBreak {
   const DvBreak._();
 
-  /// `< 600` — compact.
-  static const double compact = 600;
+  static const double compact = BgBreak.compact;
+  static const double expanded = BgBreak.expanded;
 
-  /// `>= 900` — expanded: nav rail, two columns, rung-1 defaults expanded.
-  static const double expanded = 900;
+  static bool isCompact(double width) =>
+      BgBreak.forWidth(width) == BgBreakpoint.compact;
 
-  static bool isCompact(double width) => width < compact;
-  static bool isExpanded(double width) => width >= expanded;
+  static bool isExpanded(double width) =>
+      BgBreak.forWidth(width) == BgBreakpoint.expanded;
 }
 
-/// UX_IA_SPEC.md §7.2 — additions to `BgSpace`.
+/// Deprecated. Use [BgSpace] (`UX_IA_SPEC.md` §7.2).
 class DvSpace {
   const DvSpace._();
 
-  /// Destination bottom padding / empty-state breathing room.
-  static const double xxxl = 48;
-
-  /// §6.2 — clearance reserved at the bottom of every scroll view so the
-  /// app-wide assistant bubble (items 10+11) can never cover content.
-  static const double bubbleClearance = 96;
+  static const double xxxl = BgSpace.xxxl;
+  static const double bubbleClearance = BgSpace.bubbleClearance;
 }

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../api/models.dart';
 import '../../../app_theme.dart';
 import '../../../providers.dart';
-import 'console_detail_sheet.dart';
+import '../../../widgets/bg_disclosure.dart';
 import 'console_tokens.dart';
 
 /// Expert-only rung 2 (§5.2): the exact `ForgeRequest` body this console will
@@ -26,7 +26,7 @@ class ConsoleSourceRequestLink extends StatelessWidget {
       alignment: Alignment.centerLeft,
       child: TextButton(
         key: ForgeKeys.sourceRequest,
-        onPressed: () => showConsoleDetailSheet(
+        onPressed: () => showBgDetailSheet(
           context,
           title: 'Source request',
           builder: (BuildContext sheetContext) =>

@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app_theme.dart';
+import '../../widgets/bg_disclosure.dart';
 import 'dataviz_answer_chart.dart';
 import 'dataviz_conversation.dart';
 import 'dataviz_models.dart';
@@ -390,15 +391,12 @@ class _NoRowsBody extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // SOURCE QUERY — rung 1. The trust affordance §3.4 says must exist.
 //
-// A local implementation of the rung-1 contract from §2 (1 px rule above an
-// UPPERCASE labelSmall header, 18 px chevron rotating 180° over 180 ms,
-// collapsed by default). MIGRATION: replace with the shared
-// `BgDisclosure` from `frontend/lib/screens/widgets/bg_disclosure.dart` as
-// soon as the design-system worker publishes it; the visual contract here was
-// written against the same spec paragraph, so it should be a drop-in.
+// The rung-1 chrome is the shared `BgDisclosure` (§2); what is left here is
+// the part that is genuinely Data Viz's: mapping an engine id to a provenance
+// line, and rendering the SQL body.
 // ---------------------------------------------------------------------------
 
-class SourceQueryDisclosure extends StatefulWidget {
+class SourceQueryDisclosure extends StatelessWidget {
   const SourceQueryDisclosure({
     super.key,
     required this.sql,
@@ -412,15 +410,8 @@ class SourceQueryDisclosure extends StatefulWidget {
   final int rowCount;
   final bool startsExpanded;
 
-  @override
-  State<SourceQueryDisclosure> createState() => _SourceQueryDisclosureState();
-}
-
-class _SourceQueryDisclosureState extends State<SourceQueryDisclosure> {
-  late bool _open = widget.startsExpanded;
-
   String get _provenance {
-    switch (widget.engine) {
+    switch (engine) {
       case 'bigquery_data_qna_v1beta':
         return 'Gemini Data Analytics · BigQuery';
       case 'local_olap_synthesizer':
@@ -428,105 +419,67 @@ class _SourceQueryDisclosureState extends State<SourceQueryDisclosure> {
       case '':
         return '';
       default:
-        return widget.engine;
+        return engine;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    return BgDisclosure(
+      label: 'Source query',
+      // Gives way first: at 390 px the provenance ellipsises rather than
+      // pushing the chevron off the card.
+      trailingLabel: _provenance,
+      initiallyExpanded: startsExpanded,
+      bodyPadding: EdgeInsets.zero,
+      builder: _buildSql,
+    );
+  }
+
+  Widget _buildSql(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colors = theme.colorScheme;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Divider(height: 1, thickness: 1, color: colors.outlineVariant),
-        InkWell(
-          onTap: () => setState(() => _open = !_open),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: BgSpace.md),
-            child: Row(
-              children: <Widget>[
-                Text(
-                  'SOURCE QUERY',
-                  style: theme.textTheme.labelSmall
-                      ?.copyWith(color: colors.onSurfaceVariant),
-                ),
-                const Spacer(),
-                if (_provenance.isNotEmpty)
-                  // Gives way first: at 390 px the provenance ellipsises
-                  // rather than pushing the chevron off the card.
-                  Flexible(
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: BgSpace.sm),
-                      child: Text(
-                        _provenance,
-                        textAlign: TextAlign.right,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall
-                            ?.copyWith(color: colors.onSurfaceVariant),
-                      ),
-                    ),
-                  ),
-                const SizedBox(width: BgSpace.sm),
-                AnimatedRotation(
-                  turns: _open ? 0.5 : 0.0,
-                  duration: const Duration(milliseconds: 180),
-                  child: Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 18,
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-              ],
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(BgSpace.md),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BgSpace.brSm,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SelectableText(
+            sql,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontFamily: 'monospace',
+              height: 1.45,
             ),
           ),
-        ),
-        if (_open)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(BgSpace.md),
-            decoration: BoxDecoration(
-              color: colors.surfaceContainerHighest.withValues(alpha: 0.45),
-              borderRadius: BgSpace.brSm,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                SelectableText(
-                  widget.sql,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontFamily: 'monospace',
-                    height: 1.45,
-                  ),
-                ),
-                const SizedBox(height: BgSpace.sm),
-                Row(
-                  children: <Widget>[
-                    Text(
-                      '${widget.rowCount} '
-                      '${widget.rowCount == 1 ? 'row' : 'rows'}',
-                      style: theme.textTheme.labelSmall
-                          ?.copyWith(color: colors.onSurfaceVariant),
-                    ),
-                    const Spacer(),
-                    _TextAction(
-                      label: 'Copy',
-                      icon: Icons.copy_all_outlined,
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: widget.sql));
-                        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                          const SnackBar(content: Text('Query copied.')),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
+          const SizedBox(height: BgSpace.sm),
+          Row(
+            children: <Widget>[
+              Text(
+                '$rowCount ${rowCount == 1 ? 'row' : 'rows'}',
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: colors.onSurfaceVariant),
+              ),
+              const Spacer(),
+              _TextAction(
+                label: 'Copy',
+                icon: Icons.copy_all_outlined,
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: sql));
+                  ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                    const SnackBar(content: Text('Query copied.')),
+                  );
+                },
+              ),
+            ],
           ),
-      ],
+        ],
+      ),
     );
   }
 }

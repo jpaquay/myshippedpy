@@ -19,6 +19,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app_theme.dart';
+import '../../widgets/bg_disclosure.dart';
 import 'dataviz_models.dart';
 
 class DataVizDashboard extends StatefulWidget {
@@ -50,12 +51,7 @@ class _DataVizDashboardState extends State<DataVizDashboard> {
   int? _selectedPressureIndex;
   int _selectedSolarHour = 19; // Default to 19:00 Blue Hour Peak
 
-  /// Rung 1 on compact/medium, rung 0 on expanded (§3.4 item 4, §4).
-  bool? _ribbonOpenOverride;
-
   DataVizDashboardModel get _dashboard => widget.dashboard;
-
-  bool get _ribbonOpen => _ribbonOpenOverride ?? widget.isExpanded;
 
   @override
   Widget build(BuildContext context) {
@@ -65,15 +61,16 @@ class _DataVizDashboardState extends State<DataVizDashboard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        _SummaryDisclosure(
-          open: _ribbonOpen,
-          onToggle: () =>
-              setState(() => _ribbonOpenOverride = !_ribbonOpen),
+        // Rung 1 on compact/medium, rung 0 on expanded (§3.4 item 4, §4) —
+        // this destination's one sanctioned default-open exception. The ribbon
+        // is not built at all while collapsed.
+        BgDisclosure(
+          label: 'Summary',
+          initiallyExpanded: widget.isExpanded,
+          bodyPadding: const EdgeInsets.only(top: BgSpace.md),
+          builder: (BuildContext context) =>
+              _buildSummaryKpiRibbon(context, isWide: isWide),
         ),
-        if (_ribbonOpen) ...<Widget>[
-          const SizedBox(height: BgSpace.md),
-          _buildSummaryKpiRibbon(context, isWide: isWide),
-        ],
         const SizedBox(height: BgSpace.xl),
         if (widget.pinned.isNotEmpty) ...<Widget>[
           ...widget.pinned,
@@ -951,60 +948,5 @@ class _PressureVsBpmPainter extends CustomPainter {
   bool shouldRepaint(covariant _PressureVsBpmPainter oldDelegate) {
     return oldDelegate.selectedIndex != selectedIndex ||
         oldDelegate.points != points;
-  }
-}
-
-// ============================================================================
-// `SUMMARY` — the rung-1 header above the KPI ribbon.
-//
-// Same rung-1 contract as `SourceQueryDisclosure` (§2): 1 px rule, UPPERCASE
-// labelSmall header, 18 px chevron rotating 180° over 180 ms. Collapsed by
-// default on compact/medium, expanded on expanded. MIGRATION: replace with the
-// shared `BgDisclosure` once the design-system worker publishes it.
-// ============================================================================
-
-class _SummaryDisclosure extends StatelessWidget {
-  const _SummaryDisclosure({required this.open, required this.onToggle});
-
-  final bool open;
-  final VoidCallback onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final ColorScheme colors = theme.colorScheme;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Divider(height: 1, thickness: 1, color: colors.outlineVariant),
-        InkWell(
-          onTap: onToggle,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: BgSpace.md),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    'SUMMARY',
-                    style: theme.textTheme.labelSmall
-                        ?.copyWith(color: colors.onSurfaceVariant),
-                  ),
-                ),
-                AnimatedRotation(
-                  turns: open ? 0.5 : 0.0,
-                  duration: const Duration(milliseconds: 180),
-                  child: Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 18,
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
   }
 }

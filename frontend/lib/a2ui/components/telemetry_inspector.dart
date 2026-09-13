@@ -145,7 +145,11 @@ class TelemetryInspectorA2uiWidget extends StatelessWidget {
                 label: 'MEMORIES',
                 value: '$storedMemories',
                 icon: Icons.psychology_outlined,
-                accent: Colors.purpleAccent,
+                // §7.3: an A2UI surface holds no private palette. This badge
+                // named `Colors.purpleAccent` — a colour that exists nowhere
+                // else in the app — and now asks the theme like every other
+                // surface does.
+                accent: Theme.of(context).bg.accent,
               ),
             ],
           ),
@@ -343,9 +347,6 @@ class _TelemetryEntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String id = asStringOrNull(entry['trajectory_id']) ??
-        asStringOrNull(entry['trajectoryId']) ??
-        'traj';
     final String traceId = asStringOrNull(entry['trace_id']) ??
         asStringOrNull(entry['traceId']) ??
         '';

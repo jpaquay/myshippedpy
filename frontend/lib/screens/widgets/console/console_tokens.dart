@@ -1,35 +1,29 @@
 import 'package:flutter/widgets.dart';
 
-/// Layout constants the Forge console needs from §4 / §7 of `docs/UX_IA_SPEC.md`
-/// that `app_theme.dart` does not expose *yet*.
+import '../../../app_theme.dart';
+
+/// Console-local layout facts.
 ///
-/// `BgBreak` (§4) and `BgSpace.bubbleClearance` (§7.2) are owned by the
-/// design-system item, not by item 8, and the console may not edit
-/// `app_theme.dart`. These mirrors carry the same numbers so nothing here
-/// hard-codes a stray pixel; when the real tokens land, delete this file and
-/// point the imports at `app_theme.dart`.
+/// This used to mirror `BgBreak.compact` / `BgBreak.expanded` /
+/// `BgSpace.bubbleClearance` by hand, because item 8 could not edit
+/// `app_theme.dart` while item 12 owned it. Those tokens now exist for real and
+/// the mirrors are gone: the console reads `BgBreak` and `BgSpace` directly.
+///
+/// What is left is one number that genuinely belongs to the console, plus one
+/// alias that cannot be retired from here.
 class ForgeMetrics {
   const ForgeMetrics._();
 
-  /// `BgBreak.compact` — below this we are on a phone.
-  static const double compactBreak = 600;
-
-  /// `BgBreak.expanded` — at or above this we may use two/three columns.
-  static const double expandedBreak = 900;
-
-  /// `BgSpace.bubbleClearance` — bottom padding that keeps the future
-  /// app-wide assistant bubble (§6.2) off the FORGE call to action.
-  static const double bubbleClearance = 96;
-
   /// §5.3: "If an implementer's Guided mode is taller than 120 px, it is
-  /// wrong." Asserted by `test/forge_console_modes_test.dart`.
+  /// wrong." Asserted by `test/forge_console_modes_test.dart`. Console-owned:
+  /// it is an acceptance budget, not a design token.
   static const double guidedBodyBudget = 120;
 
-  static bool isExpanded(BuildContext context) =>
-      MediaQuery.sizeOf(context).width >= expandedBreak;
-
-  static bool isCompact(BuildContext context) =>
-      MediaQuery.sizeOf(context).width < compactBreak;
+  /// Deprecated alias for [BgSpace.bubbleClearance], kept only because its
+  /// last call site (`home_screen.dart`) belongs to the assistant-overlay
+  /// worker and could not be edited from here. It forwards rather than
+  /// repeating 96, so the value cannot drift. Delete both together.
+  static const double bubbleClearance = BgSpace.bubbleClearance;
 }
 
 /// Keys used by the widget tests to measure what each mode renders.

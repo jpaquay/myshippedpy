@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app_theme.dart';
 import '../../../providers.dart';
-import 'console_disclosure.dart';
+import '../../../widgets/bg_disclosure.dart';
 import 'console_mode.dart';
 import 'console_tokens.dart';
 import 'forge_sky_reading.dart';
@@ -47,11 +47,11 @@ class ForgeSkyBlock extends ConsumerWidget {
         _SkyStrip(reading: reading),
         if (mode.showsSkyDialBehindDisclosure) ...<Widget>[
           const SizedBox(height: BgSpace.md),
-          ConsoleDisclosure(
+          BgDisclosure(
             key: ForgeKeys.skyDetail,
             label: 'Sky detail',
             // §4: rung-1 tiles default expanded at >= 900, collapsed below.
-            initiallyExpanded: ForgeMetrics.isExpanded(context),
+            initiallyExpanded: BgBreak.disclosureDefaultOpen(context),
             builder: (BuildContext context) =>
                 KeyedSubtree(key: ForgeKeys.skyDial, child: dial),
           ),
