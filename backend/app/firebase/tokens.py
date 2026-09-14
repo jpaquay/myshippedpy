@@ -299,6 +299,21 @@ class MemoryTokenVault:
         self._store.clear()
 
 
+def _repo_failure() -> Any | None:
+    """The repository's last recorded failure, or ``None`` if it kept it to itself.
+
+    Duck-typed and defensive on purpose: the vault is routinely constructed
+    with a fake repository in tests, and a missing diagnostic must never be the
+    reason a token write turns into a different error than it really was.
+    """
+    try:
+        from .firestore import last_failure  # noqa: PLC0415 - avoids cycle
+
+        return last_failure()
+    except Exception:  # noqa: BLE001 - diagnostics must not add failure modes
+        return None
+
+
 class FirestoreTokenVault:
     """Firestore-backed vault at ``users/{uid}/tokens/{provider}``.
 
@@ -324,10 +339,23 @@ class FirestoreTokenVault:
         envelope = _seal(self._cipher, self._settings, uid, prov, payload)
         ok = await self._repo.put(uid, prov, envelope)
         if not ok:
-            # The repository already logged the cause. Surfacing it lets the
-            # OAuth callback tell the user "pairing failed, try again" rather
-            # than claiming success and failing on the next forge.
-            raise TokenVaultError(f"could not persist {prov} credentials")
+            # Surfacing this lets the OAuth callback tell the user "pairing
+            # failed, try again" rather than claiming success and failing on
+            # the next forge. Chain the repository's recorded cause onto the
+            # exception so the callback's `logger.exception` prints *why* --
+            # the previous version raised a bare error and left the reason in a
+            # separate WARNING that was trivially lost next to the traceback.
+            failure = _repo_failure()
+            logger.error(
+                "token write failed: provider=%s doc=%s cause=%s",
+                prov,
+                getattr(failure, "path", None) or "-",
+                failure.summary() if failure is not None else "not recorded",
+            )
+            error = TokenVaultError(f"could not persist {prov} credentials")
+            if failure is not None:
+                raise error from failure.error
+            raise error
 
     async def get(self, user_id: str, provider: str) -> dict[str, Any] | None:
         uid = _clean(user_id, what="user_id")
@@ -374,7 +402,10 @@ def _seal(
         base["encryption"] = ENC_FERNET
         base["key_id"] = cipher.key_id
         base["ciphertext"] = cipher.encrypt(payload)
-        logger.info("stored %s credentials for uid=%s (fernet/%s)", provider, uid, cipher.key_id)
+        # "sealed", not "stored": this runs before the write, and during the
+        # 2026-09-14 outage it cheerfully claimed storage for every envelope
+        # that Firestore then refused.
+        logger.info("sealed %s credentials for uid=%s (fernet/%s)", provider, uid, cipher.key_id)
         return base
 
     # No key. `cipher.available` already raised outside local mode, so reaching

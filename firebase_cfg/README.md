@@ -96,6 +96,17 @@ therefore come before the `**` SPA fallback. Reverse that order and every API
 call gets `index.html` with a 200 status, which is a spectacularly confusing
 failure mode for a frontend developer.
 
+`/favicon.ico` sits immediately before the `**` fallback for the same reason.
+`index.html` declares `<link rel="icon" type="image/png" href="favicon.png">`,
+but browsers *additionally* request `/favicon.ico` at the document root on
+their own, whatever the markup says. No static file exists at that path, so
+without this entry the request fell through to the SPA fallback and the browser
+got `index.html` — a few KB of HTML served in answer to an image request, which
+cannot decode as an icon and shows up as a failed favicon fetch in the logs.
+Mapping it to the `favicon.png` we already ship fixes it without adding a
+second binary asset to maintain; Firebase serves the destination file's own
+`image/png` content type, which browsers accept for a favicon.
+
 ### Cache headers
 
 - Flutter web emits content-hashed asset filenames, so `*.@(js|css|woff2|...)`

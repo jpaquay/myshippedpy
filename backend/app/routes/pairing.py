@@ -588,6 +588,21 @@ class SimpleResult(BaseModel):
     message: str
 
 
+def _log_uid(user_id: str) -> str:
+    """Redacted uid for logs, matching the token repository's fingerprint.
+
+    Delegates to ``firebase.firestore.redact_uid`` so a pairing failure and the
+    Firestore error underneath it carry the *same* token, and can be joined
+    without a raw uid ever reaching the log.
+    """
+    try:
+        from ..firebase.firestore import redact_uid  # noqa: PLC0415 - avoids cycle
+
+        return redact_uid(user_id)
+    except Exception:  # noqa: BLE001 - logging must never raise
+        return "uid-unknown"
+
+
 def _problem(status: int, code: str, message: str, **extra: Any) -> JSONResponse:
     """A small problem envelope. Consistent shape so the Flutter client has one
     error path instead of five."""
@@ -1445,7 +1460,16 @@ async def spotify_callback(
         # A storage failure is not the user's fault, but it IS retryable from
         # their side, and the state above is still unspent so retrying works.
         # A 500 told them nothing and told the log nothing either.
-        logger.exception("spotify token persist failed")
+        #
+        # The uid fingerprint matches the one in the repository's own ERROR
+        # line (`doc=users/uid-.../tokens/spotify`), so the user's failed
+        # attempt and the Firestore cause can be joined in the log without
+        # putting a raw uid there. The vault chains the cause, so the
+        # traceback below now ends in the backend error itself.
+        logger.exception(
+            "spotify token persist failed: provider=spotify user=%s",
+            _log_uid(pending.user_id),
+        )
         return _problem(
             400,
             "token_store_failed",

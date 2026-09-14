@@ -195,20 +195,23 @@ def _transform_components(
             props.pop("chips", None)
             comp["properties"] = props
         elif ctype == "GenreCorridor":
+            # items / selected / title / action come from the surface builder
+            # now, for the same reason they do on ThemeChips: patching them in
+            # here fixed this route and left the MCP stream and the published
+            # catalog.json broken. All that is left is dropping the
+            # ChildTemplate, whose GenreOption prototype is filtered out below.
+            comp.pop("options", None)
             props.pop("options", None)
-            props["items"] = {"path": "/genres/items"}
-            props["selected"] = {"path": "/genres/selectedGenreId"}
-            props["title"] = {"path": "/genres/label"}
-            props["action"] = {"actionId": FN_SELECT_GENRE}
             comp["properties"] = props
         elif ctype == "RationaleCard":
             props["rationale"] = {"path": "/rationale"}
             comp["properties"] = props
         elif ctype == "TrackList":
+            # title / subtitle / items come from the surface builder now; only
+            # the template drop and the playlist id stay here. The id genuinely
+            # belongs to this route: it is request state, not surface vocabulary.
+            comp.pop("rows", None)
             props.pop("rows", None)
-            props["title"] = {"path": "/playlist/title"}
-            props["subtitle"] = {"path": "/playlist/subtitle"}
-            props["tracks"] = {"path": "/playlist/tracks"}
             pid = getattr(playlist, "id", "") if playlist else ""
             props["feedbackAction"] = {
                 "actionId": FN_TRACK_FEEDBACK,
@@ -216,11 +219,10 @@ def _transform_components(
             }
             comp["properties"] = props
         elif ctype == "AlmanacTimeline":
-            props["title"] = {"path": "/almanac/title"}
-            props["retrospective"] = {"path": "/almanac/subtitle"}
-            props["emptyMessage"] = {"path": "/almanac/emptyMessage"}
-            props["entries"] = {"path": "/almanac/entries"}
-            props["action"] = {"actionId": "openPastSet"}
+            # title / retrospective / emptyMessage / items / action come from
+            # the surface builder now. Dropping the template is all that is left.
+            comp.pop("entries", None)
+            props.pop("entries", None)
             comp["properties"] = props
         elif ctype == "TelemetryInspector":
             props["title"] = {"path": "/telemetry/title"}
