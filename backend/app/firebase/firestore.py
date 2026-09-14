@@ -56,11 +56,14 @@ Firestore type gotchas encoded in :func:`to_document`
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import random
 import re
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from enum import Enum
@@ -203,6 +206,61 @@ def _is_retryable(exc: BaseException) -> bool:
     }
 
 
+@dataclass(frozen=True)
+class GuardFailure:
+    """Why a guarded Firestore call gave up. Log-safe by construction.
+
+    Holds the operation label, the attempt count, the *redacted* document path
+    and the original exception, so a caller that only sees a falsy return
+    value can still say what actually happened. Never holds a payload.
+    """
+
+    what: str
+    attempts: int
+    error: BaseException
+    path: str | None = None
+
+    @property
+    def error_type(self) -> str:
+        return type(self.error).__name__
+
+    def summary(self) -> str:
+        """One line, safe to log and safe to chain onto an exception."""
+        where = f" at {self.path}" if self.path else ""
+        return f"{self.error_type}{where}: {self.error}"
+
+
+#: Last guarded failure in *this* task's context. Set by :func:`_guard` and
+#: read by callers that only get a ``False``/``None`` back (see
+#: ``FirestoreTokenVault.put``). A ContextVar rather than an attribute because
+#: Cloud Run serves concurrent requests in separate tasks and a shared
+#: attribute would cross-report one user's failure onto another's.
+_LAST_FAILURE: ContextVar[GuardFailure | None] = ContextVar(
+    "firestore_last_failure", default=None
+)
+
+
+def last_failure() -> GuardFailure | None:
+    """The most recent guarded failure in this task, or ``None`` if all is well."""
+    return _LAST_FAILURE.get()
+
+
+def redact_uid(user_id: str) -> str:
+    """Stable, non-reversible fingerprint of a uid. Safe to put in a log.
+
+    Same convention as the vault's ``key_id``: a truncated SHA-256. Enough to
+    correlate two log lines about the same user, useless to anyone reading the
+    log who does not already know the uid.
+    """
+    digest = hashlib.sha256((user_id or "").encode("utf-8")).hexdigest()[:12]
+    return f"uid-{digest}"
+
+
+def token_doc_path(user_id: str, provider: str) -> str:
+    """The document a token write targets, with the uid redacted."""
+    return f"{COL_USERS}/{redact_uid(user_id)}/{SUBCOL_TOKENS}/{provider}"
+
+
 async def _guard(
     op: Callable[[], Awaitable[T]],
     *,
@@ -210,13 +268,25 @@ async def _guard(
     default: T,
     timeout: float = DEFAULT_TIMEOUT_S,
     attempts: int = DEFAULT_ATTEMPTS,
+    path: str | None = None,
+    level: int = logging.WARNING,
 ) -> T:
     """Run a Firestore operation with a timeout, bounded retry and a floor.
 
     Returns ``default`` instead of raising. That is the whole point: the
     almanac is an enrichment, and an enrichment that can take the request down
     is a liability.
+
+    Degrading quietly is not the same as degrading *silently*. On failure this
+    records the cause in :data:`_LAST_FAILURE` and logs the exception type, the
+    redacted document path and the backend's own message, at ``level`` -- pass
+    ``logging.ERROR`` for operations whose failure breaks a user-visible flow,
+    so the line lands next to the traceback instead of hiding in WARNING noise.
+
+    ``path`` must already be redacted; this function does not sanitise it, and
+    no payload is ever passed in or logged.
     """
+    _LAST_FAILURE.set(None)
     last: BaseException | None = None
     for attempt in range(attempts):
         try:
@@ -230,7 +300,27 @@ async def _guard(
             backoff = min(2.0, 0.2 * (2**attempt)) * (0.5 + random.random())
             logger.debug("%s failed (%s); retry in %.2fs", what, exc, backoff)
             await asyncio.sleep(backoff)
-    logger.warning("%s failed after %d attempt(s): %s", what, attempts, last)
+
+    failure = GuardFailure(
+        what=what, attempts=attempts, error=last or RuntimeError("unknown"), path=path
+    )
+    _LAST_FAILURE.set(failure)
+    logger.log(
+        level,
+        "%s failed after %d attempt(s): %s [doc=%s error_type=%s]",
+        what,
+        attempts,
+        last,
+        path or "-",
+        failure.error_type,
+        exc_info=last if level >= logging.ERROR else None,
+        extra={
+            "firestore_op": what,
+            "firestore_doc": path or "",
+            "firestore_error_type": failure.error_type,
+            "firestore_attempts": attempts,
+        },
+    )
     return default
 
 
@@ -816,7 +906,14 @@ class TokenRepository(_BaseRepository):
     """
 
     async def put(self, user_id: str, provider: str, envelope: Mapping[str, Any]) -> bool:
-        """Write an opaque envelope. Returns success; never logs the payload."""
+        """Write an opaque envelope. Returns success; never logs the payload.
+
+        A failure here is the end of a pairing attempt, so it is logged at
+        ERROR with the exception type and the redacted document path, and the
+        cause is left in :func:`last_failure` for the vault to chain onto its
+        own exception. Returning a bare ``False`` and hoping somebody greps the
+        WARNINGs is what made the 2026-09-14 outage take hours to read.
+        """
 
         async def _op() -> bool:
             client = await self._client()
@@ -829,7 +926,13 @@ class TokenRepository(_BaseRepository):
             await ref.set(dict(envelope))
             return True
 
-        return await _guard(_op, what=f"tokens.put({provider})", default=False)
+        return await _guard(
+            _op,
+            what=f"tokens.put({provider})",
+            default=False,
+            path=token_doc_path(user_id, provider),
+            level=logging.ERROR,
+        )
 
     async def get(self, user_id: str, provider: str) -> dict[str, Any] | None:
         """Read an opaque envelope, or ``None``."""
@@ -845,7 +948,12 @@ class TokenRepository(_BaseRepository):
             snap = await ref.get()
             return snap.to_dict() if getattr(snap, "exists", False) else None
 
-        return await _guard(_op, what=f"tokens.get({provider})", default=None)
+        return await _guard(
+            _op,
+            what=f"tokens.get({provider})",
+            default=None,
+            path=token_doc_path(user_id, provider),
+        )
 
     async def delete(self, user_id: str, provider: str) -> bool:
         """Remove a stored envelope. Idempotent -- deleting nothing is success."""
@@ -861,7 +969,13 @@ class TokenRepository(_BaseRepository):
             await ref.delete()
             return True
 
-        return await _guard(_op, what=f"tokens.delete({provider})", default=False)
+        return await _guard(
+            _op,
+            what=f"tokens.delete({provider})",
+            default=False,
+            path=token_doc_path(user_id, provider),
+            level=logging.ERROR,
+        )
 
     async def list_providers(self, user_id: str) -> list[str]:
         """Provider ids with a stored envelope. Empty list on failure."""
@@ -875,7 +989,12 @@ class TokenRepository(_BaseRepository):
             )
             return sorted([snap.id async for snap in col.stream()])
 
-        return await _guard(_op, what="tokens.list_providers", default=[])
+        return await _guard(
+            _op,
+            what="tokens.list_providers",
+            default=[],
+            path=f"{COL_USERS}/{redact_uid(user_id)}/{SUBCOL_TOKENS}",
+        )
 
 
 class Repositories:
