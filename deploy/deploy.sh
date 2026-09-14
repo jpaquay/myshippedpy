@@ -306,6 +306,21 @@ ensure_firestore_database() {
     --format="value(locationId)" 2>/dev/null || true)"
 
   if [[ -n "${existing}" ]]; then
+    local ae_mode
+    ae_mode="$(gcloud firestore databases describe \
+      --database="(default)" --project "${PROJECT_ID}" \
+      --format="value(appEngineIntegrationMode)" 2>/dev/null || true)"
+    if [[ "${ae_mode}" == "ENABLED" ]]; then
+      info "Unlinking Firestore '(default)' from legacy App Engine integration mode..."
+      local token
+      token="$(gcloud auth print-access-token)"
+      curl -s -X PATCH \
+        "https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)?updateMask=appEngineIntegrationMode" \
+        -H "Authorization: Bearer ${token}" \
+        -H "Content-Type: application/json" \
+        -d '{"appEngineIntegrationMode": "DISABLED"}' >/dev/null
+      ok "Firestore unlinked from App Engine (appEngineIntegrationMode=DISABLED)"
+    fi
     if [[ "${existing}" == "${REGION}" || "${existing}" == "eur3" || "${existing}" == "europe-west" ]]; then
       ok "database '(default)' exists in EU location '${existing}'"
       return 0
