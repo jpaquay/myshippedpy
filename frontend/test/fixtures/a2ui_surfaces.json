@@ -1,0 +1,4633 @@
+{
+  "sky": {
+    "raw": [
+      {
+        "createSurface": {
+          "surfaceId": "sky",
+          "catalogId": "https://bg.netdev.be/a2ui/catalogs/barogroove/v1",
+          "surfaceProperties": {
+            "colorScheme": "light",
+            "contrast": "high",
+            "density": "comfortable",
+            "palette": {
+              "canvas": "#F5F7FA",
+              "surface": "#FFFFFF",
+              "surfaceSunken": "#EDF1F6",
+              "surfaceRaised": "#FFFFFF",
+              "border": "#CBD5E1",
+              "borderStrong": "#94A3B8",
+              "ink": "#0F172A",
+              "inkMuted": "#475569",
+              "inkSubtle": "#64748B",
+              "inkInverse": "#FFFFFF",
+              "accent": "#0369A1",
+              "accentStrong": "#075985",
+              "accentSoft": "#E0F2FE",
+              "accentInk": "#0C4A6E",
+              "onAccent": "#FFFFFF",
+              "gold": "#A16207",
+              "goldSoft": "#FEF3C7",
+              "goldInk": "#713F12",
+              "positive": "#15803D",
+              "warning": "#B45309",
+              "critical": "#B91C1C",
+              "criticalSoft": "#FEE2E2",
+              "criticalInk": "#7F1D1D",
+              "dataCold": "#1D4ED8",
+              "dataCool": "#0369A1",
+              "dataNeutral": "#64748B",
+              "dataWarm": "#A16207",
+              "dataHot": "#B45309"
+            },
+            "typography": {
+              "fontFamily": "Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+              "fontFamilyMono": "'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+              "scale": {
+                "display": {
+                  "size": 34,
+                  "lineHeight": 40,
+                  "weight": 650,
+                  "tracking": -0.6
+                },
+                "title": {
+                  "size": 24,
+                  "lineHeight": 30,
+                  "weight": 620,
+                  "tracking": -0.3
+                },
+                "heading": {
+                  "size": 18,
+                  "lineHeight": 24,
+                  "weight": 600,
+                  "tracking": -0.1
+                },
+                "body": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 400,
+                  "tracking": 0.0
+                },
+                "bodyStrong": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 600,
+                  "tracking": 0.0
+                },
+                "caption": {
+                  "size": 13,
+                  "lineHeight": 18,
+                  "weight": 500,
+                  "tracking": 0.1
+                },
+                "label": {
+                  "size": 11,
+                  "lineHeight": 14,
+                  "weight": 650,
+                  "tracking": 0.8
+                },
+                "numeric": {
+                  "size": 15,
+                  "lineHeight": 20,
+                  "weight": 550,
+                  "tracking": 0.0
+                }
+              },
+              "tabularNumerals": true
+            },
+            "spacing": {
+              "xs": 4,
+              "sm": 8,
+              "md": 12,
+              "lg": 16,
+              "xl": 24,
+              "xxl": 32,
+              "section": 40
+            },
+            "radius": {
+              "sm": 4,
+              "md": 8,
+              "lg": 12,
+              "pill": 999
+            },
+            "elevation": {
+              "flat": "none",
+              "card": "0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)",
+              "hero": "0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)",
+              "overlay": "0 12px 32px rgba(15, 23, 42, 0.16)"
+            },
+            "motion": {
+              "durationFast": 120,
+              "durationBase": 200,
+              "durationSlow": 320,
+              "easing": "cubic-bezier(0.2, 0, 0, 1)",
+              "respectsReducedMotion": true
+            }
+          },
+          "sendDataModel": true
+        }
+      },
+      {
+        "updateComponents": {
+          "surfaceId": "sky",
+          "components": [
+            {
+              "id": "root",
+              "component": "Stack",
+              "children": [
+                "skyDial"
+              ],
+              "direction": "vertical",
+              "gap": "section",
+              "padding": "xl",
+              "tone": "canvas",
+              "maxWidth": 960,
+              "align": "stretch",
+              "heading": {
+                "path": "/sky/heading"
+              },
+              "subheading": {
+                "path": "/sky/subheading"
+              }
+            },
+            {
+              "id": "skyDial",
+              "component": "SkyDial",
+              "accessibility": {
+                "label": {
+                  "path": "/sky/accessibilityLabel"
+                },
+                "live": "polite"
+              },
+              "heroDimension": {
+                "path": "/sky/heroDimension"
+              },
+              "heroLabel": {
+                "path": "/sky/heroLabel"
+              },
+              "heroDisplay": {
+                "path": "/sky/heroDisplay"
+              },
+              "heroValue": {
+                "path": "/sky/heroValue"
+              },
+              "heroCaption": {
+                "path": "/sky/heroCaption"
+              },
+              "heroTone": {
+                "path": "/sky/heroTone"
+              },
+              "observedAt": {
+                "path": "/sky/observedAt"
+              },
+              "coordinates": {
+                "path": "/sky/coordinates"
+              },
+              "stale": {
+                "path": "/sky/stale"
+              },
+              "notes": {
+                "path": "/sky/notes"
+              },
+              "spokes": {
+                "componentId": "skySpoke",
+                "dataBinding": "/sky/dimensions"
+              },
+              "onRefresh": {
+                "action": "barogroove.refreshSky",
+                "context": {
+                  "lat": {
+                    "path": "/sky/lat"
+                  },
+                  "lon": {
+                    "path": "/sky/lon"
+                  }
+                }
+              }
+            },
+            {
+              "id": "skySpoke",
+              "component": "SkyDialSpoke",
+              "dimensionId": {
+                "path": "/dimensionId"
+              },
+              "label": {
+                "path": "/label"
+              },
+              "display": {
+                "path": "/display"
+              },
+              "value": {
+                "path": "/value"
+              },
+              "signed": {
+                "path": "/signed"
+              },
+              "unit": {
+                "path": "/unit"
+              },
+              "tier": {
+                "path": "/tier"
+              },
+              "weight": {
+                "path": "/weight"
+              },
+              "polarity": {
+                "path": "/polarity"
+              },
+              "onTap": {
+                "action": "barogroove.explainDimension",
+                "context": {
+                  "dimension": {
+                    "path": "/dimensionId"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "updateDataModel": {
+          "surfaceId": "sky",
+          "path": "/",
+          "contents": {
+            "sky": {
+              "heading": "Your sky right now",
+              "subheading": "Nine dimensions. The ones that are moving matter most.",
+              "accessibilityLabel": "Sky dial. Pressure trend -0.9 hPa/6h, steady.",
+              "heroDimension": "pressure_trend_6h",
+              "heroLabel": "Pressure trend",
+              "heroDisplay": "-0.9 hPa/6h",
+              "heroValue": -0.0733,
+              "heroCaption": "steady",
+              "heroTone": "steady",
+              "observedAt": "2026-03-14T17:05:00+00:00",
+              "coordinates": "Brussels (50.850, 4.352)",
+              "lat": 50.8503,
+              "lon": 4.3517,
+              "stale": false,
+              "notes": [
+                "pressure fell 9.2 hPa in 6h",
+                "38 min to sunset",
+                "gusts swinging 14-33 km/h"
+              ],
+              "dimensions": [
+                {
+                  "dimensionId": "pressure_trend_6h",
+                  "label": "Pressure trend",
+                  "display": "-0.9 hPa/6h",
+                  "value": 0.0733,
+                  "signed": -0.0733,
+                  "unit": "hPa/6h",
+                  "tier": "hero",
+                  "weight": 1.0,
+                  "polarity": "down"
+                },
+                {
+                  "dimensionId": "pressure_norm_deviation",
+                  "label": "Pressure vs norm",
+                  "display": "-0.8 hPa",
+                  "value": 0.0316,
+                  "signed": -0.0316,
+                  "unit": "hPa",
+                  "tier": "derivative",
+                  "weight": 0.8,
+                  "polarity": "flat"
+                },
+                {
+                  "dimensionId": "temp_norm_deviation",
+                  "label": "Temp vs norm",
+                  "display": "+0.4 K",
+                  "value": 0.035,
+                  "signed": 0.035,
+                  "unit": "K",
+                  "tier": "derivative",
+                  "weight": 0.75,
+                  "polarity": "flat"
+                },
+                {
+                  "dimensionId": "gust_variance",
+                  "label": "Gust variance",
+                  "display": "0.6 m/s",
+                  "value": 0.0427,
+                  "signed": 0.0427,
+                  "unit": "m/s",
+                  "tier": "derivative",
+                  "weight": 0.7,
+                  "polarity": "flat"
+                },
+                {
+                  "dimensionId": "daylight_delta",
+                  "label": "Daylight delta",
+                  "display": "-0.3 min/d",
+                  "value": 0.062,
+                  "signed": -0.062,
+                  "unit": "min/d",
+                  "tier": "derivative",
+                  "weight": 0.65,
+                  "polarity": "down"
+                },
+                {
+                  "dimensionId": "golden_hour_proximity",
+                  "label": "Golden hour",
+                  "display": "0.72",
+                  "value": 0.72,
+                  "signed": 0.72,
+                  "unit": "",
+                  "tier": "derivative",
+                  "weight": 0.6,
+                  "polarity": "flat"
+                },
+                {
+                  "dimensionId": "sun_elevation",
+                  "label": "Sun elevation",
+                  "display": "0 deg",
+                  "value": 0.1683,
+                  "signed": 0.1683,
+                  "unit": "deg",
+                  "tier": "state",
+                  "weight": 0.35,
+                  "polarity": "flat"
+                },
+                {
+                  "dimensionId": "cloud_depth",
+                  "label": "Cloud depth",
+                  "display": "0.83",
+                  "value": 0.83,
+                  "signed": 0.83,
+                  "unit": "",
+                  "tier": "state",
+                  "weight": 0.3,
+                  "polarity": "flat"
+                },
+                {
+                  "dimensionId": "precip_intensity",
+                  "label": "Precipitation",
+                  "display": "0.6 mm/h",
+                  "value": 0.0275,
+                  "signed": 0.0275,
+                  "unit": "mm/h",
+                  "tier": "state",
+                  "weight": 0.3,
+                  "polarity": "flat"
+                }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "flutter": [
+      {
+        "createSurface": {
+          "surfaceId": "sky",
+          "catalogId": "https://bg.netdev.be/a2ui/catalogs/barogroove/v1",
+          "surfaceProperties": {
+            "colorScheme": "light",
+            "contrast": "high",
+            "density": "comfortable",
+            "palette": {
+              "canvas": "#F5F7FA",
+              "surface": "#FFFFFF",
+              "surfaceSunken": "#EDF1F6",
+              "surfaceRaised": "#FFFFFF",
+              "border": "#CBD5E1",
+              "borderStrong": "#94A3B8",
+              "ink": "#0F172A",
+              "inkMuted": "#475569",
+              "inkSubtle": "#64748B",
+              "inkInverse": "#FFFFFF",
+              "accent": "#0369A1",
+              "accentStrong": "#075985",
+              "accentSoft": "#E0F2FE",
+              "accentInk": "#0C4A6E",
+              "onAccent": "#FFFFFF",
+              "gold": "#A16207",
+              "goldSoft": "#FEF3C7",
+              "goldInk": "#713F12",
+              "positive": "#15803D",
+              "warning": "#B45309",
+              "critical": "#B91C1C",
+              "criticalSoft": "#FEE2E2",
+              "criticalInk": "#7F1D1D",
+              "dataCold": "#1D4ED8",
+              "dataCool": "#0369A1",
+              "dataNeutral": "#64748B",
+              "dataWarm": "#A16207",
+              "dataHot": "#B45309"
+            },
+            "typography": {
+              "fontFamily": "Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+              "fontFamilyMono": "'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+              "scale": {
+                "display": {
+                  "size": 34,
+                  "lineHeight": 40,
+                  "weight": 650,
+                  "tracking": -0.6
+                },
+                "title": {
+                  "size": 24,
+                  "lineHeight": 30,
+                  "weight": 620,
+                  "tracking": -0.3
+                },
+                "heading": {
+                  "size": 18,
+                  "lineHeight": 24,
+                  "weight": 600,
+                  "tracking": -0.1
+                },
+                "body": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 400,
+                  "tracking": 0.0
+                },
+                "bodyStrong": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 600,
+                  "tracking": 0.0
+                },
+                "caption": {
+                  "size": 13,
+                  "lineHeight": 18,
+                  "weight": 500,
+                  "tracking": 0.1
+                },
+                "label": {
+                  "size": 11,
+                  "lineHeight": 14,
+                  "weight": 650,
+                  "tracking": 0.8
+                },
+                "numeric": {
+                  "size": 15,
+                  "lineHeight": 20,
+                  "weight": 550,
+                  "tracking": 0.0
+                }
+              },
+              "tabularNumerals": true
+            },
+            "spacing": {
+              "xs": 4,
+              "sm": 8,
+              "md": 12,
+              "lg": 16,
+              "xl": 24,
+              "xxl": 32,
+              "section": 40
+            },
+            "radius": {
+              "sm": 4,
+              "md": 8,
+              "lg": 12,
+              "pill": 999
+            },
+            "elevation": {
+              "flat": "none",
+              "card": "0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)",
+              "hero": "0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)",
+              "overlay": "0 12px 32px rgba(15, 23, 42, 0.16)"
+            },
+            "motion": {
+              "durationFast": 120,
+              "durationBase": 200,
+              "durationSlow": 320,
+              "easing": "cubic-bezier(0.2, 0, 0, 1)",
+              "respectsReducedMotion": true
+            }
+          },
+          "sendDataModel": true
+        }
+      },
+      {
+        "updateComponents": {
+          "surfaceId": "sky",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "skyDial"
+              ],
+              "direction": "vertical",
+              "gap": "section",
+              "padding": "xl",
+              "tone": "canvas",
+              "maxWidth": 960,
+              "align": "stretch",
+              "heading": {
+                "path": "/sky/heading"
+              },
+              "subheading": {
+                "path": "/sky/subheading"
+              },
+              "properties": {}
+            },
+            {
+              "id": "skyDial",
+              "component": "SkyDial",
+              "accessibility": {
+                "label": {
+                  "path": "/sky/accessibilityLabel"
+                },
+                "live": "polite"
+              },
+              "heroDimension": {
+                "path": "/sky/heroDimension"
+              },
+              "heroLabel": {
+                "path": "/sky/heroLabel"
+              },
+              "heroDisplay": {
+                "path": "/sky/heroDisplay"
+              },
+              "heroValue": {
+                "path": "/sky/heroValue"
+              },
+              "heroCaption": {
+                "path": "/sky/heroCaption"
+              },
+              "heroTone": {
+                "path": "/sky/heroTone"
+              },
+              "observedAt": {
+                "path": "/sky/observedAt"
+              },
+              "coordinates": {
+                "path": "/sky/coordinates"
+              },
+              "stale": {
+                "path": "/sky/stale"
+              },
+              "notes": {
+                "path": "/sky/notes"
+              },
+              "spokes": {
+                "componentId": "skySpoke",
+                "dataBinding": "/sky/dimensions"
+              },
+              "onRefresh": {
+                "action": "barogroove.refreshSky",
+                "context": {
+                  "lat": {
+                    "path": "/sky/lat"
+                  },
+                  "lon": {
+                    "path": "/sky/lon"
+                  }
+                }
+              },
+              "properties": {
+                "vector": {
+                  "path": "/sky"
+                },
+                "title": {
+                  "path": "/sky/heading"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "updateDataModel": {
+          "surfaceId": "sky",
+          "path": "/",
+          "contents": {
+            "sky": {
+              "heading": "Your sky right now",
+              "subheading": "Nine dimensions. The ones that are moving matter most.",
+              "accessibilityLabel": "Sky dial. Pressure trend -0.9 hPa/6h, steady.",
+              "heroDimension": "pressure_trend_6h",
+              "heroLabel": "Pressure trend",
+              "heroDisplay": "-0.9 hPa/6h",
+              "heroValue": -0.0733,
+              "heroCaption": "steady",
+              "heroTone": "steady",
+              "observedAt": "2026-03-14T17:05:00+00:00",
+              "coordinates": "Brussels (50.850, 4.352)",
+              "lat": 50.8503,
+              "lon": 4.3517,
+              "stale": false,
+              "notes": [
+                "pressure fell 9.2 hPa in 6h",
+                "38 min to sunset",
+                "gusts swinging 14-33 km/h"
+              ],
+              "dimensions": [
+                {
+                  "dimensionId": "pressure_trend_6h",
+                  "label": "Pressure trend",
+                  "display": "-0.9 hPa/6h",
+                  "value": 0.0733,
+                  "signed": -0.0733,
+                  "unit": "hPa/6h",
+                  "tier": "hero",
+                  "weight": 1.0,
+                  "polarity": "down"
+                },
+                {
+                  "dimensionId": "pressure_norm_deviation",
+                  "label": "Pressure vs norm",
+                  "display": "-0.8 hPa",
+                  "value": 0.0316,
+                  "signed": -0.0316,
+                  "unit": "hPa",
+                  "tier": "derivative",
+                  "weight": 0.8,
+                  "polarity": "flat"
+                },
+                {
+                  "dimensionId": "temp_norm_deviation",
+                  "label": "Temp vs norm",
+                  "display": "+0.4 K",
+                  "value": 0.035,
+                  "signed": 0.035,
+                  "unit": "K",
+                  "tier": "derivative",
+                  "weight": 0.75,
+                  "polarity": "flat"
+                },
+                {
+                  "dimensionId": "gust_variance",
+                  "label": "Gust variance",
+                  "display": "0.6 m/s",
+                  "value": 0.0427,
+                  "signed": 0.0427,
+                  "unit": "m/s",
+                  "tier": "derivative",
+                  "weight": 0.7,
+                  "polarity": "flat"
+                },
+                {
+                  "dimensionId": "daylight_delta",
+                  "label": "Daylight delta",
+                  "display": "-0.3 min/d",
+                  "value": 0.062,
+                  "signed": -0.062,
+                  "unit": "min/d",
+                  "tier": "derivative",
+                  "weight": 0.65,
+                  "polarity": "down"
+                },
+                {
+                  "dimensionId": "golden_hour_proximity",
+                  "label": "Golden hour",
+                  "display": "0.72",
+                  "value": 0.72,
+                  "signed": 0.72,
+                  "unit": "",
+                  "tier": "derivative",
+                  "weight": 0.6,
+                  "polarity": "flat"
+                },
+                {
+                  "dimensionId": "sun_elevation",
+                  "label": "Sun elevation",
+                  "display": "0 deg",
+                  "value": 0.1683,
+                  "signed": 0.1683,
+                  "unit": "deg",
+                  "tier": "state",
+                  "weight": 0.35,
+                  "polarity": "flat"
+                },
+                {
+                  "dimensionId": "cloud_depth",
+                  "label": "Cloud depth",
+                  "display": "0.83",
+                  "value": 0.83,
+                  "signed": 0.83,
+                  "unit": "",
+                  "tier": "state",
+                  "weight": 0.3,
+                  "polarity": "flat"
+                },
+                {
+                  "dimensionId": "precip_intensity",
+                  "label": "Precipitation",
+                  "display": "0.6 mm/h",
+                  "value": 0.0275,
+                  "signed": 0.0275,
+                  "unit": "mm/h",
+                  "tier": "state",
+                  "weight": 0.3,
+                  "polarity": "flat"
+                }
+              ],
+              "pressure_trend_6h": -0.88,
+              "pressure_norm_deviation": -0.79,
+              "temp_norm_deviation": 0.42,
+              "sun_elevation": 0.18,
+              "golden_hour_proximity": 0.72,
+              "gust_variance": 0.64,
+              "cloud_depth": 0.83,
+              "precip_intensity": 0.55,
+              "daylight_delta": -0.31,
+              "observed_at": "2026-03-14T17:05:00+00:00"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "themes": {
+    "raw": [
+      {
+        "createSurface": {
+          "surfaceId": "themes",
+          "catalogId": "https://bg.netdev.be/a2ui/catalogs/barogroove/v1",
+          "surfaceProperties": {
+            "colorScheme": "light",
+            "contrast": "high",
+            "density": "comfortable",
+            "palette": {
+              "canvas": "#F1F5F4",
+              "surface": "#FFFFFF",
+              "surfaceSunken": "#E4EDEA",
+              "surfaceRaised": "#FFFFFF",
+              "border": "#C2D4CE",
+              "borderStrong": "#94A3B8",
+              "ink": "#0F172A",
+              "inkMuted": "#475569",
+              "inkSubtle": "#64748B",
+              "inkInverse": "#FFFFFF",
+              "accent": "#0F6656",
+              "accentStrong": "#0B4A3E",
+              "accentSoft": "#DCF0EA",
+              "accentInk": "#0A3F35",
+              "onAccent": "#FFFFFF",
+              "gold": "#8A6A12",
+              "goldSoft": "#F7EDD3",
+              "goldInk": "#5C4409",
+              "positive": "#15803D",
+              "warning": "#B45309",
+              "critical": "#B91C1C",
+              "criticalSoft": "#FEE2E2",
+              "criticalInk": "#7F1D1D",
+              "dataCold": "#1D4ED8",
+              "dataCool": "#0369A1",
+              "dataNeutral": "#64748B",
+              "dataWarm": "#A16207",
+              "dataHot": "#B45309"
+            },
+            "typography": {
+              "fontFamily": "Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+              "fontFamilyMono": "'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+              "scale": {
+                "display": {
+                  "size": 34,
+                  "lineHeight": 40,
+                  "weight": 650,
+                  "tracking": -0.6
+                },
+                "title": {
+                  "size": 24,
+                  "lineHeight": 30,
+                  "weight": 620,
+                  "tracking": -0.3
+                },
+                "heading": {
+                  "size": 18,
+                  "lineHeight": 24,
+                  "weight": 600,
+                  "tracking": -0.1
+                },
+                "body": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 400,
+                  "tracking": 0.0
+                },
+                "bodyStrong": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 600,
+                  "tracking": 0.0
+                },
+                "caption": {
+                  "size": 13,
+                  "lineHeight": 18,
+                  "weight": 500,
+                  "tracking": 0.1
+                },
+                "label": {
+                  "size": 11,
+                  "lineHeight": 14,
+                  "weight": 650,
+                  "tracking": 0.8
+                },
+                "numeric": {
+                  "size": 15,
+                  "lineHeight": 20,
+                  "weight": 550,
+                  "tracking": 0.0
+                }
+              },
+              "tabularNumerals": true
+            },
+            "spacing": {
+              "xs": 4,
+              "sm": 8,
+              "md": 12,
+              "lg": 16,
+              "xl": 24,
+              "xxl": 32,
+              "section": 40
+            },
+            "radius": {
+              "sm": 4,
+              "md": 8,
+              "lg": 12,
+              "pill": 999
+            },
+            "elevation": {
+              "flat": "none",
+              "card": "0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)",
+              "hero": "0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)",
+              "overlay": "0 12px 32px rgba(15, 23, 42, 0.16)"
+            },
+            "motion": {
+              "durationFast": 120,
+              "durationBase": 200,
+              "durationSlow": 320,
+              "easing": "cubic-bezier(0.2, 0, 0, 1)",
+              "respectsReducedMotion": true
+            },
+            "themeId": "petrichor"
+          },
+          "sendDataModel": true
+        }
+      },
+      {
+        "updateComponents": {
+          "surfaceId": "themes",
+          "components": [
+            {
+              "id": "root",
+              "component": "Stack",
+              "children": [
+                "themeChips",
+                "genreCorridor"
+              ],
+              "direction": "vertical",
+              "gap": "section",
+              "padding": "xl",
+              "tone": "canvas",
+              "maxWidth": 960,
+              "align": "stretch",
+              "heading": {
+                "path": "/page/heading"
+              },
+              "subheading": {
+                "path": "/page/subheading"
+              }
+            },
+            {
+              "id": "themeChips",
+              "component": "ThemeChips",
+              "label": {
+                "path": "/themes/label"
+              },
+              "axisNote": {
+                "path": "/themes/axisNote"
+              },
+              "helpText": {
+                "path": "/themes/helpText"
+              },
+              "selectedThemeId": {
+                "path": "/themes/selectedThemeId"
+              },
+              "chips": {
+                "componentId": "themeChip",
+                "dataBinding": "/themes/items"
+              },
+              "items": {
+                "path": "/themes/items"
+              },
+              "selected": {
+                "path": "/themes/selectedThemeId"
+              },
+              "title": {
+                "path": "/themes/label"
+              },
+              "action": {
+                "action": "barogroove.selectTheme",
+                "context": {
+                  "themeId": {
+                    "path": "/themes/selectedThemeId"
+                  }
+                },
+                "sendDataModel": false
+              }
+            },
+            {
+              "id": "themeChip",
+              "component": "ThemeChip",
+              "accessibility": {
+                "label": {
+                  "path": "/name"
+                },
+                "description": {
+                  "path": "/tagline"
+                }
+              },
+              "themeId": {
+                "path": "/themeId"
+              },
+              "name": {
+                "path": "/name"
+              },
+              "tagline": {
+                "path": "/tagline"
+              },
+              "icon": {
+                "path": "/icon"
+              },
+              "swatchAccent": {
+                "path": "/swatchAccent"
+              },
+              "swatchSoft": {
+                "path": "/swatchSoft"
+              },
+              "swatchInk": {
+                "path": "/swatchInk"
+              },
+              "selected": {
+                "path": "/selected"
+              },
+              "onSelect": {
+                "action": "barogroove.selectTheme",
+                "context": {
+                  "themeId": {
+                    "path": "/themeId"
+                  }
+                },
+                "sendDataModel": false
+              }
+            },
+            {
+              "id": "genreCorridor",
+              "component": "GenreCorridor",
+              "label": {
+                "path": "/genres/label"
+              },
+              "axisNote": {
+                "path": "/genres/axisNote"
+              },
+              "helpText": {
+                "path": "/genres/helpText"
+              },
+              "selectedGenreId": {
+                "path": "/genres/selectedGenreId"
+              },
+              "crossingLabel": {
+                "path": "/genres/crossingLabel"
+              },
+              "width": {
+                "path": "/genres/width"
+              },
+              "widthLabel": {
+                "path": "/genres/widthLabel"
+              },
+              "options": {
+                "componentId": "genreOption",
+                "dataBinding": "/genres/items"
+              },
+              "items": {
+                "path": "/genres/items"
+              },
+              "selected": {
+                "path": "/genres/selectedGenreId"
+              },
+              "title": {
+                "path": "/genres/label"
+              },
+              "action": {
+                "action": "barogroove.selectGenre",
+                "context": {
+                  "genreId": {
+                    "path": "/genres/selectedGenreId"
+                  }
+                },
+                "sendDataModel": false
+              },
+              "onWidthChange": {
+                "action": "barogroove.setCorridorWidth",
+                "context": {
+                  "genreId": {
+                    "path": "/genres/selectedGenreId"
+                  },
+                  "width": {
+                    "path": "/genres/width"
+                  }
+                }
+              },
+              "onForge": {
+                "action": "barogroove.forge",
+                "context": {
+                  "themeId": {
+                    "path": "/themes/selectedThemeId"
+                  },
+                  "genreId": {
+                    "path": "/genres/selectedGenreId"
+                  }
+                }
+              }
+            },
+            {
+              "id": "genreOption",
+              "component": "GenreOption",
+              "accessibility": {
+                "label": {
+                  "path": "/name"
+                },
+                "description": {
+                  "path": "/description"
+                }
+              },
+              "genreId": {
+                "path": "/genreId"
+              },
+              "name": {
+                "path": "/name"
+              },
+              "description": {
+                "path": "/description"
+              },
+              "tags": {
+                "path": "/tags"
+              },
+              "selected": {
+                "path": "/selected"
+              },
+              "onSelect": {
+                "action": "barogroove.selectGenre",
+                "context": {
+                  "genreId": {
+                    "path": "/genreId"
+                  }
+                },
+                "sendDataModel": false
+              }
+            }
+          ]
+        }
+      },
+      {
+        "updateDataModel": {
+          "surfaceId": "themes",
+          "path": "/",
+          "contents": {
+            "page": {
+              "heading": "Cross two axes",
+              "subheading": "The sky picks the mood. You pick the vocabulary."
+            },
+            "themes": {
+              "label": "Theme",
+              "axisNote": "Axis 1 of 2 \u2014 the weather register",
+              "helpText": "Each theme biases the sonic target and tints the surface.",
+              "selectedThemeId": "petrichor",
+              "items": [
+                {
+                  "themeId": "petrichor",
+                  "id": "petrichor",
+                  "name": "Petrichor",
+                  "tagline": "Pressure is falling and rain is close. Wet slate-green, held low.",
+                  "swatchAccent": "#0F6656",
+                  "swatchSoft": "#DCF0EA",
+                  "swatchInk": "#0A3F35",
+                  "icon": "water_drop",
+                  "palette": {
+                    "accent": "#0F6656",
+                    "primary": "#0F6656",
+                    "base": "#DCF0EA",
+                    "ink": "#0A3F35"
+                  },
+                  "selected": true
+                },
+                {
+                  "themeId": "golden_hour",
+                  "id": "golden_hour",
+                  "name": "Golden Hour",
+                  "tagline": "Sun low, light long. The one theme where gold leads.",
+                  "swatchAccent": "#9A5B08",
+                  "swatchSoft": "#FAEBD3",
+                  "swatchInk": "#6B3D04",
+                  "icon": "wb_twilight",
+                  "palette": {
+                    "accent": "#9A5B08",
+                    "primary": "#9A5B08",
+                    "base": "#FAEBD3",
+                    "ink": "#6B3D04"
+                  },
+                  "selected": false
+                },
+                {
+                  "themeId": "nordic_fog",
+                  "id": "nordic_fog",
+                  "name": "Nordic Fog",
+                  "tagline": "Deep cloud, no wind, no light. Lowest chroma; typography carries it.",
+                  "swatchAccent": "#3F5566",
+                  "swatchSoft": "#E5EAEE",
+                  "swatchInk": "#2B3B47",
+                  "icon": "foggy",
+                  "palette": {
+                    "accent": "#3F5566",
+                    "primary": "#3F5566",
+                    "base": "#E5EAEE",
+                    "ink": "#2B3B47"
+                  },
+                  "selected": false
+                },
+                {
+                  "themeId": "storm_front",
+                  "id": "storm_front",
+                  "name": "Storm Front",
+                  "tagline": "Gusts spiking, pressure collapsing. Urgent, not alarming.",
+                  "swatchAccent": "#4338CA",
+                  "swatchSoft": "#E4E1FB",
+                  "swatchInk": "#312E81",
+                  "icon": "thunderstorm",
+                  "palette": {
+                    "accent": "#4338CA",
+                    "primary": "#4338CA",
+                    "base": "#E4E1FB",
+                    "ink": "#312E81"
+                  },
+                  "selected": false
+                },
+                {
+                  "themeId": "heatwave_cruise",
+                  "id": "heatwave_cruise",
+                  "name": "Heatwave Cruise",
+                  "tagline": "Far above the norm, air standing still. Dry heat, not tropics.",
+                  "swatchAccent": "#A03A1E",
+                  "swatchSoft": "#FBE5DC",
+                  "swatchInk": "#7A2A14",
+                  "icon": "wb_sunny",
+                  "palette": {
+                    "accent": "#A03A1E",
+                    "primary": "#A03A1E",
+                    "base": "#FBE5DC",
+                    "ink": "#7A2A14"
+                  },
+                  "selected": false
+                },
+                {
+                  "themeId": "blue_hour",
+                  "id": "blue_hour",
+                  "name": "Blue Hour",
+                  "tagline": "The sun has gone and the lights aren't on. Muted violet-slate.",
+                  "swatchAccent": "#6D28A8",
+                  "swatchSoft": "#EFE3FA",
+                  "swatchInk": "#4C1D80",
+                  "icon": "nights_stay",
+                  "palette": {
+                    "accent": "#6D28A8",
+                    "primary": "#6D28A8",
+                    "base": "#EFE3FA",
+                    "ink": "#4C1D80"
+                  },
+                  "selected": false
+                },
+                {
+                  "themeId": "first_frost",
+                  "id": "first_frost",
+                  "name": "First Frost",
+                  "tagline": "Clear, cold and bright. The coldest blue in the system.",
+                  "swatchAccent": "#1D4ED8",
+                  "swatchSoft": "#DDE7FE",
+                  "swatchInk": "#1E3A8A",
+                  "icon": "ac_unit",
+                  "palette": {
+                    "accent": "#1D4ED8",
+                    "primary": "#1D4ED8",
+                    "base": "#DDE7FE",
+                    "ink": "#1E3A8A"
+                  },
+                  "selected": false
+                },
+                {
+                  "themeId": "sirocco",
+                  "id": "sirocco",
+                  "name": "Sirocco",
+                  "tagline": "A warm wind from the wrong direction. Dust and kiln, nothing blue.",
+                  "swatchAccent": "#7A5B14",
+                  "swatchSoft": "#F6EBCC",
+                  "swatchInk": "#4E390A",
+                  "icon": "air",
+                  "palette": {
+                    "accent": "#7A5B14",
+                    "primary": "#7A5B14",
+                    "base": "#F6EBCC",
+                    "ink": "#4E390A"
+                  },
+                  "selected": false
+                }
+              ]
+            },
+            "genres": {
+              "label": "Genre corridor",
+              "axisNote": "Axis 2 of 2 \u2014 independent of theme",
+              "helpText": "The corridor is a vocabulary, not a mood. It never overrides the sky.",
+              "selectedGenreId": "krautrock",
+              "crossingLabel": "Petrichor \u00d7 Krautrock",
+              "width": 0.4,
+              "widthLabel": "balanced",
+              "items": [
+                {
+                  "genreId": "krautrock",
+                  "name": "Krautrock",
+                  "description": "Motorik pulse, patient repetition.",
+                  "tags": [
+                    "krautrock",
+                    "motorik",
+                    "kosmische"
+                  ],
+                  "selected": true
+                },
+                {
+                  "genreId": "ambient",
+                  "name": "Ambient",
+                  "description": "Space before notes.",
+                  "tags": [
+                    "ambient",
+                    "drone",
+                    "field recording"
+                  ],
+                  "selected": false
+                }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "flutter": [
+      {
+        "createSurface": {
+          "surfaceId": "themes",
+          "catalogId": "https://bg.netdev.be/a2ui/catalogs/barogroove/v1",
+          "surfaceProperties": {
+            "colorScheme": "light",
+            "contrast": "high",
+            "density": "comfortable",
+            "palette": {
+              "canvas": "#F1F5F4",
+              "surface": "#FFFFFF",
+              "surfaceSunken": "#E4EDEA",
+              "surfaceRaised": "#FFFFFF",
+              "border": "#C2D4CE",
+              "borderStrong": "#94A3B8",
+              "ink": "#0F172A",
+              "inkMuted": "#475569",
+              "inkSubtle": "#64748B",
+              "inkInverse": "#FFFFFF",
+              "accent": "#0F6656",
+              "accentStrong": "#0B4A3E",
+              "accentSoft": "#DCF0EA",
+              "accentInk": "#0A3F35",
+              "onAccent": "#FFFFFF",
+              "gold": "#8A6A12",
+              "goldSoft": "#F7EDD3",
+              "goldInk": "#5C4409",
+              "positive": "#15803D",
+              "warning": "#B45309",
+              "critical": "#B91C1C",
+              "criticalSoft": "#FEE2E2",
+              "criticalInk": "#7F1D1D",
+              "dataCold": "#1D4ED8",
+              "dataCool": "#0369A1",
+              "dataNeutral": "#64748B",
+              "dataWarm": "#A16207",
+              "dataHot": "#B45309"
+            },
+            "typography": {
+              "fontFamily": "Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+              "fontFamilyMono": "'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+              "scale": {
+                "display": {
+                  "size": 34,
+                  "lineHeight": 40,
+                  "weight": 650,
+                  "tracking": -0.6
+                },
+                "title": {
+                  "size": 24,
+                  "lineHeight": 30,
+                  "weight": 620,
+                  "tracking": -0.3
+                },
+                "heading": {
+                  "size": 18,
+                  "lineHeight": 24,
+                  "weight": 600,
+                  "tracking": -0.1
+                },
+                "body": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 400,
+                  "tracking": 0.0
+                },
+                "bodyStrong": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 600,
+                  "tracking": 0.0
+                },
+                "caption": {
+                  "size": 13,
+                  "lineHeight": 18,
+                  "weight": 500,
+                  "tracking": 0.1
+                },
+                "label": {
+                  "size": 11,
+                  "lineHeight": 14,
+                  "weight": 650,
+                  "tracking": 0.8
+                },
+                "numeric": {
+                  "size": 15,
+                  "lineHeight": 20,
+                  "weight": 550,
+                  "tracking": 0.0
+                }
+              },
+              "tabularNumerals": true
+            },
+            "spacing": {
+              "xs": 4,
+              "sm": 8,
+              "md": 12,
+              "lg": 16,
+              "xl": 24,
+              "xxl": 32,
+              "section": 40
+            },
+            "radius": {
+              "sm": 4,
+              "md": 8,
+              "lg": 12,
+              "pill": 999
+            },
+            "elevation": {
+              "flat": "none",
+              "card": "0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)",
+              "hero": "0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)",
+              "overlay": "0 12px 32px rgba(15, 23, 42, 0.16)"
+            },
+            "motion": {
+              "durationFast": 120,
+              "durationBase": 200,
+              "durationSlow": 320,
+              "easing": "cubic-bezier(0.2, 0, 0, 1)",
+              "respectsReducedMotion": true
+            },
+            "themeId": "petrichor"
+          },
+          "sendDataModel": true
+        }
+      },
+      {
+        "updateComponents": {
+          "surfaceId": "themes",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "themeChips",
+                "genreCorridor"
+              ],
+              "direction": "vertical",
+              "gap": "section",
+              "padding": "xl",
+              "tone": "canvas",
+              "maxWidth": 960,
+              "align": "stretch",
+              "heading": {
+                "path": "/page/heading"
+              },
+              "subheading": {
+                "path": "/page/subheading"
+              },
+              "properties": {}
+            },
+            {
+              "id": "themeChips",
+              "component": "ThemeChips",
+              "label": {
+                "path": "/themes/label"
+              },
+              "axisNote": {
+                "path": "/themes/axisNote"
+              },
+              "helpText": {
+                "path": "/themes/helpText"
+              },
+              "selectedThemeId": {
+                "path": "/themes/selectedThemeId"
+              },
+              "items": {
+                "path": "/themes/items"
+              },
+              "selected": {
+                "path": "/themes/selectedThemeId"
+              },
+              "title": {
+                "path": "/themes/label"
+              },
+              "action": {
+                "action": "barogroove.selectTheme",
+                "context": {
+                  "themeId": {
+                    "path": "/themes/selectedThemeId"
+                  }
+                },
+                "sendDataModel": false
+              },
+              "properties": {}
+            },
+            {
+              "id": "genreCorridor",
+              "component": "GenreCorridor",
+              "label": {
+                "path": "/genres/label"
+              },
+              "axisNote": {
+                "path": "/genres/axisNote"
+              },
+              "helpText": {
+                "path": "/genres/helpText"
+              },
+              "selectedGenreId": {
+                "path": "/genres/selectedGenreId"
+              },
+              "crossingLabel": {
+                "path": "/genres/crossingLabel"
+              },
+              "width": {
+                "path": "/genres/width"
+              },
+              "widthLabel": {
+                "path": "/genres/widthLabel"
+              },
+              "items": {
+                "path": "/genres/items"
+              },
+              "selected": {
+                "path": "/genres/selectedGenreId"
+              },
+              "title": {
+                "path": "/genres/label"
+              },
+              "action": {
+                "action": "barogroove.selectGenre",
+                "context": {
+                  "genreId": {
+                    "path": "/genres/selectedGenreId"
+                  }
+                },
+                "sendDataModel": false
+              },
+              "onWidthChange": {
+                "action": "barogroove.setCorridorWidth",
+                "context": {
+                  "genreId": {
+                    "path": "/genres/selectedGenreId"
+                  },
+                  "width": {
+                    "path": "/genres/width"
+                  }
+                }
+              },
+              "onForge": {
+                "action": "barogroove.forge",
+                "context": {
+                  "themeId": {
+                    "path": "/themes/selectedThemeId"
+                  },
+                  "genreId": {
+                    "path": "/genres/selectedGenreId"
+                  }
+                }
+              },
+              "properties": {}
+            }
+          ]
+        }
+      },
+      {
+        "updateDataModel": {
+          "surfaceId": "themes",
+          "path": "/",
+          "contents": {
+            "page": {
+              "heading": "Cross two axes",
+              "subheading": "The sky picks the mood. You pick the vocabulary."
+            },
+            "themes": {
+              "label": "Theme",
+              "axisNote": "Axis 1 of 2 \u2014 the weather register",
+              "helpText": "Each theme biases the sonic target and tints the surface.",
+              "selectedThemeId": "petrichor",
+              "items": [
+                {
+                  "themeId": "petrichor",
+                  "id": "petrichor",
+                  "name": "Petrichor",
+                  "tagline": "Pressure is falling and rain is close. Wet slate-green, held low.",
+                  "swatchAccent": "#0F6656",
+                  "swatchSoft": "#DCF0EA",
+                  "swatchInk": "#0A3F35",
+                  "icon": "water_drop",
+                  "palette": {
+                    "accent": "#0F6656",
+                    "primary": "#0F6656",
+                    "base": "#DCF0EA",
+                    "ink": "#0A3F35"
+                  },
+                  "selected": true
+                },
+                {
+                  "themeId": "golden_hour",
+                  "id": "golden_hour",
+                  "name": "Golden Hour",
+                  "tagline": "Sun low, light long. The one theme where gold leads.",
+                  "swatchAccent": "#9A5B08",
+                  "swatchSoft": "#FAEBD3",
+                  "swatchInk": "#6B3D04",
+                  "icon": "wb_twilight",
+                  "palette": {
+                    "accent": "#9A5B08",
+                    "primary": "#9A5B08",
+                    "base": "#FAEBD3",
+                    "ink": "#6B3D04"
+                  },
+                  "selected": false
+                },
+                {
+                  "themeId": "nordic_fog",
+                  "id": "nordic_fog",
+                  "name": "Nordic Fog",
+                  "tagline": "Deep cloud, no wind, no light. Lowest chroma; typography carries it.",
+                  "swatchAccent": "#3F5566",
+                  "swatchSoft": "#E5EAEE",
+                  "swatchInk": "#2B3B47",
+                  "icon": "foggy",
+                  "palette": {
+                    "accent": "#3F5566",
+                    "primary": "#3F5566",
+                    "base": "#E5EAEE",
+                    "ink": "#2B3B47"
+                  },
+                  "selected": false
+                },
+                {
+                  "themeId": "storm_front",
+                  "id": "storm_front",
+                  "name": "Storm Front",
+                  "tagline": "Gusts spiking, pressure collapsing. Urgent, not alarming.",
+                  "swatchAccent": "#4338CA",
+                  "swatchSoft": "#E4E1FB",
+                  "swatchInk": "#312E81",
+                  "icon": "thunderstorm",
+                  "palette": {
+                    "accent": "#4338CA",
+                    "primary": "#4338CA",
+                    "base": "#E4E1FB",
+                    "ink": "#312E81"
+                  },
+                  "selected": false
+                },
+                {
+                  "themeId": "heatwave_cruise",
+                  "id": "heatwave_cruise",
+                  "name": "Heatwave Cruise",
+                  "tagline": "Far above the norm, air standing still. Dry heat, not tropics.",
+                  "swatchAccent": "#A03A1E",
+                  "swatchSoft": "#FBE5DC",
+                  "swatchInk": "#7A2A14",
+                  "icon": "wb_sunny",
+                  "palette": {
+                    "accent": "#A03A1E",
+                    "primary": "#A03A1E",
+                    "base": "#FBE5DC",
+                    "ink": "#7A2A14"
+                  },
+                  "selected": false
+                },
+                {
+                  "themeId": "blue_hour",
+                  "id": "blue_hour",
+                  "name": "Blue Hour",
+                  "tagline": "The sun has gone and the lights aren't on. Muted violet-slate.",
+                  "swatchAccent": "#6D28A8",
+                  "swatchSoft": "#EFE3FA",
+                  "swatchInk": "#4C1D80",
+                  "icon": "nights_stay",
+                  "palette": {
+                    "accent": "#6D28A8",
+                    "primary": "#6D28A8",
+                    "base": "#EFE3FA",
+                    "ink": "#4C1D80"
+                  },
+                  "selected": false
+                },
+                {
+                  "themeId": "first_frost",
+                  "id": "first_frost",
+                  "name": "First Frost",
+                  "tagline": "Clear, cold and bright. The coldest blue in the system.",
+                  "swatchAccent": "#1D4ED8",
+                  "swatchSoft": "#DDE7FE",
+                  "swatchInk": "#1E3A8A",
+                  "icon": "ac_unit",
+                  "palette": {
+                    "accent": "#1D4ED8",
+                    "primary": "#1D4ED8",
+                    "base": "#DDE7FE",
+                    "ink": "#1E3A8A"
+                  },
+                  "selected": false
+                },
+                {
+                  "themeId": "sirocco",
+                  "id": "sirocco",
+                  "name": "Sirocco",
+                  "tagline": "A warm wind from the wrong direction. Dust and kiln, nothing blue.",
+                  "swatchAccent": "#7A5B14",
+                  "swatchSoft": "#F6EBCC",
+                  "swatchInk": "#4E390A",
+                  "icon": "air",
+                  "palette": {
+                    "accent": "#7A5B14",
+                    "primary": "#7A5B14",
+                    "base": "#F6EBCC",
+                    "ink": "#4E390A"
+                  },
+                  "selected": false
+                }
+              ]
+            },
+            "genres": {
+              "label": "Genre corridor",
+              "axisNote": "Axis 2 of 2 \u2014 independent of theme",
+              "helpText": "The corridor is a vocabulary, not a mood. It never overrides the sky.",
+              "selectedGenreId": "krautrock",
+              "crossingLabel": "Petrichor \u00d7 Krautrock",
+              "width": 0.4,
+              "widthLabel": "balanced",
+              "items": [
+                {
+                  "genreId": "krautrock",
+                  "name": "Krautrock",
+                  "description": "Motorik pulse, patient repetition.",
+                  "tags": [
+                    "krautrock",
+                    "motorik",
+                    "kosmische"
+                  ],
+                  "selected": true,
+                  "id": "krautrock",
+                  "anchor": 0.5,
+                  "width": 0.4
+                },
+                {
+                  "genreId": "ambient",
+                  "name": "Ambient",
+                  "description": "Space before notes.",
+                  "tags": [
+                    "ambient",
+                    "drone",
+                    "field recording"
+                  ],
+                  "selected": false,
+                  "id": "ambient",
+                  "anchor": 0.5,
+                  "width": 0.4
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  },
+  "playlist": {
+    "raw": [
+      {
+        "createSurface": {
+          "surfaceId": "playlist",
+          "catalogId": "https://bg.netdev.be/a2ui/catalogs/barogroove/v1",
+          "surfaceProperties": {
+            "colorScheme": "light",
+            "contrast": "high",
+            "density": "comfortable",
+            "palette": {
+              "canvas": "#F1F5F4",
+              "surface": "#FFFFFF",
+              "surfaceSunken": "#E4EDEA",
+              "surfaceRaised": "#FFFFFF",
+              "border": "#C2D4CE",
+              "borderStrong": "#94A3B8",
+              "ink": "#0F172A",
+              "inkMuted": "#475569",
+              "inkSubtle": "#64748B",
+              "inkInverse": "#FFFFFF",
+              "accent": "#0F6656",
+              "accentStrong": "#0B4A3E",
+              "accentSoft": "#DCF0EA",
+              "accentInk": "#0A3F35",
+              "onAccent": "#FFFFFF",
+              "gold": "#8A6A12",
+              "goldSoft": "#F7EDD3",
+              "goldInk": "#5C4409",
+              "positive": "#15803D",
+              "warning": "#B45309",
+              "critical": "#B91C1C",
+              "criticalSoft": "#FEE2E2",
+              "criticalInk": "#7F1D1D",
+              "dataCold": "#1D4ED8",
+              "dataCool": "#0369A1",
+              "dataNeutral": "#64748B",
+              "dataWarm": "#A16207",
+              "dataHot": "#B45309"
+            },
+            "typography": {
+              "fontFamily": "Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+              "fontFamilyMono": "'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+              "scale": {
+                "display": {
+                  "size": 34,
+                  "lineHeight": 40,
+                  "weight": 650,
+                  "tracking": -0.6
+                },
+                "title": {
+                  "size": 24,
+                  "lineHeight": 30,
+                  "weight": 620,
+                  "tracking": -0.3
+                },
+                "heading": {
+                  "size": 18,
+                  "lineHeight": 24,
+                  "weight": 600,
+                  "tracking": -0.1
+                },
+                "body": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 400,
+                  "tracking": 0.0
+                },
+                "bodyStrong": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 600,
+                  "tracking": 0.0
+                },
+                "caption": {
+                  "size": 13,
+                  "lineHeight": 18,
+                  "weight": 500,
+                  "tracking": 0.1
+                },
+                "label": {
+                  "size": 11,
+                  "lineHeight": 14,
+                  "weight": 650,
+                  "tracking": 0.8
+                },
+                "numeric": {
+                  "size": 15,
+                  "lineHeight": 20,
+                  "weight": 550,
+                  "tracking": 0.0
+                }
+              },
+              "tabularNumerals": true
+            },
+            "spacing": {
+              "xs": 4,
+              "sm": 8,
+              "md": 12,
+              "lg": 16,
+              "xl": 24,
+              "xxl": 32,
+              "section": 40
+            },
+            "radius": {
+              "sm": 4,
+              "md": 8,
+              "lg": 12,
+              "pill": 999
+            },
+            "elevation": {
+              "flat": "none",
+              "card": "0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)",
+              "hero": "0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)",
+              "overlay": "0 12px 32px rgba(15, 23, 42, 0.16)"
+            },
+            "motion": {
+              "durationFast": 120,
+              "durationBase": 200,
+              "durationSlow": 320,
+              "easing": "cubic-bezier(0.2, 0, 0, 1)",
+              "respectsReducedMotion": true
+            },
+            "themeId": "petrichor"
+          },
+          "sendDataModel": true
+        }
+      },
+      {
+        "updateComponents": {
+          "surfaceId": "playlist",
+          "components": [
+            {
+              "id": "root",
+              "component": "Stack",
+              "children": [
+                "rationale",
+                "trackList"
+              ],
+              "direction": "vertical",
+              "gap": "section",
+              "padding": "xl",
+              "tone": "canvas",
+              "maxWidth": 960,
+              "align": "stretch"
+            },
+            {
+              "id": "rationale",
+              "component": "RationaleCard",
+              "accessibility": {
+                "label": {
+                  "path": "/rationale/headline"
+                },
+                "live": "polite"
+              },
+              "headline": {
+                "path": "/rationale/headline"
+              },
+              "body": {
+                "path": "/rationale/body"
+              },
+              "skyReading": {
+                "path": "/rationale/skyReading"
+              },
+              "sonicMoves": {
+                "path": "/rationale/sonicMoves"
+              },
+              "tasteNote": {
+                "path": "/rationale/tasteNote"
+              },
+              "confidence": {
+                "path": "/rationale/confidence"
+              },
+              "confidenceLabel": {
+                "path": "/rationale/confidenceLabel"
+              },
+              "degraded": {
+                "path": "/rationale/degraded"
+              },
+              "themeName": {
+                "path": "/rationale/themeName"
+              },
+              "genreName": {
+                "path": "/rationale/genreName"
+              },
+              "emphasis": "hero",
+              "onExplainDimension": {
+                "action": "barogroove.explainDimension",
+                "context": {
+                  "dimension": {
+                    "path": "/selectedDimension"
+                  }
+                }
+              }
+            },
+            {
+              "id": "trackList",
+              "component": "TrackList",
+              "title": {
+                "path": "/playlist/title"
+              },
+              "subtitle": {
+                "path": "/playlist/subtitle"
+              },
+              "trackCount": {
+                "path": "/playlist/trackCount"
+              },
+              "durationDisplay": {
+                "path": "/playlist/durationDisplay"
+              },
+              "arcLegend": {
+                "path": "/playlist/arcLegend"
+              },
+              "showWhy": {
+                "path": "/playlist/showWhy"
+              },
+              "rows": {
+                "componentId": "trackRow",
+                "dataBinding": "/playlist/tracks"
+              },
+              "items": {
+                "path": "/playlist/tracks"
+              }
+            },
+            {
+              "id": "trackRow",
+              "component": "TrackRow",
+              "accessibility": {
+                "label": {
+                  "path": "/display"
+                },
+                "description": {
+                  "path": "/why"
+                }
+              },
+              "trackKey": {
+                "path": "/trackKey"
+              },
+              "position": {
+                "path": "/position"
+              },
+              "title": {
+                "path": "/title"
+              },
+              "artist": {
+                "path": "/artist"
+              },
+              "display": {
+                "path": "/display"
+              },
+              "role": {
+                "path": "/role"
+              },
+              "roleLabel": {
+                "path": "/roleLabel"
+              },
+              "why": {
+                "path": "/why"
+              },
+              "durationDisplay": {
+                "path": "/durationDisplay"
+              },
+              "score": {
+                "path": "/score"
+              },
+              "sonicDistance": {
+                "path": "/sonicDistance"
+              },
+              "loved": {
+                "path": "/loved"
+              },
+              "skipped": {
+                "path": "/skipped"
+              },
+              "spotifyUri": {
+                "path": "/spotifyUri"
+              },
+              "onLove": {
+                "action": "barogroove.trackFeedback",
+                "context": {
+                  "trackKey": {
+                    "path": "/trackKey"
+                  },
+                  "verdict": "loved",
+                  "position": {
+                    "path": "/position"
+                  },
+                  "playlistId": {
+                    "path": "/playlistId"
+                  }
+                }
+              },
+              "onSkip": {
+                "action": "barogroove.trackFeedback",
+                "context": {
+                  "trackKey": {
+                    "path": "/trackKey"
+                  },
+                  "verdict": "skipped",
+                  "position": {
+                    "path": "/position"
+                  },
+                  "playlistId": {
+                    "path": "/playlistId"
+                  }
+                }
+              },
+              "onOpen": {
+                "action": "barogroove.openTrack",
+                "context": {
+                  "trackKey": {
+                    "path": "/trackKey"
+                  },
+                  "spotifyUri": {
+                    "path": "/spotifyUri"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "updateDataModel": {
+          "surfaceId": "playlist",
+          "path": "/",
+          "contents": {
+            "playlist": {
+              "id": "pl-fixture-0001",
+              "title": "Nine Hectopascals Down",
+              "subtitle": "Petrichor x krautrock",
+              "themeId": "petrichor",
+              "genreId": "krautrock",
+              "createdAt": "2026-03-14T17:05:00+00:00",
+              "trackCount": 7,
+              "durationDisplay": "24 min",
+              "arcLegend": [
+                "Opener",
+                "Build",
+                "Peak",
+                "Descent",
+                "Closer",
+                "Body"
+              ],
+              "showWhy": true,
+              "tracks": [
+                {
+                  "index": 0,
+                  "playlistId": "pl-fixture-0001",
+                  "trackKey": "artist 0|track 0",
+                  "position": 1,
+                  "title": "Track 0",
+                  "artist": "Artist 0",
+                  "display": "Artist 0 \u2014 Track 0",
+                  "role": "opener",
+                  "roleLabel": "Opener",
+                  "why": "Sits at 1 because the fall wants momentum here.",
+                  "durationDisplay": "3:30",
+                  "score": 0.9,
+                  "sonicDistance": 0.1,
+                  "loved": false,
+                  "skipped": false,
+                  "spotifyUri": "spotify:track:0000000000000000000000"
+                },
+                {
+                  "index": 1,
+                  "playlistId": "pl-fixture-0001",
+                  "trackKey": "artist 1|track 1",
+                  "position": 2,
+                  "title": "Track 1",
+                  "artist": "Artist 1",
+                  "display": "Artist 1 \u2014 Track 1",
+                  "role": "build",
+                  "roleLabel": "Build",
+                  "why": "Sits at 2 because the fall wants momentum here.",
+                  "durationDisplay": "3:31",
+                  "score": 0.85,
+                  "sonicDistance": 0.12,
+                  "loved": false,
+                  "skipped": false,
+                  "spotifyUri": "spotify:track:0000000000000000000001"
+                },
+                {
+                  "index": 2,
+                  "playlistId": "pl-fixture-0001",
+                  "trackKey": "artist 2|track 2",
+                  "position": 3,
+                  "title": "Track 2",
+                  "artist": "Artist 2",
+                  "display": "Artist 2 \u2014 Track 2",
+                  "role": "peak",
+                  "roleLabel": "Peak",
+                  "why": "Sits at 3 because the fall wants momentum here.",
+                  "durationDisplay": "3:32",
+                  "score": 0.8,
+                  "sonicDistance": 0.14,
+                  "loved": false,
+                  "skipped": false,
+                  "spotifyUri": "spotify:track:0000000000000000000002"
+                },
+                {
+                  "index": 3,
+                  "playlistId": "pl-fixture-0001",
+                  "trackKey": "artist 3|track 3",
+                  "position": 4,
+                  "title": "Track 3",
+                  "artist": "Artist 3",
+                  "display": "Artist 3 \u2014 Track 3",
+                  "role": "descent",
+                  "roleLabel": "Descent",
+                  "why": "Sits at 4 because the fall wants momentum here.",
+                  "durationDisplay": "3:33",
+                  "score": 0.75,
+                  "sonicDistance": 0.16,
+                  "loved": false,
+                  "skipped": false,
+                  "spotifyUri": "spotify:track:0000000000000000000003"
+                },
+                {
+                  "index": 4,
+                  "playlistId": "pl-fixture-0001",
+                  "trackKey": "artist 4|track 4",
+                  "position": 5,
+                  "title": "Track 4",
+                  "artist": "Artist 4",
+                  "display": "Artist 4 \u2014 Track 4",
+                  "role": "closer",
+                  "roleLabel": "Closer",
+                  "why": "Sits at 5 because the fall wants momentum here.",
+                  "durationDisplay": "3:34",
+                  "score": 0.7,
+                  "sonicDistance": 0.18,
+                  "loved": false,
+                  "skipped": false,
+                  "spotifyUri": "spotify:track:0000000000000000000004"
+                },
+                {
+                  "index": 5,
+                  "playlistId": "pl-fixture-0001",
+                  "trackKey": "artist 5|track 5",
+                  "position": 6,
+                  "title": "Track 5",
+                  "artist": "Artist 5",
+                  "display": "Artist 5 \u2014 Track 5",
+                  "role": "opener",
+                  "roleLabel": "Opener",
+                  "why": "Sits at 6 because the fall wants momentum here.",
+                  "durationDisplay": "3:35",
+                  "score": 0.65,
+                  "sonicDistance": 0.2,
+                  "loved": false,
+                  "skipped": false,
+                  "spotifyUri": "spotify:track:0000000000000000000005"
+                },
+                {
+                  "index": 6,
+                  "playlistId": "pl-fixture-0001",
+                  "trackKey": "artist 6|track 6",
+                  "position": 7,
+                  "title": "Track 6",
+                  "artist": "Artist 6",
+                  "display": "Artist 6 \u2014 Track 6",
+                  "role": "build",
+                  "roleLabel": "Build",
+                  "why": "Sits at 7 because the fall wants momentum here.",
+                  "durationDisplay": "3:36",
+                  "score": 0.6,
+                  "sonicDistance": 0.22,
+                  "loved": false,
+                  "skipped": false,
+                  "spotifyUri": "spotify:track:0000000000000000000006"
+                }
+              ]
+            },
+            "rationale": {
+              "headline": "Pressure fell nine hectopascals; the music leans in.",
+              "body": "A six-hour collapse of this size usually lands as restlessness.",
+              "skyReading": [
+                "Pressure trend -9.2 hPa/6h - the steepest fall in a fortnight.",
+                "Gust variance 7.4 m/s - the wind is not settled."
+              ],
+              "sonicMoves": [
+                "energy +0.18",
+                "acousticness -0.12",
+                "grit +0.09"
+              ],
+              "tasteNote": "You reach for motorik when the barometer drops.",
+              "confidence": 0.82,
+              "confidenceLabel": "high",
+              "degraded": [],
+              "themeName": "petrichor",
+              "genreName": "krautrock"
+            },
+            "selectedDimension": "pressure_trend_6h"
+          }
+        }
+      }
+    ],
+    "flutter": [
+      {
+        "createSurface": {
+          "surfaceId": "playlist",
+          "catalogId": "https://bg.netdev.be/a2ui/catalogs/barogroove/v1",
+          "surfaceProperties": {
+            "colorScheme": "light",
+            "contrast": "high",
+            "density": "comfortable",
+            "palette": {
+              "canvas": "#F1F5F4",
+              "surface": "#FFFFFF",
+              "surfaceSunken": "#E4EDEA",
+              "surfaceRaised": "#FFFFFF",
+              "border": "#C2D4CE",
+              "borderStrong": "#94A3B8",
+              "ink": "#0F172A",
+              "inkMuted": "#475569",
+              "inkSubtle": "#64748B",
+              "inkInverse": "#FFFFFF",
+              "accent": "#0F6656",
+              "accentStrong": "#0B4A3E",
+              "accentSoft": "#DCF0EA",
+              "accentInk": "#0A3F35",
+              "onAccent": "#FFFFFF",
+              "gold": "#8A6A12",
+              "goldSoft": "#F7EDD3",
+              "goldInk": "#5C4409",
+              "positive": "#15803D",
+              "warning": "#B45309",
+              "critical": "#B91C1C",
+              "criticalSoft": "#FEE2E2",
+              "criticalInk": "#7F1D1D",
+              "dataCold": "#1D4ED8",
+              "dataCool": "#0369A1",
+              "dataNeutral": "#64748B",
+              "dataWarm": "#A16207",
+              "dataHot": "#B45309"
+            },
+            "typography": {
+              "fontFamily": "Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+              "fontFamilyMono": "'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+              "scale": {
+                "display": {
+                  "size": 34,
+                  "lineHeight": 40,
+                  "weight": 650,
+                  "tracking": -0.6
+                },
+                "title": {
+                  "size": 24,
+                  "lineHeight": 30,
+                  "weight": 620,
+                  "tracking": -0.3
+                },
+                "heading": {
+                  "size": 18,
+                  "lineHeight": 24,
+                  "weight": 600,
+                  "tracking": -0.1
+                },
+                "body": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 400,
+                  "tracking": 0.0
+                },
+                "bodyStrong": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 600,
+                  "tracking": 0.0
+                },
+                "caption": {
+                  "size": 13,
+                  "lineHeight": 18,
+                  "weight": 500,
+                  "tracking": 0.1
+                },
+                "label": {
+                  "size": 11,
+                  "lineHeight": 14,
+                  "weight": 650,
+                  "tracking": 0.8
+                },
+                "numeric": {
+                  "size": 15,
+                  "lineHeight": 20,
+                  "weight": 550,
+                  "tracking": 0.0
+                }
+              },
+              "tabularNumerals": true
+            },
+            "spacing": {
+              "xs": 4,
+              "sm": 8,
+              "md": 12,
+              "lg": 16,
+              "xl": 24,
+              "xxl": 32,
+              "section": 40
+            },
+            "radius": {
+              "sm": 4,
+              "md": 8,
+              "lg": 12,
+              "pill": 999
+            },
+            "elevation": {
+              "flat": "none",
+              "card": "0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)",
+              "hero": "0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)",
+              "overlay": "0 12px 32px rgba(15, 23, 42, 0.16)"
+            },
+            "motion": {
+              "durationFast": 120,
+              "durationBase": 200,
+              "durationSlow": 320,
+              "easing": "cubic-bezier(0.2, 0, 0, 1)",
+              "respectsReducedMotion": true
+            },
+            "themeId": "petrichor"
+          },
+          "sendDataModel": true
+        }
+      },
+      {
+        "updateComponents": {
+          "surfaceId": "playlist",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "rationale",
+                "trackList"
+              ],
+              "direction": "vertical",
+              "gap": "section",
+              "padding": "xl",
+              "tone": "canvas",
+              "maxWidth": 960,
+              "align": "stretch",
+              "properties": {}
+            },
+            {
+              "id": "rationale",
+              "component": "RationaleCard",
+              "accessibility": {
+                "label": {
+                  "path": "/rationale/headline"
+                },
+                "live": "polite"
+              },
+              "headline": {
+                "path": "/rationale/headline"
+              },
+              "body": {
+                "path": "/rationale/body"
+              },
+              "skyReading": {
+                "path": "/rationale/skyReading"
+              },
+              "sonicMoves": {
+                "path": "/rationale/sonicMoves"
+              },
+              "tasteNote": {
+                "path": "/rationale/tasteNote"
+              },
+              "confidence": {
+                "path": "/rationale/confidence"
+              },
+              "confidenceLabel": {
+                "path": "/rationale/confidenceLabel"
+              },
+              "degraded": {
+                "path": "/rationale/degraded"
+              },
+              "themeName": {
+                "path": "/rationale/themeName"
+              },
+              "genreName": {
+                "path": "/rationale/genreName"
+              },
+              "emphasis": "hero",
+              "onExplainDimension": {
+                "action": "barogroove.explainDimension",
+                "context": {
+                  "dimension": {
+                    "path": "/selectedDimension"
+                  }
+                }
+              },
+              "properties": {
+                "rationale": {
+                  "path": "/rationale"
+                }
+              }
+            },
+            {
+              "id": "trackList",
+              "component": "TrackList",
+              "title": {
+                "path": "/playlist/title"
+              },
+              "subtitle": {
+                "path": "/playlist/subtitle"
+              },
+              "trackCount": {
+                "path": "/playlist/trackCount"
+              },
+              "durationDisplay": {
+                "path": "/playlist/durationDisplay"
+              },
+              "arcLegend": {
+                "path": "/playlist/arcLegend"
+              },
+              "showWhy": {
+                "path": "/playlist/showWhy"
+              },
+              "items": {
+                "path": "/playlist/tracks"
+              },
+              "properties": {
+                "feedbackAction": {
+                  "actionId": "barogroove.trackFeedback",
+                  "payload": {
+                    "playlistId": {
+                      "literalString": "pl-fixture-0001"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "updateDataModel": {
+          "surfaceId": "playlist",
+          "path": "/",
+          "contents": {
+            "playlist": {
+              "id": "pl-fixture-0001",
+              "title": "Nine Hectopascals Down",
+              "subtitle": "Petrichor x krautrock",
+              "themeId": "petrichor",
+              "genreId": "krautrock",
+              "createdAt": "2026-03-14T17:05:00+00:00",
+              "trackCount": 7,
+              "durationDisplay": "24 min",
+              "arcLegend": [
+                "Opener",
+                "Build",
+                "Peak",
+                "Descent",
+                "Closer",
+                "Body"
+              ],
+              "showWhy": true,
+              "tracks": [
+                {
+                  "index": 0,
+                  "playlistId": "pl-fixture-0001",
+                  "trackKey": "artist 0|track 0",
+                  "position": 1,
+                  "title": "Track 0",
+                  "artist": "Artist 0",
+                  "display": "Artist 0 \u2014 Track 0",
+                  "role": "opener",
+                  "roleLabel": "Opener",
+                  "why": "Sits at 1 because the fall wants momentum here.",
+                  "durationDisplay": "3:30",
+                  "score": 0.9,
+                  "sonicDistance": 0.1,
+                  "loved": false,
+                  "skipped": false,
+                  "spotifyUri": "spotify:track:0000000000000000000000",
+                  "track_key": "artist 0|track 0",
+                  "spotify_uri": "spotify:track:0000000000000000000000",
+                  "sonic_distance": 0.1,
+                  "album": null,
+                  "duration_ms": 210000,
+                  "tags": [
+                    "krautrock"
+                  ],
+                  "lastfm_url": null,
+                  "taste_affinity": 0.0,
+                  "corridor_fit": 0.0,
+                  "novelty": 0.0
+                },
+                {
+                  "index": 1,
+                  "playlistId": "pl-fixture-0001",
+                  "trackKey": "artist 1|track 1",
+                  "position": 2,
+                  "title": "Track 1",
+                  "artist": "Artist 1",
+                  "display": "Artist 1 \u2014 Track 1",
+                  "role": "build",
+                  "roleLabel": "Build",
+                  "why": "Sits at 2 because the fall wants momentum here.",
+                  "durationDisplay": "3:31",
+                  "score": 0.85,
+                  "sonicDistance": 0.12,
+                  "loved": false,
+                  "skipped": false,
+                  "spotifyUri": "spotify:track:0000000000000000000001",
+                  "track_key": "artist 1|track 1",
+                  "spotify_uri": "spotify:track:0000000000000000000001",
+                  "sonic_distance": 0.12,
+                  "album": null,
+                  "duration_ms": 211000,
+                  "tags": [
+                    "krautrock"
+                  ],
+                  "lastfm_url": null,
+                  "taste_affinity": 0.0,
+                  "corridor_fit": 0.0,
+                  "novelty": 0.0
+                },
+                {
+                  "index": 2,
+                  "playlistId": "pl-fixture-0001",
+                  "trackKey": "artist 2|track 2",
+                  "position": 3,
+                  "title": "Track 2",
+                  "artist": "Artist 2",
+                  "display": "Artist 2 \u2014 Track 2",
+                  "role": "peak",
+                  "roleLabel": "Peak",
+                  "why": "Sits at 3 because the fall wants momentum here.",
+                  "durationDisplay": "3:32",
+                  "score": 0.8,
+                  "sonicDistance": 0.14,
+                  "loved": false,
+                  "skipped": false,
+                  "spotifyUri": "spotify:track:0000000000000000000002",
+                  "track_key": "artist 2|track 2",
+                  "spotify_uri": "spotify:track:0000000000000000000002",
+                  "sonic_distance": 0.14,
+                  "album": null,
+                  "duration_ms": 212000,
+                  "tags": [
+                    "krautrock"
+                  ],
+                  "lastfm_url": null,
+                  "taste_affinity": 0.0,
+                  "corridor_fit": 0.0,
+                  "novelty": 0.0
+                },
+                {
+                  "index": 3,
+                  "playlistId": "pl-fixture-0001",
+                  "trackKey": "artist 3|track 3",
+                  "position": 4,
+                  "title": "Track 3",
+                  "artist": "Artist 3",
+                  "display": "Artist 3 \u2014 Track 3",
+                  "role": "descent",
+                  "roleLabel": "Descent",
+                  "why": "Sits at 4 because the fall wants momentum here.",
+                  "durationDisplay": "3:33",
+                  "score": 0.75,
+                  "sonicDistance": 0.16,
+                  "loved": false,
+                  "skipped": false,
+                  "spotifyUri": "spotify:track:0000000000000000000003",
+                  "track_key": "artist 3|track 3",
+                  "spotify_uri": "spotify:track:0000000000000000000003",
+                  "sonic_distance": 0.16,
+                  "album": null,
+                  "duration_ms": 213000,
+                  "tags": [
+                    "krautrock"
+                  ],
+                  "lastfm_url": null,
+                  "taste_affinity": 0.0,
+                  "corridor_fit": 0.0,
+                  "novelty": 0.0
+                },
+                {
+                  "index": 4,
+                  "playlistId": "pl-fixture-0001",
+                  "trackKey": "artist 4|track 4",
+                  "position": 5,
+                  "title": "Track 4",
+                  "artist": "Artist 4",
+                  "display": "Artist 4 \u2014 Track 4",
+                  "role": "closer",
+                  "roleLabel": "Closer",
+                  "why": "Sits at 5 because the fall wants momentum here.",
+                  "durationDisplay": "3:34",
+                  "score": 0.7,
+                  "sonicDistance": 0.18,
+                  "loved": false,
+                  "skipped": false,
+                  "spotifyUri": "spotify:track:0000000000000000000004",
+                  "track_key": "artist 4|track 4",
+                  "spotify_uri": "spotify:track:0000000000000000000004",
+                  "sonic_distance": 0.18,
+                  "album": null,
+                  "duration_ms": 214000,
+                  "tags": [
+                    "krautrock"
+                  ],
+                  "lastfm_url": null,
+                  "taste_affinity": 0.0,
+                  "corridor_fit": 0.0,
+                  "novelty": 0.0
+                },
+                {
+                  "index": 5,
+                  "playlistId": "pl-fixture-0001",
+                  "trackKey": "artist 5|track 5",
+                  "position": 6,
+                  "title": "Track 5",
+                  "artist": "Artist 5",
+                  "display": "Artist 5 \u2014 Track 5",
+                  "role": "opener",
+                  "roleLabel": "Opener",
+                  "why": "Sits at 6 because the fall wants momentum here.",
+                  "durationDisplay": "3:35",
+                  "score": 0.65,
+                  "sonicDistance": 0.2,
+                  "loved": false,
+                  "skipped": false,
+                  "spotifyUri": "spotify:track:0000000000000000000005",
+                  "track_key": "artist 5|track 5",
+                  "spotify_uri": "spotify:track:0000000000000000000005",
+                  "sonic_distance": 0.2,
+                  "album": null,
+                  "duration_ms": 215000,
+                  "tags": [
+                    "krautrock"
+                  ],
+                  "lastfm_url": null,
+                  "taste_affinity": 0.0,
+                  "corridor_fit": 0.0,
+                  "novelty": 0.0
+                },
+                {
+                  "index": 6,
+                  "playlistId": "pl-fixture-0001",
+                  "trackKey": "artist 6|track 6",
+                  "position": 7,
+                  "title": "Track 6",
+                  "artist": "Artist 6",
+                  "display": "Artist 6 \u2014 Track 6",
+                  "role": "build",
+                  "roleLabel": "Build",
+                  "why": "Sits at 7 because the fall wants momentum here.",
+                  "durationDisplay": "3:36",
+                  "score": 0.6,
+                  "sonicDistance": 0.22,
+                  "loved": false,
+                  "skipped": false,
+                  "spotifyUri": "spotify:track:0000000000000000000006",
+                  "track_key": "artist 6|track 6",
+                  "spotify_uri": "spotify:track:0000000000000000000006",
+                  "sonic_distance": 0.22,
+                  "album": null,
+                  "duration_ms": 216000,
+                  "tags": [
+                    "krautrock"
+                  ],
+                  "lastfm_url": null,
+                  "taste_affinity": 0.0,
+                  "corridor_fit": 0.0,
+                  "novelty": 0.0
+                }
+              ]
+            },
+            "rationale": {
+              "headline": "Pressure fell nine hectopascals; the music leans in.",
+              "body": "A six-hour collapse of this size usually lands as restlessness.",
+              "skyReading": [
+                "Pressure trend -9.2 hPa/6h - the steepest fall in a fortnight.",
+                "Gust variance 7.4 m/s - the wind is not settled."
+              ],
+              "sonicMoves": [
+                "energy +0.18",
+                "acousticness -0.12",
+                "grit +0.09"
+              ],
+              "tasteNote": "You reach for motorik when the barometer drops.",
+              "confidence": 0.82,
+              "confidenceLabel": "high",
+              "degraded": [],
+              "themeName": "petrichor",
+              "genreName": "krautrock",
+              "sky_reading": [
+                "Pressure trend -9.2 hPa/6h - the steepest fall in a fortnight.",
+                "Gust variance 7.4 m/s - the wind is not settled."
+              ],
+              "sonic_moves": [
+                "energy +0.18",
+                "acousticness -0.12",
+                "grit +0.09"
+              ],
+              "taste_note": "You reach for motorik when the barometer drops."
+            },
+            "selectedDimension": "pressure_trend_6h"
+          }
+        }
+      }
+    ]
+  },
+  "rationale": {
+    "raw": [
+      {
+        "createSurface": {
+          "surfaceId": "rationale",
+          "catalogId": "https://bg.netdev.be/a2ui/catalogs/barogroove/v1",
+          "surfaceProperties": {
+            "colorScheme": "light",
+            "contrast": "high",
+            "density": "comfortable",
+            "palette": {
+              "canvas": "#F5F7FA",
+              "surface": "#FFFFFF",
+              "surfaceSunken": "#EDF1F6",
+              "surfaceRaised": "#FFFFFF",
+              "border": "#CBD5E1",
+              "borderStrong": "#94A3B8",
+              "ink": "#0F172A",
+              "inkMuted": "#475569",
+              "inkSubtle": "#64748B",
+              "inkInverse": "#FFFFFF",
+              "accent": "#0369A1",
+              "accentStrong": "#075985",
+              "accentSoft": "#E0F2FE",
+              "accentInk": "#0C4A6E",
+              "onAccent": "#FFFFFF",
+              "gold": "#A16207",
+              "goldSoft": "#FEF3C7",
+              "goldInk": "#713F12",
+              "positive": "#15803D",
+              "warning": "#B45309",
+              "critical": "#B91C1C",
+              "criticalSoft": "#FEE2E2",
+              "criticalInk": "#7F1D1D",
+              "dataCold": "#1D4ED8",
+              "dataCool": "#0369A1",
+              "dataNeutral": "#64748B",
+              "dataWarm": "#A16207",
+              "dataHot": "#B45309"
+            },
+            "typography": {
+              "fontFamily": "Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+              "fontFamilyMono": "'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+              "scale": {
+                "display": {
+                  "size": 34,
+                  "lineHeight": 40,
+                  "weight": 650,
+                  "tracking": -0.6
+                },
+                "title": {
+                  "size": 24,
+                  "lineHeight": 30,
+                  "weight": 620,
+                  "tracking": -0.3
+                },
+                "heading": {
+                  "size": 18,
+                  "lineHeight": 24,
+                  "weight": 600,
+                  "tracking": -0.1
+                },
+                "body": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 400,
+                  "tracking": 0.0
+                },
+                "bodyStrong": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 600,
+                  "tracking": 0.0
+                },
+                "caption": {
+                  "size": 13,
+                  "lineHeight": 18,
+                  "weight": 500,
+                  "tracking": 0.1
+                },
+                "label": {
+                  "size": 11,
+                  "lineHeight": 14,
+                  "weight": 650,
+                  "tracking": 0.8
+                },
+                "numeric": {
+                  "size": 15,
+                  "lineHeight": 20,
+                  "weight": 550,
+                  "tracking": 0.0
+                }
+              },
+              "tabularNumerals": true
+            },
+            "spacing": {
+              "xs": 4,
+              "sm": 8,
+              "md": 12,
+              "lg": 16,
+              "xl": 24,
+              "xxl": 32,
+              "section": 40
+            },
+            "radius": {
+              "sm": 4,
+              "md": 8,
+              "lg": 12,
+              "pill": 999
+            },
+            "elevation": {
+              "flat": "none",
+              "card": "0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)",
+              "hero": "0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)",
+              "overlay": "0 12px 32px rgba(15, 23, 42, 0.16)"
+            },
+            "motion": {
+              "durationFast": 120,
+              "durationBase": 200,
+              "durationSlow": 320,
+              "easing": "cubic-bezier(0.2, 0, 0, 1)",
+              "respectsReducedMotion": true
+            }
+          },
+          "sendDataModel": true
+        }
+      },
+      {
+        "updateComponents": {
+          "surfaceId": "rationale",
+          "components": [
+            {
+              "id": "root",
+              "component": "Stack",
+              "children": [
+                "rationale"
+              ],
+              "direction": "vertical",
+              "gap": "section",
+              "padding": "xl",
+              "tone": "canvas",
+              "maxWidth": 960,
+              "align": "stretch",
+              "heading": {
+                "path": "/page/heading"
+              }
+            },
+            {
+              "id": "rationale",
+              "component": "RationaleCard",
+              "accessibility": {
+                "label": {
+                  "path": "/rationale/headline"
+                },
+                "live": "polite"
+              },
+              "headline": {
+                "path": "/rationale/headline"
+              },
+              "body": {
+                "path": "/rationale/body"
+              },
+              "skyReading": {
+                "path": "/rationale/skyReading"
+              },
+              "sonicMoves": {
+                "path": "/rationale/sonicMoves"
+              },
+              "tasteNote": {
+                "path": "/rationale/tasteNote"
+              },
+              "confidence": {
+                "path": "/rationale/confidence"
+              },
+              "confidenceLabel": {
+                "path": "/rationale/confidenceLabel"
+              },
+              "degraded": {
+                "path": "/rationale/degraded"
+              },
+              "themeName": {
+                "path": "/rationale/themeName"
+              },
+              "genreName": {
+                "path": "/rationale/genreName"
+              },
+              "emphasis": "hero",
+              "onExplainDimension": {
+                "action": "barogroove.explainDimension",
+                "context": {
+                  "dimension": {
+                    "path": "/selectedDimension"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "updateDataModel": {
+          "surfaceId": "rationale",
+          "path": "/",
+          "contents": {
+            "page": {
+              "heading": "Why this playlist"
+            },
+            "rationale": {
+              "headline": "Pressure fell nine hectopascals; the music leans in.",
+              "body": "A six-hour collapse of this size usually lands as restlessness.",
+              "skyReading": [
+                "Pressure trend -9.2 hPa/6h - the steepest fall in a fortnight.",
+                "Gust variance 7.4 m/s - the wind is not settled."
+              ],
+              "sonicMoves": [
+                "energy +0.18",
+                "acousticness -0.12",
+                "grit +0.09"
+              ],
+              "tasteNote": "You reach for motorik when the barometer drops.",
+              "confidence": 0.82,
+              "confidenceLabel": "high",
+              "degraded": [],
+              "themeName": "",
+              "genreName": ""
+            },
+            "selectedDimension": "pressure_trend_6h"
+          }
+        }
+      }
+    ],
+    "flutter": [
+      {
+        "createSurface": {
+          "surfaceId": "rationale",
+          "catalogId": "https://bg.netdev.be/a2ui/catalogs/barogroove/v1",
+          "surfaceProperties": {
+            "colorScheme": "light",
+            "contrast": "high",
+            "density": "comfortable",
+            "palette": {
+              "canvas": "#F5F7FA",
+              "surface": "#FFFFFF",
+              "surfaceSunken": "#EDF1F6",
+              "surfaceRaised": "#FFFFFF",
+              "border": "#CBD5E1",
+              "borderStrong": "#94A3B8",
+              "ink": "#0F172A",
+              "inkMuted": "#475569",
+              "inkSubtle": "#64748B",
+              "inkInverse": "#FFFFFF",
+              "accent": "#0369A1",
+              "accentStrong": "#075985",
+              "accentSoft": "#E0F2FE",
+              "accentInk": "#0C4A6E",
+              "onAccent": "#FFFFFF",
+              "gold": "#A16207",
+              "goldSoft": "#FEF3C7",
+              "goldInk": "#713F12",
+              "positive": "#15803D",
+              "warning": "#B45309",
+              "critical": "#B91C1C",
+              "criticalSoft": "#FEE2E2",
+              "criticalInk": "#7F1D1D",
+              "dataCold": "#1D4ED8",
+              "dataCool": "#0369A1",
+              "dataNeutral": "#64748B",
+              "dataWarm": "#A16207",
+              "dataHot": "#B45309"
+            },
+            "typography": {
+              "fontFamily": "Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+              "fontFamilyMono": "'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+              "scale": {
+                "display": {
+                  "size": 34,
+                  "lineHeight": 40,
+                  "weight": 650,
+                  "tracking": -0.6
+                },
+                "title": {
+                  "size": 24,
+                  "lineHeight": 30,
+                  "weight": 620,
+                  "tracking": -0.3
+                },
+                "heading": {
+                  "size": 18,
+                  "lineHeight": 24,
+                  "weight": 600,
+                  "tracking": -0.1
+                },
+                "body": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 400,
+                  "tracking": 0.0
+                },
+                "bodyStrong": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 600,
+                  "tracking": 0.0
+                },
+                "caption": {
+                  "size": 13,
+                  "lineHeight": 18,
+                  "weight": 500,
+                  "tracking": 0.1
+                },
+                "label": {
+                  "size": 11,
+                  "lineHeight": 14,
+                  "weight": 650,
+                  "tracking": 0.8
+                },
+                "numeric": {
+                  "size": 15,
+                  "lineHeight": 20,
+                  "weight": 550,
+                  "tracking": 0.0
+                }
+              },
+              "tabularNumerals": true
+            },
+            "spacing": {
+              "xs": 4,
+              "sm": 8,
+              "md": 12,
+              "lg": 16,
+              "xl": 24,
+              "xxl": 32,
+              "section": 40
+            },
+            "radius": {
+              "sm": 4,
+              "md": 8,
+              "lg": 12,
+              "pill": 999
+            },
+            "elevation": {
+              "flat": "none",
+              "card": "0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)",
+              "hero": "0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)",
+              "overlay": "0 12px 32px rgba(15, 23, 42, 0.16)"
+            },
+            "motion": {
+              "durationFast": 120,
+              "durationBase": 200,
+              "durationSlow": 320,
+              "easing": "cubic-bezier(0.2, 0, 0, 1)",
+              "respectsReducedMotion": true
+            }
+          },
+          "sendDataModel": true
+        }
+      },
+      {
+        "updateComponents": {
+          "surfaceId": "rationale",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "rationale"
+              ],
+              "direction": "vertical",
+              "gap": "section",
+              "padding": "xl",
+              "tone": "canvas",
+              "maxWidth": 960,
+              "align": "stretch",
+              "heading": {
+                "path": "/page/heading"
+              },
+              "properties": {}
+            },
+            {
+              "id": "rationale",
+              "component": "RationaleCard",
+              "accessibility": {
+                "label": {
+                  "path": "/rationale/headline"
+                },
+                "live": "polite"
+              },
+              "headline": {
+                "path": "/rationale/headline"
+              },
+              "body": {
+                "path": "/rationale/body"
+              },
+              "skyReading": {
+                "path": "/rationale/skyReading"
+              },
+              "sonicMoves": {
+                "path": "/rationale/sonicMoves"
+              },
+              "tasteNote": {
+                "path": "/rationale/tasteNote"
+              },
+              "confidence": {
+                "path": "/rationale/confidence"
+              },
+              "confidenceLabel": {
+                "path": "/rationale/confidenceLabel"
+              },
+              "degraded": {
+                "path": "/rationale/degraded"
+              },
+              "themeName": {
+                "path": "/rationale/themeName"
+              },
+              "genreName": {
+                "path": "/rationale/genreName"
+              },
+              "emphasis": "hero",
+              "onExplainDimension": {
+                "action": "barogroove.explainDimension",
+                "context": {
+                  "dimension": {
+                    "path": "/selectedDimension"
+                  }
+                }
+              },
+              "properties": {
+                "rationale": {
+                  "path": "/rationale"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "updateDataModel": {
+          "surfaceId": "rationale",
+          "path": "/",
+          "contents": {
+            "page": {
+              "heading": "Why this playlist"
+            },
+            "rationale": {
+              "headline": "Pressure fell nine hectopascals; the music leans in.",
+              "body": "A six-hour collapse of this size usually lands as restlessness.",
+              "skyReading": [
+                "Pressure trend -9.2 hPa/6h - the steepest fall in a fortnight.",
+                "Gust variance 7.4 m/s - the wind is not settled."
+              ],
+              "sonicMoves": [
+                "energy +0.18",
+                "acousticness -0.12",
+                "grit +0.09"
+              ],
+              "tasteNote": "You reach for motorik when the barometer drops.",
+              "confidence": 0.82,
+              "confidenceLabel": "high",
+              "degraded": [],
+              "themeName": "",
+              "genreName": "",
+              "sky_reading": [
+                "Pressure trend -9.2 hPa/6h - the steepest fall in a fortnight.",
+                "Gust variance 7.4 m/s - the wind is not settled."
+              ],
+              "sonic_moves": [
+                "energy +0.18",
+                "acousticness -0.12",
+                "grit +0.09"
+              ],
+              "taste_note": "You reach for motorik when the barometer drops."
+            },
+            "selectedDimension": "pressure_trend_6h"
+          }
+        }
+      }
+    ]
+  },
+  "almanac": {
+    "raw": [
+      {
+        "createSurface": {
+          "surfaceId": "almanac",
+          "catalogId": "https://bg.netdev.be/a2ui/catalogs/barogroove/v1",
+          "surfaceProperties": {
+            "colorScheme": "light",
+            "contrast": "high",
+            "density": "comfortable",
+            "palette": {
+              "canvas": "#F5F7FA",
+              "surface": "#FFFFFF",
+              "surfaceSunken": "#EDF1F6",
+              "surfaceRaised": "#FFFFFF",
+              "border": "#CBD5E1",
+              "borderStrong": "#94A3B8",
+              "ink": "#0F172A",
+              "inkMuted": "#475569",
+              "inkSubtle": "#64748B",
+              "inkInverse": "#FFFFFF",
+              "accent": "#0369A1",
+              "accentStrong": "#075985",
+              "accentSoft": "#E0F2FE",
+              "accentInk": "#0C4A6E",
+              "onAccent": "#FFFFFF",
+              "gold": "#A16207",
+              "goldSoft": "#FEF3C7",
+              "goldInk": "#713F12",
+              "positive": "#15803D",
+              "warning": "#B45309",
+              "critical": "#B91C1C",
+              "criticalSoft": "#FEE2E2",
+              "criticalInk": "#7F1D1D",
+              "dataCold": "#1D4ED8",
+              "dataCool": "#0369A1",
+              "dataNeutral": "#64748B",
+              "dataWarm": "#A16207",
+              "dataHot": "#B45309"
+            },
+            "typography": {
+              "fontFamily": "Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+              "fontFamilyMono": "'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+              "scale": {
+                "display": {
+                  "size": 34,
+                  "lineHeight": 40,
+                  "weight": 650,
+                  "tracking": -0.6
+                },
+                "title": {
+                  "size": 24,
+                  "lineHeight": 30,
+                  "weight": 620,
+                  "tracking": -0.3
+                },
+                "heading": {
+                  "size": 18,
+                  "lineHeight": 24,
+                  "weight": 600,
+                  "tracking": -0.1
+                },
+                "body": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 400,
+                  "tracking": 0.0
+                },
+                "bodyStrong": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 600,
+                  "tracking": 0.0
+                },
+                "caption": {
+                  "size": 13,
+                  "lineHeight": 18,
+                  "weight": 500,
+                  "tracking": 0.1
+                },
+                "label": {
+                  "size": 11,
+                  "lineHeight": 14,
+                  "weight": 650,
+                  "tracking": 0.8
+                },
+                "numeric": {
+                  "size": 15,
+                  "lineHeight": 20,
+                  "weight": 550,
+                  "tracking": 0.0
+                }
+              },
+              "tabularNumerals": true
+            },
+            "spacing": {
+              "xs": 4,
+              "sm": 8,
+              "md": 12,
+              "lg": 16,
+              "xl": 24,
+              "xxl": 32,
+              "section": 40
+            },
+            "radius": {
+              "sm": 4,
+              "md": 8,
+              "lg": 12,
+              "pill": 999
+            },
+            "elevation": {
+              "flat": "none",
+              "card": "0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)",
+              "hero": "0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)",
+              "overlay": "0 12px 32px rgba(15, 23, 42, 0.16)"
+            },
+            "motion": {
+              "durationFast": 120,
+              "durationBase": 200,
+              "durationSlow": 320,
+              "easing": "cubic-bezier(0.2, 0, 0, 1)",
+              "respectsReducedMotion": true
+            }
+          },
+          "sendDataModel": true
+        }
+      },
+      {
+        "updateComponents": {
+          "surfaceId": "almanac",
+          "components": [
+            {
+              "id": "root",
+              "component": "Stack",
+              "children": [
+                "almanac"
+              ],
+              "direction": "vertical",
+              "gap": "section",
+              "padding": "xl",
+              "tone": "canvas",
+              "maxWidth": 960,
+              "align": "stretch"
+            },
+            {
+              "id": "almanac",
+              "component": "AlmanacTimeline",
+              "title": {
+                "path": "/almanac/title"
+              },
+              "subtitle": {
+                "path": "/almanac/subtitle"
+              },
+              "groupBy": {
+                "path": "/almanac/groupBy"
+              },
+              "emptyMessage": {
+                "path": "/almanac/emptyMessage"
+              },
+              "entryCount": {
+                "path": "/almanac/entryCount"
+              },
+              "entries": {
+                "componentId": "almanacEntry",
+                "dataBinding": "/almanac/entries"
+              },
+              "items": {
+                "path": "/almanac/entries"
+              },
+              "retrospective": {
+                "path": "/almanac/subtitle"
+              },
+              "action": {
+                "action": "barogroove.openAlmanacEntry",
+                "context": {
+                  "playlistId": {
+                    "path": "/almanac/selectedPlaylistId"
+                  }
+                },
+                "sendDataModel": false
+              }
+            },
+            {
+              "id": "almanacEntry",
+              "component": "AlmanacEntry",
+              "accessibility": {
+                "label": {
+                  "path": "/title"
+                },
+                "description": {
+                  "path": "/badge"
+                }
+              },
+              "playlistId": {
+                "path": "/playlistId"
+              },
+              "title": {
+                "path": "/title"
+              },
+              "subtitle": {
+                "path": "/subtitle"
+              },
+              "badge": {
+                "path": "/badge"
+              },
+              "createdAt": {
+                "path": "/createdAt"
+              },
+              "createdLabel": {
+                "path": "/createdLabel"
+              },
+              "themeId": {
+                "path": "/themeId"
+              },
+              "themeName": {
+                "path": "/themeName"
+              },
+              "genreName": {
+                "path": "/genreName"
+              },
+              "accent": {
+                "path": "/accent"
+              },
+              "headline": {
+                "path": "/headline"
+              },
+              "trackCount": {
+                "path": "/trackCount"
+              },
+              "onOpen": {
+                "action": "barogroove.openAlmanacEntry",
+                "context": {
+                  "playlistId": {
+                    "path": "/playlistId"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "updateDataModel": {
+          "surfaceId": "almanac",
+          "path": "/",
+          "contents": {
+            "almanac": {
+              "title": "Your almanac",
+              "subtitle": "Every sky you have forged, kept in the light it was made in.",
+              "groupBy": "season",
+              "emptyMessage": "No forges yet. Read the sky and make the first one.",
+              "entryCount": 1,
+              "selectedPlaylistId": "",
+              "entries": [
+                {
+                  "playlistId": "pl-fixture-0001",
+                  "title": "Nine Hectopascals Down",
+                  "subtitle": "Petrichor x krautrock",
+                  "badge": "your rain sound",
+                  "createdAt": "2026-03-14T17:05:00+00:00",
+                  "createdLabel": "14 Mar 2026",
+                  "themeId": "petrichor",
+                  "themeName": "Petrichor",
+                  "genreName": "Krautrock",
+                  "accent": "#0F6656",
+                  "headline": "Pressure fell nine hectopascals; the music leans in.",
+                  "trackCount": 7
+                }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "flutter": [
+      {
+        "createSurface": {
+          "surfaceId": "almanac",
+          "catalogId": "https://bg.netdev.be/a2ui/catalogs/barogroove/v1",
+          "surfaceProperties": {
+            "colorScheme": "light",
+            "contrast": "high",
+            "density": "comfortable",
+            "palette": {
+              "canvas": "#F5F7FA",
+              "surface": "#FFFFFF",
+              "surfaceSunken": "#EDF1F6",
+              "surfaceRaised": "#FFFFFF",
+              "border": "#CBD5E1",
+              "borderStrong": "#94A3B8",
+              "ink": "#0F172A",
+              "inkMuted": "#475569",
+              "inkSubtle": "#64748B",
+              "inkInverse": "#FFFFFF",
+              "accent": "#0369A1",
+              "accentStrong": "#075985",
+              "accentSoft": "#E0F2FE",
+              "accentInk": "#0C4A6E",
+              "onAccent": "#FFFFFF",
+              "gold": "#A16207",
+              "goldSoft": "#FEF3C7",
+              "goldInk": "#713F12",
+              "positive": "#15803D",
+              "warning": "#B45309",
+              "critical": "#B91C1C",
+              "criticalSoft": "#FEE2E2",
+              "criticalInk": "#7F1D1D",
+              "dataCold": "#1D4ED8",
+              "dataCool": "#0369A1",
+              "dataNeutral": "#64748B",
+              "dataWarm": "#A16207",
+              "dataHot": "#B45309"
+            },
+            "typography": {
+              "fontFamily": "Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+              "fontFamilyMono": "'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+              "scale": {
+                "display": {
+                  "size": 34,
+                  "lineHeight": 40,
+                  "weight": 650,
+                  "tracking": -0.6
+                },
+                "title": {
+                  "size": 24,
+                  "lineHeight": 30,
+                  "weight": 620,
+                  "tracking": -0.3
+                },
+                "heading": {
+                  "size": 18,
+                  "lineHeight": 24,
+                  "weight": 600,
+                  "tracking": -0.1
+                },
+                "body": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 400,
+                  "tracking": 0.0
+                },
+                "bodyStrong": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 600,
+                  "tracking": 0.0
+                },
+                "caption": {
+                  "size": 13,
+                  "lineHeight": 18,
+                  "weight": 500,
+                  "tracking": 0.1
+                },
+                "label": {
+                  "size": 11,
+                  "lineHeight": 14,
+                  "weight": 650,
+                  "tracking": 0.8
+                },
+                "numeric": {
+                  "size": 15,
+                  "lineHeight": 20,
+                  "weight": 550,
+                  "tracking": 0.0
+                }
+              },
+              "tabularNumerals": true
+            },
+            "spacing": {
+              "xs": 4,
+              "sm": 8,
+              "md": 12,
+              "lg": 16,
+              "xl": 24,
+              "xxl": 32,
+              "section": 40
+            },
+            "radius": {
+              "sm": 4,
+              "md": 8,
+              "lg": 12,
+              "pill": 999
+            },
+            "elevation": {
+              "flat": "none",
+              "card": "0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)",
+              "hero": "0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)",
+              "overlay": "0 12px 32px rgba(15, 23, 42, 0.16)"
+            },
+            "motion": {
+              "durationFast": 120,
+              "durationBase": 200,
+              "durationSlow": 320,
+              "easing": "cubic-bezier(0.2, 0, 0, 1)",
+              "respectsReducedMotion": true
+            }
+          },
+          "sendDataModel": true
+        }
+      },
+      {
+        "updateComponents": {
+          "surfaceId": "almanac",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "almanac"
+              ],
+              "direction": "vertical",
+              "gap": "section",
+              "padding": "xl",
+              "tone": "canvas",
+              "maxWidth": 960,
+              "align": "stretch",
+              "properties": {}
+            },
+            {
+              "id": "almanac",
+              "component": "AlmanacTimeline",
+              "title": {
+                "path": "/almanac/title"
+              },
+              "subtitle": {
+                "path": "/almanac/subtitle"
+              },
+              "groupBy": {
+                "path": "/almanac/groupBy"
+              },
+              "emptyMessage": {
+                "path": "/almanac/emptyMessage"
+              },
+              "entryCount": {
+                "path": "/almanac/entryCount"
+              },
+              "items": {
+                "path": "/almanac/entries"
+              },
+              "retrospective": {
+                "path": "/almanac/subtitle"
+              },
+              "action": {
+                "action": "barogroove.openAlmanacEntry",
+                "context": {
+                  "playlistId": {
+                    "path": "/almanac/selectedPlaylistId"
+                  }
+                },
+                "sendDataModel": false
+              },
+              "properties": {}
+            }
+          ]
+        }
+      },
+      {
+        "updateDataModel": {
+          "surfaceId": "almanac",
+          "path": "/",
+          "contents": {
+            "almanac": {
+              "title": "Your almanac",
+              "subtitle": "Every sky you have forged, kept in the light it was made in.",
+              "groupBy": "season",
+              "emptyMessage": "No forges yet. Read the sky and make the first one.",
+              "entryCount": 1,
+              "selectedPlaylistId": "",
+              "entries": [
+                {
+                  "playlistId": "pl-fixture-0001",
+                  "title": "Nine Hectopascals Down",
+                  "subtitle": "Petrichor x krautrock",
+                  "badge": "your rain sound",
+                  "createdAt": "2026-03-14T17:05:00+00:00",
+                  "createdLabel": "14 Mar 2026",
+                  "themeId": "petrichor",
+                  "themeName": "Petrichor",
+                  "genreName": "Krautrock",
+                  "accent": "#0F6656",
+                  "headline": "Pressure fell nine hectopascals; the music leans in.",
+                  "trackCount": 7,
+                  "id": "pl-fixture-0001",
+                  "created_at": "2026-03-14T17:05:00+00:00",
+                  "theme_id": "petrichor",
+                  "theme_name": "Petrichor",
+                  "track_count": 7,
+                  "pressure_trend_6h": -0.88
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  },
+  "telemetry": {
+    "raw": [
+      {
+        "createSurface": {
+          "surfaceId": "telemetry",
+          "catalogId": "https://bg.netdev.be/a2ui/catalogs/barogroove/v1",
+          "surfaceProperties": {
+            "colorScheme": "light",
+            "contrast": "high",
+            "density": "comfortable",
+            "palette": {
+              "canvas": "#F5F7FA",
+              "surface": "#FFFFFF",
+              "surfaceSunken": "#EDF1F6",
+              "surfaceRaised": "#FFFFFF",
+              "border": "#CBD5E1",
+              "borderStrong": "#94A3B8",
+              "ink": "#0F172A",
+              "inkMuted": "#475569",
+              "inkSubtle": "#64748B",
+              "inkInverse": "#FFFFFF",
+              "accent": "#0369A1",
+              "accentStrong": "#075985",
+              "accentSoft": "#E0F2FE",
+              "accentInk": "#0C4A6E",
+              "onAccent": "#FFFFFF",
+              "gold": "#A16207",
+              "goldSoft": "#FEF3C7",
+              "goldInk": "#713F12",
+              "positive": "#15803D",
+              "warning": "#B45309",
+              "critical": "#B91C1C",
+              "criticalSoft": "#FEE2E2",
+              "criticalInk": "#7F1D1D",
+              "dataCold": "#1D4ED8",
+              "dataCool": "#0369A1",
+              "dataNeutral": "#64748B",
+              "dataWarm": "#A16207",
+              "dataHot": "#B45309"
+            },
+            "typography": {
+              "fontFamily": "Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+              "fontFamilyMono": "'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+              "scale": {
+                "display": {
+                  "size": 34,
+                  "lineHeight": 40,
+                  "weight": 650,
+                  "tracking": -0.6
+                },
+                "title": {
+                  "size": 24,
+                  "lineHeight": 30,
+                  "weight": 620,
+                  "tracking": -0.3
+                },
+                "heading": {
+                  "size": 18,
+                  "lineHeight": 24,
+                  "weight": 600,
+                  "tracking": -0.1
+                },
+                "body": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 400,
+                  "tracking": 0.0
+                },
+                "bodyStrong": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 600,
+                  "tracking": 0.0
+                },
+                "caption": {
+                  "size": 13,
+                  "lineHeight": 18,
+                  "weight": 500,
+                  "tracking": 0.1
+                },
+                "label": {
+                  "size": 11,
+                  "lineHeight": 14,
+                  "weight": 650,
+                  "tracking": 0.8
+                },
+                "numeric": {
+                  "size": 15,
+                  "lineHeight": 20,
+                  "weight": 550,
+                  "tracking": 0.0
+                }
+              },
+              "tabularNumerals": true
+            },
+            "spacing": {
+              "xs": 4,
+              "sm": 8,
+              "md": 12,
+              "lg": 16,
+              "xl": 24,
+              "xxl": 32,
+              "section": 40
+            },
+            "radius": {
+              "sm": 4,
+              "md": 8,
+              "lg": 12,
+              "pill": 999
+            },
+            "elevation": {
+              "flat": "none",
+              "card": "0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)",
+              "hero": "0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)",
+              "overlay": "0 12px 32px rgba(15, 23, 42, 0.16)"
+            },
+            "motion": {
+              "durationFast": 120,
+              "durationBase": 200,
+              "durationSlow": 320,
+              "easing": "cubic-bezier(0.2, 0, 0, 1)",
+              "respectsReducedMotion": true
+            }
+          },
+          "sendDataModel": true
+        }
+      },
+      {
+        "updateComponents": {
+          "surfaceId": "telemetry",
+          "components": [
+            {
+              "id": "root",
+              "component": "Stack",
+              "children": [
+                "telemetryInspector"
+              ],
+              "direction": "vertical",
+              "gap": "section",
+              "padding": "xl",
+              "tone": "canvas",
+              "maxWidth": 960,
+              "align": "stretch"
+            },
+            {
+              "id": "telemetryInspector",
+              "component": "TelemetryInspector",
+              "title": {
+                "path": "/telemetry/title"
+              },
+              "subtitle": {
+                "path": "/telemetry/subtitle"
+              },
+              "totalAiCalls": {
+                "path": "/telemetry/totalAiCalls"
+              },
+              "totalTokens": {
+                "path": "/telemetry/totalTokens"
+              },
+              "activeSessions": {
+                "path": "/telemetry/activeSessions"
+              },
+              "storedMemories": {
+                "path": "/telemetry/storedMemories"
+              },
+              "avgLatencyMs": {
+                "path": "/telemetry/avgLatencyMs"
+              },
+              "onRefresh": {
+                "action": "barogroove.refreshTelemetry",
+                "context": {
+                  "surfaceId": {
+                    "path": "/telemetry/surfaceId"
+                  }
+                }
+              },
+              "entries": {
+                "componentId": "telemetryEntry",
+                "dataBinding": "/telemetry/entries"
+              },
+              "items": {
+                "path": "/telemetry/entries"
+              }
+            },
+            {
+              "id": "telemetryEntry",
+              "component": "TelemetryEntry",
+              "accessibility": {
+                "label": {
+                  "path": "/endpoint"
+                },
+                "description": {
+                  "path": "/executionPath"
+                }
+              },
+              "trajectoryId": {
+                "path": "/trajectoryId"
+              },
+              "surface": {
+                "path": "/surface"
+              },
+              "endpoint": {
+                "path": "/endpoint"
+              },
+              "executionPath": {
+                "path": "/executionPath"
+              },
+              "latencyMs": {
+                "path": "/latencyMs"
+              },
+              "totalTokens": {
+                "path": "/totalTokens"
+              },
+              "traceId": {
+                "path": "/traceId"
+              },
+              "createdAt": {
+                "path": "/createdAt"
+              },
+              "status": {
+                "path": "/status"
+              },
+              "onOpen": {
+                "action": "barogroove.openTelemetryTrace",
+                "context": {
+                  "trajectoryId": {
+                    "path": "/trajectoryId"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "updateDataModel": {
+          "surfaceId": "telemetry",
+          "path": "/",
+          "contents": {
+            "telemetry": {
+              "surfaceId": "telemetry",
+              "title": "AI Observability & Telemetry Inspector",
+              "subtitle": "Live Vertex AI Gemini 2.5 Flash & Multi-Surface Trace Stream",
+              "totalAiCalls": 2,
+              "totalTokens": 1939,
+              "activeSessions": 1,
+              "storedMemories": 7,
+              "avgLatencyMs": 406.75,
+              "entries": [
+                {
+                  "trajectoryId": "traj_fixture_0001",
+                  "surface": "a2ui",
+                  "endpoint": "GET /api/surfaces/themes",
+                  "executionPath": "deterministic-fallback",
+                  "latencyMs": 1.5,
+                  "totalTokens": 35,
+                  "traceId": "trace_fixture_0001",
+                  "createdAt": "2026-03-14T17:05:00Z",
+                  "status": "ok"
+                },
+                {
+                  "trajectoryId": "traj_fixture_0002",
+                  "surface": "advisor",
+                  "endpoint": "POST /api/advisor/ask",
+                  "executionPath": "gemini-2.5-flash",
+                  "latencyMs": 812.0,
+                  "totalTokens": 1904,
+                  "traceId": "trace_fixture_0002",
+                  "createdAt": "2026-03-14T17:06:00Z",
+                  "status": "ok"
+                }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "flutter": [
+      {
+        "createSurface": {
+          "surfaceId": "telemetry",
+          "catalogId": "https://bg.netdev.be/a2ui/catalogs/barogroove/v1",
+          "surfaceProperties": {
+            "colorScheme": "light",
+            "contrast": "high",
+            "density": "comfortable",
+            "palette": {
+              "canvas": "#F5F7FA",
+              "surface": "#FFFFFF",
+              "surfaceSunken": "#EDF1F6",
+              "surfaceRaised": "#FFFFFF",
+              "border": "#CBD5E1",
+              "borderStrong": "#94A3B8",
+              "ink": "#0F172A",
+              "inkMuted": "#475569",
+              "inkSubtle": "#64748B",
+              "inkInverse": "#FFFFFF",
+              "accent": "#0369A1",
+              "accentStrong": "#075985",
+              "accentSoft": "#E0F2FE",
+              "accentInk": "#0C4A6E",
+              "onAccent": "#FFFFFF",
+              "gold": "#A16207",
+              "goldSoft": "#FEF3C7",
+              "goldInk": "#713F12",
+              "positive": "#15803D",
+              "warning": "#B45309",
+              "critical": "#B91C1C",
+              "criticalSoft": "#FEE2E2",
+              "criticalInk": "#7F1D1D",
+              "dataCold": "#1D4ED8",
+              "dataCool": "#0369A1",
+              "dataNeutral": "#64748B",
+              "dataWarm": "#A16207",
+              "dataHot": "#B45309"
+            },
+            "typography": {
+              "fontFamily": "Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+              "fontFamilyMono": "'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+              "scale": {
+                "display": {
+                  "size": 34,
+                  "lineHeight": 40,
+                  "weight": 650,
+                  "tracking": -0.6
+                },
+                "title": {
+                  "size": 24,
+                  "lineHeight": 30,
+                  "weight": 620,
+                  "tracking": -0.3
+                },
+                "heading": {
+                  "size": 18,
+                  "lineHeight": 24,
+                  "weight": 600,
+                  "tracking": -0.1
+                },
+                "body": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 400,
+                  "tracking": 0.0
+                },
+                "bodyStrong": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 600,
+                  "tracking": 0.0
+                },
+                "caption": {
+                  "size": 13,
+                  "lineHeight": 18,
+                  "weight": 500,
+                  "tracking": 0.1
+                },
+                "label": {
+                  "size": 11,
+                  "lineHeight": 14,
+                  "weight": 650,
+                  "tracking": 0.8
+                },
+                "numeric": {
+                  "size": 15,
+                  "lineHeight": 20,
+                  "weight": 550,
+                  "tracking": 0.0
+                }
+              },
+              "tabularNumerals": true
+            },
+            "spacing": {
+              "xs": 4,
+              "sm": 8,
+              "md": 12,
+              "lg": 16,
+              "xl": 24,
+              "xxl": 32,
+              "section": 40
+            },
+            "radius": {
+              "sm": 4,
+              "md": 8,
+              "lg": 12,
+              "pill": 999
+            },
+            "elevation": {
+              "flat": "none",
+              "card": "0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)",
+              "hero": "0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)",
+              "overlay": "0 12px 32px rgba(15, 23, 42, 0.16)"
+            },
+            "motion": {
+              "durationFast": 120,
+              "durationBase": 200,
+              "durationSlow": 320,
+              "easing": "cubic-bezier(0.2, 0, 0, 1)",
+              "respectsReducedMotion": true
+            }
+          },
+          "sendDataModel": true
+        }
+      },
+      {
+        "updateComponents": {
+          "surfaceId": "telemetry",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "telemetryInspector"
+              ],
+              "direction": "vertical",
+              "gap": "section",
+              "padding": "xl",
+              "tone": "canvas",
+              "maxWidth": 960,
+              "align": "stretch",
+              "properties": {}
+            },
+            {
+              "id": "telemetryInspector",
+              "component": "TelemetryInspector",
+              "title": {
+                "path": "/telemetry/title"
+              },
+              "subtitle": {
+                "path": "/telemetry/subtitle"
+              },
+              "totalAiCalls": {
+                "path": "/telemetry/totalAiCalls"
+              },
+              "totalTokens": {
+                "path": "/telemetry/totalTokens"
+              },
+              "activeSessions": {
+                "path": "/telemetry/activeSessions"
+              },
+              "storedMemories": {
+                "path": "/telemetry/storedMemories"
+              },
+              "avgLatencyMs": {
+                "path": "/telemetry/avgLatencyMs"
+              },
+              "onRefresh": {
+                "action": "barogroove.refreshTelemetry",
+                "context": {
+                  "surfaceId": {
+                    "path": "/telemetry/surfaceId"
+                  }
+                }
+              },
+              "entries": {
+                "componentId": "telemetryEntry",
+                "dataBinding": "/telemetry/entries"
+              },
+              "items": {
+                "path": "/telemetry/entries"
+              },
+              "properties": {
+                "title": {
+                  "path": "/telemetry/title"
+                },
+                "subtitle": {
+                  "path": "/telemetry/subtitle"
+                },
+                "entries": {
+                  "path": "/telemetry/entries"
+                },
+                "action": {
+                  "actionId": "barogroove.openTelemetryTrace"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "updateDataModel": {
+          "surfaceId": "telemetry",
+          "path": "/",
+          "contents": {
+            "telemetry": {
+              "surfaceId": "telemetry",
+              "title": "AI Observability & Telemetry Inspector",
+              "subtitle": "Live Vertex AI Gemini 2.5 Flash & Multi-Surface Trace Stream",
+              "totalAiCalls": 2,
+              "totalTokens": 1939,
+              "activeSessions": 1,
+              "storedMemories": 7,
+              "avgLatencyMs": 406.75,
+              "entries": [
+                {
+                  "trajectoryId": "traj_fixture_0001",
+                  "surface": "a2ui",
+                  "endpoint": "GET /api/surfaces/themes",
+                  "executionPath": "deterministic-fallback",
+                  "latencyMs": 1.5,
+                  "totalTokens": 35,
+                  "traceId": "trace_fixture_0001",
+                  "createdAt": "2026-03-14T17:05:00Z",
+                  "status": "ok"
+                },
+                {
+                  "trajectoryId": "traj_fixture_0002",
+                  "surface": "advisor",
+                  "endpoint": "POST /api/advisor/ask",
+                  "executionPath": "gemini-2.5-flash",
+                  "latencyMs": 812.0,
+                  "totalTokens": 1904,
+                  "traceId": "trace_fixture_0002",
+                  "createdAt": "2026-03-14T17:06:00Z",
+                  "status": "ok"
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  },
+  "error": {
+    "raw": [
+      {
+        "createSurface": {
+          "surfaceId": "error",
+          "catalogId": "https://bg.netdev.be/a2ui/catalogs/barogroove/v1",
+          "surfaceProperties": {
+            "colorScheme": "light",
+            "contrast": "high",
+            "density": "comfortable",
+            "palette": {
+              "canvas": "#F5F7FA",
+              "surface": "#FFFFFF",
+              "surfaceSunken": "#EDF1F6",
+              "surfaceRaised": "#FFFFFF",
+              "border": "#CBD5E1",
+              "borderStrong": "#94A3B8",
+              "ink": "#0F172A",
+              "inkMuted": "#475569",
+              "inkSubtle": "#64748B",
+              "inkInverse": "#FFFFFF",
+              "accent": "#0369A1",
+              "accentStrong": "#075985",
+              "accentSoft": "#E0F2FE",
+              "accentInk": "#0C4A6E",
+              "onAccent": "#FFFFFF",
+              "gold": "#A16207",
+              "goldSoft": "#FEF3C7",
+              "goldInk": "#713F12",
+              "positive": "#15803D",
+              "warning": "#B45309",
+              "critical": "#B91C1C",
+              "criticalSoft": "#FEE2E2",
+              "criticalInk": "#7F1D1D",
+              "dataCold": "#1D4ED8",
+              "dataCool": "#0369A1",
+              "dataNeutral": "#64748B",
+              "dataWarm": "#A16207",
+              "dataHot": "#B45309"
+            },
+            "typography": {
+              "fontFamily": "Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+              "fontFamilyMono": "'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+              "scale": {
+                "display": {
+                  "size": 34,
+                  "lineHeight": 40,
+                  "weight": 650,
+                  "tracking": -0.6
+                },
+                "title": {
+                  "size": 24,
+                  "lineHeight": 30,
+                  "weight": 620,
+                  "tracking": -0.3
+                },
+                "heading": {
+                  "size": 18,
+                  "lineHeight": 24,
+                  "weight": 600,
+                  "tracking": -0.1
+                },
+                "body": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 400,
+                  "tracking": 0.0
+                },
+                "bodyStrong": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 600,
+                  "tracking": 0.0
+                },
+                "caption": {
+                  "size": 13,
+                  "lineHeight": 18,
+                  "weight": 500,
+                  "tracking": 0.1
+                },
+                "label": {
+                  "size": 11,
+                  "lineHeight": 14,
+                  "weight": 650,
+                  "tracking": 0.8
+                },
+                "numeric": {
+                  "size": 15,
+                  "lineHeight": 20,
+                  "weight": 550,
+                  "tracking": 0.0
+                }
+              },
+              "tabularNumerals": true
+            },
+            "spacing": {
+              "xs": 4,
+              "sm": 8,
+              "md": 12,
+              "lg": 16,
+              "xl": 24,
+              "xxl": 32,
+              "section": 40
+            },
+            "radius": {
+              "sm": 4,
+              "md": 8,
+              "lg": 12,
+              "pill": 999
+            },
+            "elevation": {
+              "flat": "none",
+              "card": "0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)",
+              "hero": "0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)",
+              "overlay": "0 12px 32px rgba(15, 23, 42, 0.16)"
+            },
+            "motion": {
+              "durationFast": 120,
+              "durationBase": 200,
+              "durationSlow": 320,
+              "easing": "cubic-bezier(0.2, 0, 0, 1)",
+              "respectsReducedMotion": true
+            }
+          },
+          "sendDataModel": false
+        }
+      },
+      {
+        "updateComponents": {
+          "surfaceId": "error",
+          "components": [
+            {
+              "id": "root",
+              "component": "Stack",
+              "children": [
+                "notice"
+              ],
+              "direction": "vertical",
+              "gap": "section",
+              "padding": "xl",
+              "tone": "canvas",
+              "maxWidth": 960,
+              "align": "stretch"
+            },
+            {
+              "id": "notice",
+              "component": "Notice",
+              "accessibility": {
+                "label": {
+                  "path": "/error/title"
+                },
+                "live": "assertive"
+              },
+              "tone": "critical",
+              "title": {
+                "path": "/error/title"
+              },
+              "message": {
+                "path": "/error/message"
+              },
+              "detail": {
+                "path": "/error/detail"
+              },
+              "degraded": {
+                "path": "/error/degraded"
+              },
+              "onRetry": {
+                "action": "barogroove.retry",
+                "context": {
+                  "intent": {
+                    "path": "/error/intent"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "updateDataModel": {
+          "surfaceId": "error",
+          "path": "/",
+          "contents": {
+            "error": {
+              "title": "The sky did not answer",
+              "message": "We could not read your sky just now.",
+              "detail": "upstream 503",
+              "degraded": [],
+              "intent": "forge"
+            }
+          }
+        }
+      }
+    ],
+    "flutter": [
+      {
+        "createSurface": {
+          "surfaceId": "error",
+          "catalogId": "https://bg.netdev.be/a2ui/catalogs/barogroove/v1",
+          "surfaceProperties": {
+            "colorScheme": "light",
+            "contrast": "high",
+            "density": "comfortable",
+            "palette": {
+              "canvas": "#F5F7FA",
+              "surface": "#FFFFFF",
+              "surfaceSunken": "#EDF1F6",
+              "surfaceRaised": "#FFFFFF",
+              "border": "#CBD5E1",
+              "borderStrong": "#94A3B8",
+              "ink": "#0F172A",
+              "inkMuted": "#475569",
+              "inkSubtle": "#64748B",
+              "inkInverse": "#FFFFFF",
+              "accent": "#0369A1",
+              "accentStrong": "#075985",
+              "accentSoft": "#E0F2FE",
+              "accentInk": "#0C4A6E",
+              "onAccent": "#FFFFFF",
+              "gold": "#A16207",
+              "goldSoft": "#FEF3C7",
+              "goldInk": "#713F12",
+              "positive": "#15803D",
+              "warning": "#B45309",
+              "critical": "#B91C1C",
+              "criticalSoft": "#FEE2E2",
+              "criticalInk": "#7F1D1D",
+              "dataCold": "#1D4ED8",
+              "dataCool": "#0369A1",
+              "dataNeutral": "#64748B",
+              "dataWarm": "#A16207",
+              "dataHot": "#B45309"
+            },
+            "typography": {
+              "fontFamily": "Inter, 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif",
+              "fontFamilyMono": "'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+              "scale": {
+                "display": {
+                  "size": 34,
+                  "lineHeight": 40,
+                  "weight": 650,
+                  "tracking": -0.6
+                },
+                "title": {
+                  "size": 24,
+                  "lineHeight": 30,
+                  "weight": 620,
+                  "tracking": -0.3
+                },
+                "heading": {
+                  "size": 18,
+                  "lineHeight": 24,
+                  "weight": 600,
+                  "tracking": -0.1
+                },
+                "body": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 400,
+                  "tracking": 0.0
+                },
+                "bodyStrong": {
+                  "size": 15,
+                  "lineHeight": 23,
+                  "weight": 600,
+                  "tracking": 0.0
+                },
+                "caption": {
+                  "size": 13,
+                  "lineHeight": 18,
+                  "weight": 500,
+                  "tracking": 0.1
+                },
+                "label": {
+                  "size": 11,
+                  "lineHeight": 14,
+                  "weight": 650,
+                  "tracking": 0.8
+                },
+                "numeric": {
+                  "size": 15,
+                  "lineHeight": 20,
+                  "weight": 550,
+                  "tracking": 0.0
+                }
+              },
+              "tabularNumerals": true
+            },
+            "spacing": {
+              "xs": 4,
+              "sm": 8,
+              "md": 12,
+              "lg": 16,
+              "xl": 24,
+              "xxl": 32,
+              "section": 40
+            },
+            "radius": {
+              "sm": 4,
+              "md": 8,
+              "lg": 12,
+              "pill": 999
+            },
+            "elevation": {
+              "flat": "none",
+              "card": "0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.06)",
+              "hero": "0 2px 8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)",
+              "overlay": "0 12px 32px rgba(15, 23, 42, 0.16)"
+            },
+            "motion": {
+              "durationFast": 120,
+              "durationBase": 200,
+              "durationSlow": 320,
+              "easing": "cubic-bezier(0.2, 0, 0, 1)",
+              "respectsReducedMotion": true
+            }
+          },
+          "sendDataModel": false
+        }
+      },
+      {
+        "updateComponents": {
+          "surfaceId": "error",
+          "components": [
+            {
+              "id": "root",
+              "component": "Column",
+              "children": [
+                "notice"
+              ],
+              "direction": "vertical",
+              "gap": "section",
+              "padding": "xl",
+              "tone": "canvas",
+              "maxWidth": 960,
+              "align": "stretch",
+              "properties": {}
+            },
+            {
+              "id": "notice",
+              "component": "Card",
+              "accessibility": {
+                "label": {
+                  "path": "/error/title"
+                },
+                "live": "assertive"
+              },
+              "tone": "critical",
+              "title": {
+                "path": "/error/title"
+              },
+              "message": {
+                "path": "/error/message"
+              },
+              "detail": {
+                "path": "/error/detail"
+              },
+              "degraded": {
+                "path": "/error/degraded"
+              },
+              "onRetry": {
+                "action": "barogroove.retry",
+                "context": {
+                  "intent": {
+                    "path": "/error/intent"
+                  }
+                }
+              },
+              "properties": {
+                "title": {
+                  "path": "/error/title"
+                },
+                "children": [
+                  "noticeText"
+                ]
+              }
+            },
+            {
+              "id": "noticeText",
+              "component": "Text",
+              "properties": {
+                "text": {
+                  "path": "/error/message"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "updateDataModel": {
+          "surfaceId": "error",
+          "path": "/",
+          "contents": {
+            "error": {
+              "title": "The sky did not answer",
+              "message": "We could not read your sky just now.",
+              "detail": "upstream 503",
+              "degraded": [],
+              "intent": "forge"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

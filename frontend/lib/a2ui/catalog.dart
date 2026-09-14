@@ -337,12 +337,34 @@ class A2uiPlaceholder extends StatelessWidget {
         severity: A2uiPlaceholderSeverity.error,
       );
 
+  /// Debug/test-only observation point for every degradation.
+  ///
+  /// The placeholder is deliberately non-fatal: a grey note beats a white
+  /// screen for a user. But "non-fatal" had become "silent", and three
+  /// separate binding regressions reached production as screenshots because
+  /// nothing in CI could see this widget being built. This hook is how a test
+  /// sees it.
+  ///
+  /// It fires from inside an [assert], so it is compiled out of release
+  /// entirely and cannot change what a user gets. Do NOT promote it to a
+  /// throw: a hard failure in front of a user is strictly worse than a note
+  /// that names the problem.
+  ///
+  /// See `frontend/test/a2ui_surface_contract_test.dart`, which registers it
+  /// and fails the build if any real surface payload trips it.
+  static void Function(A2uiPlaceholder placeholder)? debugOnDegrade;
+
   final String title;
   final String detail;
   final A2uiPlaceholderSeverity severity;
 
   @override
   Widget build(BuildContext context) {
+    assert(() {
+      debugOnDegrade?.call(this);
+      return true;
+    }());
+
     final ColorScheme colors = Theme.of(context).colorScheme;
     final TextTheme text = Theme.of(context).textTheme;
     final Color tone = switch (severity) {

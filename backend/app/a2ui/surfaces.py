@@ -681,6 +681,25 @@ def build_themes_surface(
                 "width": bind("/genres/width"),
                 "widthLabel": bind("/genres/widthLabel"),
                 "options": ChildTemplate(component_id="genreOption", data_binding="/genres/items"),
+                # THE ARRAY, BOUND DIRECTLY. Same reasoning as ThemeChips above:
+                # a renderer that ships GenreCorridor as one self-drawing widget
+                # has no GenreOption builder, never expands `options`, and reads
+                # the corridors out of `items`. Describing them only as a
+                # template was correct A2UI and still produced
+                # `Missing data: "genreCorridor": no corridors bound to "items"`.
+                #
+                # The REST adapter used to inject this on its way to Flutter,
+                # which is why the app looked fine while the MCP stream and the
+                # published contract stayed broken. It belongs here, where every
+                # consumer of the surface sees it.
+                "items": bind("/genres/items"),
+                "selected": bind("/genres/selectedGenreId"),
+                "title": bind("/genres/label"),
+                "action": Action(
+                    action=FN_SELECT_GENRE,
+                    context={"genreId": bind("/genres/selectedGenreId")},
+                    send_data_model=False,
+                ),
                 "onWidthChange": Action(
                     action=FN_SET_CORRIDOR_WIDTH,
                     context={
@@ -850,6 +869,10 @@ def build_playlist_surface(
                 "arcLegend": bind("/playlist/arcLegend"),
                 "showWhy": bind("/playlist/showWhy"),
                 "rows": ChildTemplate(component_id="trackRow", data_binding="/playlist/tracks"),
+                # THE ARRAY, BOUND DIRECTLY. See the ThemeChips note in
+                # build_themes_surface: a renderer with no TrackRow builder
+                # never expands `rows` and reads the tracks out of `items`.
+                "items": bind("/playlist/tracks"),
             },
         ),
         Component(
@@ -996,6 +1019,24 @@ def build_almanac_surface(
                 "entries": ChildTemplate(
                     component_id="almanacEntry", data_binding="/almanac/entries"
                 ),
+                # THE ARRAY, BOUND DIRECTLY. See the ThemeChips note in
+                # build_themes_surface. This one degraded even more quietly
+                # than the others: with no AlmanacEntry builder the template
+                # resolves to a non-list, the widget reads zero entries and
+                # draws its *empty state* -- so a full almanac rendered as
+                # "no forges yet". A lie is worse than a placeholder.
+                "items": bind("/almanac/entries"),
+                "retrospective": bind("/almanac/subtitle"),
+                # The node-level action a self-drawing timeline fires. The
+                # widget overrides playlistId with the tapped entry's own id;
+                # the pointer here is the declared default, because the
+                # function requires the key and a component must promise to
+                # send everything its function requires.
+                "action": Action(
+                    action=FN_OPEN_ALMANAC_ENTRY,
+                    context={"playlistId": bind("/almanac/selectedPlaylistId")},
+                    send_data_model=False,
+                ),
             },
         ),
         Component(
@@ -1030,6 +1071,10 @@ def build_almanac_surface(
             "groupBy": "season",
             "emptyMessage": "No forges yet. Read the sky and make the first one.",
             "entryCount": len(items),
+            #: The declared default for the node-level open action. The widget
+            #: sends the tapped entry's own id; this is what the pointer in the
+            #: action context resolves to before anything is tapped.
+            "selectedPlaylistId": "",
             "entries": items,
         }
     }
@@ -1104,6 +1149,9 @@ def build_telemetry_surface(
                 "entries": ChildTemplate(
                     component_id="telemetryEntry", data_binding="/telemetry/entries"
                 ),
+                # THE ARRAY, BOUND DIRECTLY. See the ThemeChips note in
+                # build_themes_surface.
+                "items": bind("/telemetry/entries"),
             },
         ),
         Component(

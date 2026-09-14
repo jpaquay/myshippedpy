@@ -761,11 +761,27 @@ COMPONENTS: Final[dict[str, dict[str, Any]]] = {
             "crossingLabel": _dyn("String", "Live crossing readout: 'Petrichor x krautrock'."),
             "width": _dyn("Number", "0..1 corridor width."),
             "widthLabel": _dyn("String", "'tight' | 'balanced' | 'loose'."),
+            # Self-drawing form, exactly as on ThemeChips above. A renderer with
+            # no GenreOption builder never expands `options`; it reads the
+            # corridors out of `items`. Both forms are declared and both are
+            # always emitted -- see surfaces.build_themes_surface.
+            "items": _dyn(
+                "Array",
+                "The corridor array itself, for renderers that draw the whole "
+                "list rather than expanding the `options` template. Each item "
+                "carries genreId, name, description, tags and selected.",
+            ),
+            "selected": _dyn("String", "Selected corridor id, beside `items`."),
+            "title": _dyn("String", "Axis label, beside `items`."),
+            "action": _action("Select the tapped corridor.", FN_SELECT_GENRE),
             "onWidthChange": _action("Change the corridor width.", FN_SET_CORRIDOR_WIDTH),
             "onForge": _action("Commit the crossing and forge.", FN_FORGE),
         },
         required=["options"],
-        bindable=["label", "axisNote", "helpText", "selectedGenreId", "crossingLabel", "width", "widthLabel"],
+        bindable=[
+            "label", "axisNote", "helpText", "selectedGenreId", "crossingLabel",
+            "width", "widthLabel", "items", "selected", "title",
+        ],
         actions=[FN_SELECT_GENRE, FN_SET_CORRIDOR_WIDTH, FN_FORGE],
         design="Panel with borderStrong hairline and its own heading; never inline with chips.",
     ),
@@ -804,9 +820,18 @@ COMPONENTS: Final[dict[str, dict[str, Any]]] = {
             "durationDisplay": _dyn("String", "Total running time, e.g. '58 min'."),
             "arcLegend": _dyn("StringList", "Ordered arc role legend."),
             "showWhy": _dyn("Boolean", "Show the per-track rationale line (default true)."),
+            # Self-drawing form, exactly as on ThemeChips.
+            "items": _dyn(
+                "Array",
+                "The track array itself, for renderers that draw the whole list "
+                "rather than expanding the `rows` template.",
+            ),
         },
         required=["rows"],
-        bindable=["title", "subtitle", "trackCount", "durationDisplay", "arcLegend", "showWhy"],
+        bindable=[
+            "title", "subtitle", "trackCount", "durationDisplay", "arcLegend",
+            "showWhy", "items",
+        ],
         actions=[FN_TRACK_FEEDBACK, FN_OPEN_TRACK],
         design="Peak row gets the gold hairline. Everything else is slate on white.",
     ),
@@ -868,6 +893,7 @@ COMPONENTS: Final[dict[str, dict[str, Any]]] = {
             "emphasis": _dyn("String", "'hero' (default) | 'inline' when re-shown lower down."),
             "themeName": _dyn("String", "Active theme name."),
             "genreName": _dyn("String", "Active corridor name."),
+
             "onExplainDimension": _action(
                 "Drill into one sky dimension from the evidence list.",
                 FN_EXPLAIN_DIMENSION,
@@ -901,9 +927,22 @@ COMPONENTS: Final[dict[str, dict[str, Any]]] = {
             "groupBy": _dyn("String", "'season' (default) | 'year' | 'theme'."),
             "emptyMessage": _dyn("String", "Shown when there are no past forges yet."),
             "entryCount": _dyn("Number", "Number of entries."),
+            # Self-drawing form, exactly as on ThemeChips. It rides under
+            # `items` and not `entries` because `entries` is already the
+            # template; a renderer with no AlmanacEntry builder reads `items`.
+            "items": _dyn(
+                "Array",
+                "The almanac entry array itself, for renderers that draw the "
+                "whole timeline rather than expanding the `entries` template.",
+            ),
+            "retrospective": _dyn("String", "Section subtitle, beside `items`."),
+            "action": _action("Re-open the tapped forge.", FN_OPEN_ALMANAC_ENTRY),
         },
         required=["entries"],
-        bindable=["title", "subtitle", "groupBy", "emptyMessage", "entryCount"],
+        bindable=[
+            "title", "subtitle", "groupBy", "emptyMessage", "entryCount",
+            "items", "retrospective",
+        ],
         actions=[FN_OPEN_ALMANAC_ENTRY],
     ),
     "AlmanacEntry": _component(
@@ -944,12 +983,19 @@ COMPONENTS: Final[dict[str, dict[str, Any]]] = {
             "activeSessions": _dyn("Number", "Active user sessions count."),
             "storedMemories": _dyn("Number", "Stored semantic memories count."),
             "avgLatencyMs": _dyn("Number", "Average turn latency in ms."),
+            # Self-drawing form, exactly as on ThemeChips. Under `items` and not
+            # `entries` because `entries` is already the template.
+            "items": _dyn(
+                "Array",
+                "The trajectory array itself, for renderers that draw the whole "
+                "list rather than expanding the `entries` template.",
+            ),
             "onRefresh": _action("Refresh telemetry stream.", FN_REFRESH_TELEMETRY),
         },
         required=["entries"],
         bindable=[
             "title", "subtitle", "totalAiCalls", "totalTokens",
-            "activeSessions", "storedMemories", "avgLatencyMs",
+            "activeSessions", "storedMemories", "avgLatencyMs", "items",
         ],
         actions=[FN_REFRESH_TELEMETRY, FN_OPEN_TELEMETRY_TRACE],
     ),

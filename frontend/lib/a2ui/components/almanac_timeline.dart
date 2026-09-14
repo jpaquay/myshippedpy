@@ -361,26 +361,45 @@ class _RetrospectiveBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final TextTheme t = Theme.of(context).textTheme;
     final ColorScheme colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(BgSpace.lg),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
-        borderRadius: BgSpace.brSm,
-        border: Border(
-          left: const BorderSide(color: BgPalette.gold500, width: 3),
-          top: BorderSide(color: colors.outlineVariant),
-          right: BorderSide(color: colors.outlineVariant),
-          bottom: BorderSide(color: colors.outlineVariant),
+    // The gold edge is a clipped child, not a BorderSide.
+    //
+    // A BoxDecoration cannot combine a borderRadius with a Border whose sides
+    // differ in colour -- Flutter throws "a borderRadius can only be given on
+    // borders with uniform colors" at paint time, and it throws during paint,
+    // so there is no widget-level error boundary to catch it: the whole
+    // surface goes red. This is the same trap A2uiPlaceholder documents; it
+    // was latent here only because nothing ever rendered an almanac that had
+    // a retrospective line to show.
+    return ClipRRect(
+      borderRadius: BgSpace.brSm,
+      child: Container(
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerLow,
+          borderRadius: BgSpace.brSm,
+          border: Border.all(color: colors.outlineVariant),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Text('RETROSPECTIVE', style: t.labelSmall),
-          const SizedBox(height: BgSpace.xs),
-          Text(text, style: t.bodyLarge),
-        ],
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Container(width: 3, color: BgPalette.gold500),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(BgSpace.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text('RETROSPECTIVE', style: t.labelSmall),
+                      const SizedBox(height: BgSpace.xs),
+                      Text(text, style: t.bodyLarge),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
