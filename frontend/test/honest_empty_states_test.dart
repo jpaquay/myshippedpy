@@ -78,6 +78,130 @@ void main() {
       expect(src, isNot(contains("'Brussels'")));
       expect(src, isNot(contains("'petrichor'")));
     });
+
+    // ---------------------------------------------------------------------
+    // Data Viz. The same defect as the Almanac KPI strip, one destination
+    // over, and a much larger instance of it.
+    // ---------------------------------------------------------------------
+
+    test('the Data Viz models carry no fabricated dashboard', () {
+      final String src = _code('screens/dataviz/dataviz_models.dart');
+
+      // `DataVizDashboardModel.fallback()` was ~90 lines of invented
+      // analytics, and it was the screen's *initial state* — not dead code.
+      expect(
+        src,
+        isNot(contains('fallback()')),
+        reason: 'the canned dashboard was the value `_dashboard` started at',
+      );
+      for (final String literal in <String>[
+        '160717', // total scrobbles
+        '102.4', // average tempo
+        '0.84', // "pressure sensitivity index"
+        '20893', // "High Pressure Clarity" scrobbles
+        '38572', // Petrichor scrobbles
+        'Teardrop', // the stand-in track, artist and album
+        'Massive Attack',
+        'Mezzanine',
+        'Nocturnal Dub', // the stand-in hourly mood
+      ]) {
+        expect(src, isNot(contains(literal)), reason: '$literal is back');
+      }
+
+      // The one spelling of "no value", shared with the Almanac strip.
+      expect(src, contains("const String kDvNoValue = '—';"));
+    });
+
+    test('the Data Viz screen starts empty, not full', () {
+      final String src = _code('screens/dataviz_screen.dart');
+
+      expect(src, contains('DataVizDashboardModel.empty'));
+      expect(
+        src,
+        isNot(contains('DataVizDashboardModel.fallback')),
+        reason: 'every user saw the canned figures before any real data landed',
+      );
+      // A failed load now empties the dashboard rather than leaving invented
+      // charts on screen behind a "this is a sample" label.
+      expect(src, isNot(contains('_dashboardIsSample')));
+      expect(src, contains('_dashboardFailed'));
+    });
+
+    test('the Data Viz cards state no finding of their own', () {
+      final String src = _code('screens/dataviz/dataviz_dashboard.dart');
+
+      // Card titles and subtitles used to assert results — a share, a play
+      // count, a BPM range, a decade span — as static strings, so they stayed
+      // put no matter what the backend actually returned.
+      for (final String literal in <String>[
+        '160,717',
+        '38,572',
+        '24.0% Share',
+        '78 BPM Storm',
+        '132 BPM Zenith',
+        '1970s – 2020s',
+        'Bristol Trip-Hop',
+        'Solar Zenith',
+        'Midnight Thermal',
+        'low_pressure_front',
+      ]) {
+        expect(src, isNot(contains(literal)), reason: '$literal is back');
+      }
+
+      // Every card handles having nothing to draw.
+      expect(
+        RegExp(r'_buildChartEmptyState\(').allMatches(src).length,
+        greaterThanOrEqualTo(4),
+        reason: 'all four standing cards need an honest empty state',
+      );
+      expect(
+        RegExp(r'kDvNoValue').allMatches(src).length,
+        greaterThanOrEqualTo(6),
+        reason: 'every figure that can be unknown says so the same way',
+      );
+    });
+
+    // ---------------------------------------------------------------------
+    // Tenancy and location.
+    // ---------------------------------------------------------------------
+
+    test('the Almanac sync does not name a Last.fm account', () {
+      final String src = _code('screens/almanac_screen.dart');
+
+      // A literal handle here meant every signed-in user's "Sync Last.fm"
+      // pulled the same real person's listening history into their almanac.
+      expect(src, isNot(contains("'jpaquay'")));
+      expect(src, contains('pairingStatusProvider'));
+    });
+
+    test('a geocache with no coordinates is not placed in Brussels', () {
+      final String src = _code('api/models.dart');
+
+      // `lat: ?? 50.8503, lon: ?? 4.3517` put any landmark the backend sent
+      // without coordinates in Belgium, and fetched Belgian weather for it.
+      expect(src, isNot(contains('50.8503')));
+      expect(src, isNot(contains('4.3517')));
+      // ...along with the clock that came with it.
+      expect(src, isNot(contains("'14:00 (UTC+1)'")));
+      expect(src, isNot(contains("?? 'afternoon'")));
+    });
+
+    test('parsed analytics do not stand in a tempo', () {
+      final String src = _code('api/models.dart');
+
+      // `avg_bpm ?? 112.0` / `?? 102.0` and `bpm_estimate ?? 112` / `?? 102`
+      // rendered as a measured tempo beside honest em-dashes.
+      for (final String literal in <String>[
+        "?? 112.0",
+        "?? 102.0",
+        "?? 112)",
+        "?? 102)",
+        "?? 0.60,",
+        "?? 0.54,",
+      ]) {
+        expect(src, isNot(contains(literal)), reason: '$literal is back');
+      }
+    });
   });
 
   group('the A2UI tree holds no private palette', () {

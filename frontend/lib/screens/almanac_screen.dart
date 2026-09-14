@@ -198,11 +198,30 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
     );
   }
 
+  /// The Last.fm handle the **signed-in** user has linked, or `null`.
+  ///
+  /// `docs/TENANCY_AUDIT.md`: a path that cannot resolve an identity must
+  /// refuse, never substitute a different one. This call site used to pass a
+  /// literal handle, so every signed-in user's "Sync Last.fm" pulled the same
+  /// real person's listening history into their own almanac. The handle now
+  /// comes from `pairingStatusProvider`, which is already keyed on the uid and
+  /// returns `PairingStatus.none` when signed out.
+  String? get _linkedLastfmUser {
+    final PairingStatus? status = ref.watch(pairingStatusProvider).valueOrNull;
+    if (status == null || !status.lastfm) return null;
+    final String handle = (status.lastfmAccount ?? '').trim();
+    return handle.isEmpty ? null : handle;
+  }
+
   Future<void> _syncLastfmToFirestore() async {
+    final String? lastfmUser = _linkedLastfmUser;
+    // No linked account means no identity to sync, so there is nothing to do.
+    // The button is disabled in this state; this is the belt to that braces.
+    if (lastfmUser == null) return;
     setState(() => _syncing = true);
     final BarogrooveApi api = ref.read(apiProvider);
     final ApiResult<ScrobbleSearchResponse> res =
-        await api.syncScrobbles(lastfmUser: 'jpaquay');
+        await api.syncScrobbles(lastfmUser: lastfmUser);
     if (!mounted) return;
     setState(() {
       _syncing = false;
@@ -489,19 +508,32 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            OutlinedButton.icon(
-              onPressed: _syncing ? null : _syncLastfmToFirestore,
-              icon: _syncing
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.sync_rounded, size: 16),
-              label: Text(_syncing ? 'Syncing…' : 'Sync Last.fm'),
-              style: OutlinedButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-              ),
+            Builder(
+              builder: (BuildContext context) {
+                final String? lastfmUser = _linkedLastfmUser;
+                // Unavailable rather than wrong: with no linked account there
+                // is no handle to sync, and guessing one syncs a stranger.
+                final bool canSync = lastfmUser != null && !_syncing;
+                return Tooltip(
+                  message: lastfmUser == null
+                      ? 'Connect Last.fm in Settings to sync your scrobbles.'
+                      : 'Sync $lastfmUser',
+                  child: OutlinedButton.icon(
+                    onPressed: canSync ? _syncLastfmToFirestore : null,
+                    icon: _syncing
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.sync_rounded, size: 16),
+                    label: Text(_syncing ? 'Syncing…' : 'Sync Last.fm'),
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(width: 6),
             IconButton(
@@ -540,6 +572,11 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
     final String uniqueTracks = stats.uniqueTracks > 0
         ? '${stats.uniqueTracks} Unique Tracks'
         : _kNoValue;
+    // The third pill of the same strip, missed by that pass. `avgBpm` is
+    // parsed with `?? 102.0`, so with no analytics it read "102 BPM" beside
+    // two honest em-dashes.
+    final String avgTempo =
+        stats.avgBpm > 0 ? '${stats.avgBpm.toStringAsFixed(0)} BPM' : _kNoValue;
 
     if (_mode == _AlmanacMode.forged) {
       return Wrap(
@@ -599,7 +636,7 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
           _KpiPill(
             icon: Icons.speed_rounded,
             label: 'AVG SONIC TEMPO',
-            value: '${stats.avgBpm.toStringAsFixed(0)} BPM',
+            value: avgTempo,
             accent: const Color(0xFFF59E0B),
           ),
           _KpiPill(
@@ -1427,7 +1464,11 @@ class _ScrobbleTrackRow extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      '${entry.bpmEstimate} BPM • ${_formatThemeName(entry.weatherTheme)}',
+                      // `bpm_estimate` is 0 when the catalog holds no estimate
+                      // for this track. It used to be parsed as 112, which read
+                      // as that track's own measured tempo.
+                      '${entry.bpmEstimate > 0 ? '${entry.bpmEstimate}' : _kNoValue}'
+                      ' BPM • ${_formatThemeName(entry.weatherTheme)}',
                       style: text.labelSmall?.copyWith(
                         color: moodColor,
                         fontWeight: FontWeight.w600,

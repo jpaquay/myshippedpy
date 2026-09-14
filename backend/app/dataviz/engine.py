@@ -1,8 +1,38 @@
 """Data Visualization Telemetry & Gemini Live 2.5 QnA Engine.
 
-Aggregates BaroGroove's 160,717-scrobble Sonic Almanac and barometric weather
-telemetry into visual dashboard models, and powers the Gemini Live 2.5 Flash
-interactive Data Viz QnA Studio with spoken DJ/Data-Scientist synthesis.
+Aggregates the Sonic Almanac scrobble corpus and its cached summary into the
+dashboard models behind ``GET /api/dataviz/dashboard``, and powers the Gemini
+Live 2.5 Flash Data Viz QnA studio.
+
+WHAT THIS MODULE MAY AND MAY NOT DO
+-----------------------------------
+Every number it emits is read or derived from the corpus. Where the corpus has
+no answer, it emits ``None`` or an empty list and the renderer says so.
+
+It did not use to. Four builders returned hand-written constants that the
+dashboard presented as measurements:
+
+* ``_build_weather_affinity`` returned six fixed rows (Petrichor 24.0% /
+  38,572 plays, "High Pressure Clarity" 13.0% / 20,893 ...). The corpus summary
+  sitting on disk beside it says something else entirely -- seven themes, top
+  row ``warm_front_haze`` at 15.6% / 25,090 -- and disagrees on every row and
+  every id. The table was not stale data; it was never data.
+* ``_build_hourly_solar_heatmap`` returned 24 fixed buckets while
+  ``hourly_histogram_utc`` in the same summary held the real per-hour counts.
+* ``_build_pressure_vs_bpm_points`` held 18 ``baseline_templates`` tuples and
+  overwrote only the title and artist of the first ``len(scrobbles)`` of them
+  from the catalog, keeping the invented pressure, BPM and energy, and emitting
+  the remaining rows whole. That is padding a thin result, not a shape for real
+  data to fill.
+* ``_build_decade_sonic_dna`` returned six fixed decades.
+
+``get_dashboard`` then did ``analytics.total_scrobbles or 160717`` and
+``analytics.avg_bpm or 102.4``. The first happened to match the corpus; the
+second had drifted -- the corpus says 104.6.
+
+The templates also originated four retired theme ids (``low_pressure_front``,
+``midnight_thermal``, ``solar_zenith``, and ``clear_high``, which is retired
+with no successor at all -- see ``contracts.RETIRED_THEME_IDS``).
 """
 
 from __future__ import annotations
@@ -29,15 +59,38 @@ VALID_HIGHLIGHT_SECTIONS = {
 
 
 class SummaryStats(BaseModel):
-    """High-level KPI summary metrics across the user's Sonic Almanac."""
+    """High-level KPI summary metrics across the user's Sonic Almanac.
 
-    total_scrobbles_analyzed: int = Field(..., description="Total scrobbles analyzed in the Almanac cohort.")
-    avg_bpm: float = Field(..., description="Weighted average tempo across all scrobbles.")
-    dominant_weather_theme: str = Field(..., description="Most frequent barometric weather theme.")
-    dominant_genre: str = Field(..., description="Top sonic corridor / genre tag.")
-    pressure_sensitivity_index: float = Field(
-        ...,
-        description="Correlation index (0.0 - 1.0) measuring how strongly barometric shifts alter tempo & mood selection.",
+    Every field is nullable, and ``None`` means *the corpus does not answer
+    this*. The renderer shows an em-dash rather than a number, which is what
+    ``UX_IA_SPEC.md`` §2 rule 4 requires of an empty state.
+    """
+
+    total_scrobbles_analyzed: int | None = Field(
+        default=None,
+        description="Total scrobbles analyzed, or null when nothing is synced.",
+    )
+    avg_bpm: float | None = Field(
+        default=None,
+        description="Weighted average tempo across all scrobbles, or null when unknown.",
+    )
+    dominant_weather_theme: str | None = Field(
+        default=None,
+        description="Most frequent barometric weather theme, or null when unknown.",
+    )
+    dominant_genre: str | None = Field(
+        default=None,
+        description="Top sonic corridor / genre tag, or null when unknown.",
+    )
+    # Was a hardcoded coefficient, emitted on every response and rendered as
+    # "84% CORR" in the KPI ribbon. Nothing measured it.
+    pressure_sensitivity_index: float | None = Field(
+        default=None,
+        description=(
+            "Correlation between barometric shift and tempo selection. Always "
+            "null: no pressure reading is recorded against a scrobble anywhere "
+            "in this system, so there is nothing to correlate."
+        ),
     )
 
 
@@ -53,24 +106,41 @@ class PressureVsBpmPoint(BaseModel):
 
 
 class WeatherAffinityItem(BaseModel):
-    """Distribution of listening activity across the 6 atmospheric sky themes."""
+    """One row of the real weather-affinity breakdown from the corpus summary."""
 
-    theme_id: str = Field(..., description="Sky theme identifier.")
+    theme_id: str = Field(..., description="Sky theme identifier, as recorded in the corpus.")
     theme_name: str = Field(..., description="Human-readable atmospheric theme name.")
     scrobble_count: int = Field(..., description="Number of scrobbles logged under this weather regime.")
     percentage: float = Field(..., description="Percentage share of total listening.")
-    avg_bpm: int = Field(..., description="Average BPM within this atmospheric theme.")
-    top_artist: str = Field(..., description="Most scrobbled artist during this weather pattern.")
+    avg_bpm: int | None = Field(
+        default=None,
+        description="Play-weighted mean BPM of catalog tracks in this theme, or null when none are held.",
+    )
+    top_artist: str | None = Field(
+        default=None,
+        description="Most-played catalog artist in this theme, or null when none are held.",
+    )
 
 
 class HourlySolarBucket(BaseModel):
-    """Single hour bucket (0..23) showing circadian solar listening activity & BPM drift."""
+    """One hour bucket (0..23) of the real UTC play histogram."""
 
-    hour: int = Field(..., ge=0, le=23, description="Hour of day (0-23).")
-    label: str = Field(..., description="Formatted hour label (e.g. '06:00 • Dawn').")
-    activity_score: float = Field(..., description="Normalized listening activity score (0.0 to 1.0).")
-    avg_bpm: int = Field(..., description="Average BPM during this solar hour.")
-    dominant_mood: str = Field(..., description="Dominant sonic mood label for this hour.")
+    hour: int = Field(..., ge=0, le=23, description="Hour of day (0-23, UTC).")
+    label: str = Field(..., description="Formatted hour label (e.g. '06:00').")
+    activity_score: float = Field(..., description="Plays this hour / plays in the busiest hour (0.0 to 1.0).")
+    scrobble_count: int = Field(default=0, description="Plays recorded in this hour.")
+    avg_bpm: int | None = Field(
+        default=None,
+        description=(
+            "Always null. The histogram counts plays per hour; it does not "
+            "carry which tracks they were, so there is no tempo to average. "
+            "This used to be a hand-written per-hour BPM curve."
+        ),
+    )
+    dominant_mood: str | None = Field(
+        default=None,
+        description="Always null, for the same reason as avg_bpm.",
+    )
 
 
 class DecadeSonicDnaItem(BaseModel):
@@ -260,198 +330,272 @@ def _get_vertex_token() -> tuple[str | None, str]:
         return None, project_id
 
 
-def _build_pressure_vs_bpm_points(scrobbles: list[ScrobbleEntry]) -> list[PressureVsBpmPoint]:
-    """Constructs 18 barometric pressure vs BPM points grounded in real scrobble tracks.
+def _catalog_theme_stats() -> dict[str, dict[str, Any]]:
+    """Per-theme BPM mean and top artist, computed from the track catalog.
 
-    Demonstrates how low barometric pressure (992-1005 hPa) correlates with moody
-    ambient/trip-hop/dub-techno tempos (76-94 BPM), while high pressure anticyclonic
-    ridges (1018-1030 hPa) drive higher-BPM motorik, funk, and upbeat acoustic grooves (114-132 BPM).
+    The corpus summary knows how many plays each weather theme took but not
+    what they sounded like; the catalog knows the tempo and artist of each
+    track but not the summary totals. Joining them here is the only place the
+    two meet, and it is a real join -- no row is emitted for a theme the
+    catalog holds no tracks for.
     """
-    baseline_templates = [
-        (992.4, 78, 0.34, "Teardrop", "Massive Attack", "low_pressure_front"),
-        (994.8, 82, 0.38, "Roads", "Portishead", "low_pressure_front"),
-        (997.1, 85, 0.41, "Archangel", "Burial", "low_pressure_front"),
-        (999.5, 88, 0.44, "Glory Box", "Portishead", "petrichor"),
-        (1001.8, 91, 0.47, "Angel", "Massive Attack", "petrichor"),
-        (1003.6, 94, 0.50, "La Javanaise", "Serge Gainsbourg", "petrichor"),
-        (1005.9, 96, 0.52, "Que Sera", "Wax Tailor", "blue_hour"),
-        (1008.2, 99, 0.55, "La femme d'argent", "Air", "blue_hour"),
-        (1010.5, 102, 0.57, "Les copains d'abord", "Georges Brassens", "blue_hour"),
-        (1012.8, 105, 0.60, "I've Got That Tune", "Chinese Man", "midnight_thermal"),
-        (1014.9, 108, 0.63, "Kerala", "Bonobo", "midnight_thermal"),
-        (1017.1, 111, 0.66, "L'hymne de nos campagnes", "Tryo", "midnight_thermal"),
-        (1019.4, 114, 0.70, "Texas Sun", "Khruangbin", "clear_high"),
-        (1021.6, 118, 0.73, "Onde sensuelle", "-M-", "clear_high"),
-        (1023.8, 121, 0.76, "Papaoutai", "Stromae", "clear_high"),
-        (1025.9, 124, 0.80, "Formidable", "Stromae", "solar_zenith"),
-        (1027.7, 128, 0.84, "Hallogallo", "Neu!", "solar_zenith"),
-        (1029.5, 132, 0.88, "Liquid Sunshine", "Biga*Ranx", "solar_zenith"),
-    ]
+    from backend.app.almanac.scrobbles import _ensure_catalog_and_indexes
 
-    points: list[PressureVsBpmPoint] = []
-    for idx, (pressure, default_bpm, default_energy, default_title, default_artist, theme_id) in enumerate(baseline_templates):
-        if idx < len(scrobbles):
-            s = scrobbles[idx]
-            # Blend scrobble metadata with the barometric curve so real catalog tracks appear
-            title = s.title or default_title
-            artist = s.artist or default_artist
-        else:
-            title = default_title
-            artist = default_artist
+    stats: dict[str, dict[str, Any]] = {}
+    try:
+        catalog = _ensure_catalog_and_indexes()
+    except Exception:  # noqa: BLE001 - a missing catalog means "no answer", not a 500
+        logger.debug("track catalog unavailable; weather affinity will omit BPM and top artist")
+        return stats
 
-        points.append(
-            PressureVsBpmPoint(
-                pressure_hpa=pressure,
-                bpm=default_bpm,
-                energy=default_energy,
-                track_title=title,
-                artist=artist,
+    for row in catalog:
+        theme = str(row.get("weather_theme") or "").strip()
+        if not theme:
+            continue
+        try:
+            plays = int(row.get("play_count") or 0)
+            bpm = int(row.get("bpm_estimate") or 0)
+        except (TypeError, ValueError):
+            continue
+        if plays <= 0:
+            continue
+        bucket = stats.setdefault(theme, {"bpm_weighted": 0, "plays": 0, "artists": {}})
+        if bpm > 0:
+            bucket["bpm_weighted"] += bpm * plays
+            bucket["plays"] += plays
+        artist = str(row.get("artist") or "").strip()
+        if artist:
+            bucket["artists"][artist] = bucket["artists"].get(artist, 0) + plays
+
+    out: dict[str, dict[str, Any]] = {}
+    for theme, bucket in stats.items():
+        plays = bucket["plays"]
+        artists: dict[str, int] = bucket["artists"]
+        out[theme] = {
+            "avg_bpm": round(bucket["bpm_weighted"] / plays) if plays else None,
+            "top_artist": max(artists, key=lambda a: artists[a]) if artists else None,
+        }
+    return out
+
+
+def _build_pressure_vs_bpm_points(scrobbles: list[ScrobbleEntry]) -> list[PressureVsBpmPoint]:
+    """Always empty. Nothing in this system records a pressure reading per play.
+
+    This used to return 18 points from a ``baseline_templates`` table of
+    invented ``(pressure, bpm, energy, title, artist, theme)`` tuples. Real
+    scrobbles overwrote the title and artist of the first ``len(scrobbles)``
+    rows and nothing else -- the pressure, the BPM and the energy stayed
+    invented even for those -- and every remaining row shipped whole. So the
+    templates were not a shape for real data to fill. They were the data, and
+    the scrobbles were a veneer on top of it.
+
+    To fill this chart honestly the corpus would have to carry the barometric
+    pressure observed at each play. It does not: neither ``track_catalog.jsonl``
+    nor ``summary_cache.json`` has a pressure field, and no join anywhere
+    reconstructs one. An axis labelled hPa therefore cannot be populated, and
+    the renderer says so instead of drawing a plausible curve.
+
+    The signature keeps ``scrobbles`` so the call site reads the same and so
+    this docstring sits where the padding used to.
+    """
+    del scrobbles
+    return []
+
+
+def _build_weather_affinity(analytics: Any) -> list[WeatherAffinityItem]:
+    """The real per-theme listening split, from the corpus summary.
+
+    ``analytics.weather_affinity`` is what the summary actually measured.
+    Percentage and play count are passed through unchanged; BPM and top artist
+    are joined in from the catalog and stay ``None`` where it holds nothing.
+    """
+    rows = list(getattr(analytics, "weather_affinity", None) or [])
+    if not rows:
+        return []
+
+    catalog_stats = _catalog_theme_stats()
+    items: list[WeatherAffinityItem] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        theme_id = str(row.get("theme_id") or "").strip()
+        if not theme_id:
+            continue
+        try:
+            plays = int(row.get("plays") or 0)
+            percentage = float(row.get("percentage") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        joined = catalog_stats.get(theme_id, {})
+        items.append(
+            WeatherAffinityItem(
                 theme_id=theme_id,
+                theme_name=str(row.get("label") or theme_id.replace("_", " ").title()),
+                scrobble_count=plays,
+                percentage=round(percentage, 1),
+                avg_bpm=joined.get("avg_bpm"),
+                top_artist=joined.get("top_artist"),
             )
         )
-    return points
-
-
-def _build_weather_affinity() -> list[WeatherAffinityItem]:
-    """Returns the 6 atmospheric sky themes with scrobble counts, avg BPM, and top artists."""
-    return [
-        WeatherAffinityItem(
-            theme_id="petrichor",
-            theme_name="Petrichor & Rain Front",
-            scrobble_count=38572,
-            percentage=24.0,
-            avg_bpm=96,
-            top_artist="Georges Brassens",
-        ),
-        WeatherAffinityItem(
-            theme_id="blue_hour",
-            theme_name="Blue Hour Drift",
-            scrobble_count=32947,
-            percentage=20.5,
-            avg_bpm=99,
-            top_artist="Serge Gainsbourg",
-        ),
-        WeatherAffinityItem(
-            theme_id="low_pressure_front",
-            theme_name="Low Pressure Storm Front",
-            scrobble_count=26518,
-            percentage=16.5,
-            avg_bpm=87,
-            top_artist="Massive Attack",
-        ),
-        WeatherAffinityItem(
-            theme_id="midnight_thermal",
-            theme_name="Midnight Thermal",
-            scrobble_count=24108,
-            percentage=15.0,
-            avg_bpm=108,
-            top_artist="Chinese Man",
-        ),
-        WeatherAffinityItem(
-            theme_id="clear_high",
-            theme_name="High Pressure Clarity",
-            scrobble_count=20893,
-            percentage=13.0,
-            avg_bpm=116,
-            top_artist="-M-",
-        ),
-        WeatherAffinityItem(
-            theme_id="solar_zenith",
-            theme_name="Solar Zenith",
-            scrobble_count=17679,
-            percentage=11.0,
-            avg_bpm=124,
-            top_artist="Stromae",
-        ),
-    ]
+    items.sort(key=lambda i: i.percentage, reverse=True)
+    return items
 
 
 def _build_hourly_solar_heatmap() -> list[HourlySolarBucket]:
-    """Constructs 24 hourly solar chronology buckets (0..23) showing circadian BPM & mood shifts."""
-    hourly_specs = [
-        (0, "00:00 • Midnight Thermal", 0.62, 92, "Nocturnal Dub & Deep Trip-Hop"),
-        (1, "01:00 • Deep Night", 0.48, 88, "Sub-Bass & Ambient Drone"),
-        (2, "02:00 • Astral Stillness", 0.31, 84, "Late-Night Vinyl & Lo-Fi Drift"),
-        (3, "03:00 • Pre-Dawn Isobar", 0.19, 82, "Minimal Dub Chords"),
-        (4, "04:00 • First Twilight", 0.14, 85, "Quiet Acoustic Reflections"),
-        (5, "05:00 • Civil Dawn", 0.22, 89, "Dew-Point Acoustic Folk"),
-        (6, "06:00 • Sunrise Horizon", 0.38, 94, "Warm Rhodes & Morning Coffee"),
-        (7, "07:00 • Morning Ascent", 0.54, 101, "Chanson Française & Poetic Guitar"),
-        (8, "08:00 • Commute Ridge", 0.68, 106, "Upbeat Indie & Motorik Pulse"),
-        (9, "09:00 • Forenoon Clarity", 0.75, 110, "Crisp Rhythm & Analog Grooves"),
-        (10, "10:00 • High Sun Climb", 0.82, 114, "Funk, Soul & Brass Hooks"),
-        (11, "11:00 • Pre-Zenith", 0.86, 117, "High-Energy Grooves & Reggae"),
-        (12, "12:00 • Solar Zenith", 0.91, 122, "Peak Solar Energy & Tropicalia"),
-        (13, "13:00 • Post-Zenith Warmth", 0.84, 119, "Sun-Drenched Grooves & Bossa"),
-        (14, "14:00 • Afternoon Thermal", 0.79, 115, "Steady Groove & Classic Rock"),
-        (15, "15:00 • Trade Wind Breeze", 0.76, 112, "Roots Reggae & Dub Basslines"),
-        (16, "16:00 • Golden Approach", 0.83, 109, "Warm Analog Synths & Soul"),
-        (17, "17:00 • Golden Hour Ridge", 0.94, 106, "Sunset Grooves & Poetic Chanson"),
-        (18, "18:00 • Civil Dusk", 0.98, 103, "Twilight Transitions & Downtempo"),
-        (19, "19:00 • Blue Hour Drift", 1.00, 99, "Peak Listening • Bristol Trip-Hop"),
-        (20, "20:00 • Nautical Twilight", 0.92, 97, "Atmospheric Beats & Spoken Word"),
-        (21, "21:00 • Urban Heat Island", 0.85, 96, "Deep Grooves & Midnight Jazz"),
-        (22, "22:00 • Late Evening Club", 0.78, 95, "Hypnotic Beats & Dub Techno"),
-        (23, "23:00 • Pre-Midnight Drift", 0.71, 93, "Nocturnal Trip-Hop & Vinyl Crackle"),
-    ]
+    """The real 24-hour play histogram, from the corpus summary.
+
+    ``activity_score`` is this hour's plays over the busiest hour's plays, so
+    the tallest bar is 1.0 by construction and every other bar is a ratio of
+    two counted numbers.
+
+    This used to be 24 hand-written ``(score, bpm, mood)`` tuples -- "02:00 •
+    Astral Stillness, 0.31, 84 BPM, Late-Night Vinyl & Lo-Fi Drift" -- while
+    ``hourly_histogram_utc`` sat unread in the same summary file. The mood
+    labels and the per-hour BPM have no source at all and are gone; the
+    histogram carries counts, not tracks.
+    """
+    from backend.app.almanac.scrobbles import fetch_firestore_summary
+
+    try:
+        summary = fetch_firestore_summary() or {}
+    except Exception:  # noqa: BLE001 - no summary means "no answer", not a 500
+        logger.debug("corpus summary unavailable; hourly heatmap omitted")
+        return []
+
+    raw = summary.get("hourly_histogram_utc") or {}
+    if not isinstance(raw, dict) or not raw:
+        return []
+
+    counts: dict[int, int] = {}
+    for key, value in raw.items():
+        try:
+            hour = int(key)
+            count = int(value)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= hour <= 23 and count >= 0:
+            counts[hour] = count
+    if not counts:
+        return []
+
+    busiest = max(counts.values()) or 1
     return [
         HourlySolarBucket(
             hour=hour,
-            label=label,
-            activity_score=score,
-            avg_bpm=bpm,
-            dominant_mood=mood,
+            label=f"{hour:02d}:00",
+            activity_score=round(counts.get(hour, 0) / busiest, 4),
+            scrobble_count=counts.get(hour, 0),
         )
-        for hour, label, score, bpm, mood in hourly_specs
+        for hour in range(24)
     ]
 
 
 def _build_decade_sonic_dna() -> list[DecadeSonicDnaItem]:
-    """Constructs the 6-decade Sonic DNA matrix (1970s through 2020s)."""
-    return [
-        DecadeSonicDnaItem(
-            decade="1970s",
-            percentage=18.5,
-            track_count=29732,
-            signature_artists=["Georges Brassens", "Serge Gainsbourg", "Jacques Brel", "Simon & Garfunkel"],
-            vibe_summary="Analog warmth, poetic Chanson Française storytelling, and timeless acoustic fingerpicking.",
-        ),
-        DecadeSonicDnaItem(
-            decade="1980s",
-            percentage=11.0,
-            track_count=17679,
-            signature_artists=["Paolo Conte", "Claude Nougaro", "The Cure", "Talking Heads"],
-            vibe_summary="Post-punk basslines, theatrical cabaret jazz swing, and early analog synth textures.",
-        ),
-        DecadeSonicDnaItem(
-            decade="1990s",
-            percentage=26.5,
-            track_count=42590,
-            signature_artists=["Massive Attack", "Portishead", "Tricky", "MC Solaar"],
-            vibe_summary="The Bristol Trip-Hop golden era: brooding sub-bass, vinyl crackle, and low-pressure melancholia.",
-        ),
-        DecadeSonicDnaItem(
-            decade="2000s",
-            percentage=22.0,
-            track_count=35358,
-            signature_artists=["Chinese Man", "Tryo", "Wax Tailor", "-M-"],
-            vibe_summary="Turntablism, sample-heavy cinematic hip-hop, festive acoustic reggae, and French touch.",
-        ),
-        DecadeSonicDnaItem(
-            decade="2010s",
-            percentage=14.0,
-            track_count=22500,
-            signature_artists=["Stromae", "Bonobo", "Dub Incorporation", "L'Entourloop"],
-            vibe_summary="Electronic orchestration, global bass fusion, and high-definition club production.",
-        ),
-        DecadeSonicDnaItem(
-            decade="2020s",
-            percentage=8.0,
-            track_count=12858,
-            signature_artists=["Khruangbin", "Pomme", "Biga*Ranx", "Fred again.."],
-            vibe_summary="Psychedelic Thai-surf funk, intimate neo-chanson, and vapor-dub atmospheric soundscapes.",
-        ),
+    """Always empty. Nothing in this system records when a track was released.
+
+    This used to return six decades, 1970s through 2020s, with shares, track
+    counts, signature artists and a prose "vibe summary" apiece -- "1990s,
+    26.5%, 42,590 tracks, the Bristol Trip-Hop golden era". None of it was
+    measured.
+
+    A release decade needs a release year. ``track_catalog.jsonl`` carries
+    ``first_played_at`` and ``last_played_at``, which say when a track entered
+    *this listener's* history, not when it was made, and nothing else in the
+    corpus comes closer. ``summary_cache.json``'s ``yearly_counts`` are play
+    years for the same reason. Deriving a decade from either would be a guess
+    wearing a percentage sign, so the chart stays empty and the renderer names
+    what is missing.
+    """
+    return []
+
+
+#: What the prompt says where a figure does not exist. Spelled once.
+_NOT_RECORDED = "not recorded in this corpus"
+
+
+def _kpi_line(dashboard: DataVizDashboardResponse) -> str:
+    """The one-line KPI preamble, with an absence named rather than filled."""
+    s = dashboard.summary_stats
+    parts = [
+        f"{s.total_scrobbles_analyzed:,} scrobbles analyzed"
+        if s.total_scrobbles_analyzed is not None
+        else f"scrobble total {_NOT_RECORDED}",
+        f"avg {s.avg_bpm} BPM"
+        if s.avg_bpm is not None
+        else f"average tempo {_NOT_RECORDED}",
     ]
+    if s.dominant_genre:
+        parts.append(f"top tag '{s.dominant_genre}'")
+    return ", ".join(parts)
+
+
+def _dashboard_facts_block(dashboard: DataVizDashboardResponse) -> str:
+    """Render the dashboard's real contents as the model's only source of numbers.
+
+    This block used to be a literal in the prompt: six weather-affinity rows,
+    three pressure bands, an hourly BPM curve and a decade ranking, none of
+    which came from the corpus and none of which matched it. The model quoted
+    them back with total confidence, so a fabricated table became a spoken
+    answer about the user's own listening. Now the prompt can only contain
+    what ``get_dashboard`` measured, and says so where it measured nothing.
+    """
+    lines: list[str] = []
+
+    lines.append("1. Barometric Pressure vs BPM (`pressure_vs_bpm`):")
+    if dashboard.pressure_vs_bpm:
+        for p in dashboard.pressure_vs_bpm[:20]:
+            lines.append(
+                f"   - {p.pressure_hpa} hPa: {p.bpm} BPM, energy {p.energy} "
+                f"({p.artist} — {p.track_title}, theme {p.theme_id})"
+            )
+    else:
+        lines.append(
+            "   - No barometric pressure is recorded against any play, so there "
+            "is no pressure-to-tempo relationship to report. Say so if asked."
+        )
+
+    lines.append("2. Weather Affinity (`weather_affinity`):")
+    if dashboard.weather_affinity_breakdown:
+        for a in dashboard.weather_affinity_breakdown:
+            bpm = f"{a.avg_bpm} BPM" if a.avg_bpm is not None else f"BPM {_NOT_RECORDED}"
+            artist = f"top artist {a.top_artist}" if a.top_artist else f"top artist {_NOT_RECORDED}"
+            lines.append(
+                f"   - {a.theme_name}: {a.percentage}% "
+                f"({a.scrobble_count:,} plays, {bpm}, {artist})"
+            )
+    else:
+        lines.append(f"   - Weather affinity {_NOT_RECORDED}.")
+
+    lines.append("3. Hourly Chronology (`hourly_solar`, UTC play counts):")
+    if dashboard.hourly_solar_heatmap:
+        busiest = max(dashboard.hourly_solar_heatmap, key=lambda h: h.scrobble_count)
+        quietest = min(dashboard.hourly_solar_heatmap, key=lambda h: h.scrobble_count)
+        lines.append(
+            f"   - Busiest hour {busiest.label} ({busiest.scrobble_count:,} plays); "
+            f"quietest {quietest.label} ({quietest.scrobble_count:,} plays)."
+        )
+        lines.append(
+            "   - Per-hour counts: "
+            + ", ".join(f"{h.label} {h.scrobble_count:,}" for h in dashboard.hourly_solar_heatmap)
+        )
+        lines.append(
+            "   - The histogram carries counts only. Per-hour tempo and mood are "
+            f"{_NOT_RECORDED}."
+        )
+    else:
+        lines.append(f"   - Hourly chronology {_NOT_RECORDED}.")
+
+    lines.append("4. Decade Sonic DNA (`decade_dna`):")
+    if dashboard.decade_sonic_dna:
+        for d in dashboard.decade_sonic_dna:
+            lines.append(f"   - {d.decade}: {d.percentage}% ({d.track_count:,} tracks)")
+    else:
+        lines.append(
+            "   - No release year is recorded for any track, so the catalog "
+            "cannot be split by decade at all. Say so if asked."
+        )
+
+    return "\n".join(lines)
 
 
 def _build_qna_system_prompt(
@@ -478,29 +622,19 @@ def _build_qna_system_prompt(
     if hist_block:
         context_addendum += f"\n\n{hist_block}"
 
-    return f"""You are the **BaroGroove Gemini Live 2.5 Data Viz QnA Agent**, an charismatic sonic data scientist and atmospheric DJ.
-The user is viewing their 15-year Sonic Almanac Dashboard ({dashboard.summary_stats.total_scrobbles_analyzed:,} scrobbles analyzed, avg {dashboard.summary_stats.avg_bpm} BPM, pressure sensitivity index {dashboard.summary_stats.pressure_sensitivity_index}).
+    facts_block = _dashboard_facts_block(dashboard)
 
-Key Dashboard Facts:
-1. Barometric Pressure vs BPM (`pressure_vs_bpm`):
-   - Below 1005 hPa (Storm Front / Petrichor): BPM drops to 78–94 BPM with moody trip-hop & ambient (Massive Attack, Portishead, Burial).
-   - 1005–1018 hPa (Blue Hour / Midnight Thermal): 96–111 BPM (Serge Gainsbourg, Chinese Man, Bonobo).
-   - Above 1018 hPa (High Pressure Clarity / Solar Zenith): 114–132 BPM with high energy (Stromae, -M-, Khruangbin, Neu!).
-2. Weather Affinity (`weather_affinity`):
-   - Petrichor & Rain Front: 24.0% (38,572 plays, 96 BPM, top artist Georges Brassens)
-   - Blue Hour Drift: 20.5% (32,947 plays, 99 BPM, top artist Serge Gainsbourg)
-   - Low Pressure Storm Front: 16.5% (26,518 plays, 87 BPM, top artist Massive Attack)
-   - Midnight Thermal: 15.0% (24,108 plays, 108 BPM, top artist Chinese Man)
-   - High Pressure Clarity: 13.0% (20,893 plays, 116 BPM, top artist -M-)
-   - Solar Zenith: 11.0% (17,679 plays, 124 BPM, top artist Stromae)
-3. Hourly Solar Chronology (`hourly_solar`):
-   - Peak listening is 18:00–20:00 (Blue Hour Drift, activity 0.98–1.00, ~99 BPM).
-   - Highest BPM is Solar Zenith 11:00–13:00 (117–122 BPM).
-   - Lowest BPM is 01:00–04:00 Deep Night (82–88 BPM).
-4. Decade Sonic DNA (`decade_dna`):
-   - 1990s is #1 (26.5%, 42,590 plays — Bristol Trip-Hop: Massive Attack, Portishead, Tricky).
-   - 2000s is #2 (22.0%, 35,358 plays — Chinese Man, Tryo, Wax Tailor).
-   - 1970s is #3 (18.5%, 29,732 plays — Georges Brassens, Serge Gainsbourg, Jacques Brel).
+    return f"""You are the **BaroGroove Gemini Live 2.5 Data Viz QnA Agent**, an charismatic sonic data scientist and atmospheric DJ.
+The user is viewing their Sonic Almanac Dashboard ({_kpi_line(dashboard)}).
+
+Key Dashboard Facts — these are the ONLY figures you may quote:
+{facts_block}
+
+GROUNDING RULE (non-negotiable): every number in your answer must appear
+verbatim above. If the figures needed to answer the question are listed as not
+recorded, say plainly that the data is not there and name what is missing. Do
+NOT estimate, interpolate, or supply a typical value. An answer that invents a
+measurement is worse than no answer.
 
 Available Almanac Scrobbles to reference in `matching_scrobbles` (choose up to 4):
 {chr(10).join(scrobble_lines)}{context_addendum}
@@ -508,10 +642,10 @@ Available Almanac Scrobbles to reference in `matching_scrobbles` (choose up to 4
 INSTRUCTIONS:
 Return ONLY valid JSON matching this exact schema:
 {{
-  "answer_text": "Detailed, insightful 2-3 sentence data-storytelling answer citing exact numbers/BPM/percentages from above.",
+  "answer_text": "Detailed, insightful 2-3 sentence data-storytelling answer citing exact numbers/BPM/percentages from the facts above.",
   "spoken_summary": "Punchy 1-2 sentence DJ/Data-Scientist spoken summary written for text-to-speech synthesis.",
   "highlight_section": "MUST be exactly one of: 'pressure_vs_bpm', 'weather_affinity', 'hourly_solar', 'decade_dna'",
-  "key_metric_badge": "Short punchy badge e.g. '< 1005 hPa • 86 BPM Trip-Hop Shift' or '1990s Bristol Peak • 26.5% Share'",
+  "key_metric_badge": "Short punchy badge built from a figure in the facts above, e.g. 'Petrichor • 15.2% Share'",
   "suggested_followups": ["Follow-up question 1", "Follow-up question 2", "Follow-up question 3"],
   "matching_scrobble_ids": ["list of up to 4 scrobble IDs from the list above"]
 }}"""
@@ -560,82 +694,138 @@ def _deterministic_qna_fallback(
             picked = list(_DEFAULT_CURATED_SCROBBLES[:4])
         return picked[:4]
 
+    # Each branch below answers from `dashboard`, which `get_dashboard` filled
+    # from the corpus. They used to answer from prose literals instead:
+    # "86 BPM below 1005 hPa", "Pressure Sensitivity Index of 0.84", "the
+    # 1990s, 26.5%, 42,590 scrobbles", "Petrichor at 24.0%, 38,572 plays". None
+    # of those figures existed in the corpus, and this is the path that runs
+    # offline and under test — so the canned numbers were what most users and
+    # every test actually saw. Where the corpus holds nothing, the branch now
+    # says what is missing instead of reaching for a plausible number.
+    stats = dashboard.summary_stats
+    affinity = dashboard.weather_affinity_breakdown
+    hourly = dashboard.hourly_solar_heatmap
+
+    def _corpus_size() -> str:
+        return (
+            f"{stats.total_scrobbles_analyzed:,} analysed scrobbles"
+            if stats.total_scrobbles_analyzed is not None
+            else "your synced scrobbles"
+        )
+
     if any(k in q_lower for k in ["1005", "pressure", "hpa", "baromet", "drop", "storm", "falling"]):
         section = "pressure_vs_bpm"
-        badge = "< 1005 hPa • 86 BPM Trip-Hop Shift"
+        badge = "No pressure readings"
         answer = (
-            "When barometric pressure drops below 1005 hPa, your listening tempo decelerates by 18.4% "
-            "to an average of 86 BPM. Your Pressure Sensitivity Index of 0.84 reveals a strong shift away "
-            "from upbeat grooves toward brooding sub-bass, Bristol trip-hop, and petrichor acoustic ballads "
-            "anchored by Massive Attack, Portishead, and Serge Gainsbourg."
+            "I cannot answer that from your almanac. No barometric pressure is "
+            "recorded against any play in this corpus, so there is nothing to "
+            "set your tempo against — a pressure-versus-BPM figure would be a "
+            "guess, not a reading. Weather themes are recorded per track, so a "
+            "question about your themes I can answer."
         )
         spoken = (
-            "Whenever the barometer drops below 1005 hectopascals, your tempo slows down to 86 BPM. "
-            "You instinctively trade sunny grooves for deep Bristol trip-hop and rainy-day acoustic classics."
+            "There is no barometric pressure recorded against your plays, so I "
+            "have nothing to correlate tempo with. Ask me about your weather "
+            "themes instead."
         )
         followups = [
-            "Which tracks do I play during high-pressure ridges above 1022 hPa?",
-            "Compare my late-night vs morning BPM and solar chronology",
-            "How does Petrichor rain affect my acoustic Chanson listening?",
+            "Which weather theme do I listen to most?",
+            "What hour of the day do I listen most?",
+            "Which artist leads my rain-front listening?",
         ]
-        tracks = _pick_tracks(["massive", "portishead", "gainsbourg", "petrichor", "low_pressure"], slice(0, 4))
+        tracks = _pick_tracks(["massive", "portishead", "gainsbourg", "petrichor"], slice(0, 4))
 
     elif any(k in q_lower for k in ["night", "morning", "solar", "hour", "chronology", "time", "dawn", "zenith"]):
         section = "hourly_solar"
-        badge = "19:00 Blue Hour Peak • +34 BPM Solar Swing"
-        answer = (
-            "Your circadian solar chronology shows a 34 BPM swing between Deep Night (88 BPM at 01:00) "
-            "and Solar Zenith (122 BPM at 12:00 noon). However, your highest listening volume clusters "
-            "during Civil Dusk and Blue Hour (18:00–20:00), where activity hits 100% around 99 BPM downtempo and trip-hop."
-        )
-        spoken = (
-            "Your tempo peaks at 122 BPM right at solar noon, before cooling down to 88 BPM after midnight. "
-            "Your favorite listening window is 7 PM Blue Hour, where trip-hop and poetic grooves dominate."
-        )
+        if hourly:
+            busiest = max(hourly, key=lambda h: h.scrobble_count)
+            quietest = min(hourly, key=lambda h: h.scrobble_count)
+            badge = f"{busiest.label} peak • {busiest.scrobble_count:,} plays"
+            answer = (
+                f"Your listening peaks at {busiest.label} UTC with "
+                f"{busiest.scrobble_count:,} plays, and bottoms out at "
+                f"{quietest.label} with {quietest.scrobble_count:,}. That is the "
+                "shape of the hour histogram across " + _corpus_size() + ". "
+                "The histogram counts plays only — it does not carry which "
+                "tracks they were, so I have no tempo or mood to break down by "
+                "hour."
+            )
+            spoken = (
+                f"You listen most at {busiest.label} and least at "
+                f"{quietest.label}. The histogram counts plays, not tempo, so I "
+                "cannot give you a BPM by hour."
+            )
+        else:
+            badge = "No hourly histogram"
+            answer = (
+                "I have no hourly breakdown for you — the corpus summary carries "
+                "no play histogram, so there is no time-of-day shape to report."
+            )
+            spoken = "There is no hourly play histogram in your almanac yet."
         followups = [
-            "What do I listen to when barometric pressure drops below 1005 hPa?",
-            "Which artists dominate my Midnight Thermal sessions after 11 PM?",
-            "Break down my 1990s Bristol Trip-Hop & Dub Techno DNA",
+            "Which weather theme do I listen to most?",
+            "Which artist leads my rain-front listening?",
+            "How many scrobbles are in my almanac?",
         ]
         tracks = _pick_tracks(["chinese man", "bonobo", "air", "stromae"], slice(2, 6))
 
     elif any(k in q_lower for k in ["1990", "90s", "bristol", "decade", "dna", "1970", "70s", "era", "history"]):
         section = "decade_dna"
-        badge = "1990s Peak Era • 26.5% Share (42,590 Plays)"
+        badge = "No release years"
         answer = (
-            "The 1990s form the core pillar of your Sonic DNA, accounting for 26.5% of your catalog "
-            "(42,590 scrobbles) led by Massive Attack, Portishead, and Tricky. Combined with your 2000s "
-            "turntablism cohort (22.0%, Chinese Man & Wax Tailor) and 1970s Chanson heritage (18.5%, Georges Brassens), "
-            "nearly two-thirds of your listening bridges analog storytelling with heavy atmospheric breakbeats."
+            "I cannot break your catalog down by decade. No release year is "
+            "recorded for any track — the corpus knows when you first and last "
+            "played something, which is when it entered your history, not when "
+            "it was made. Splitting that by decade would describe your listening "
+            "history, not the music's era, so I would rather not."
         )
         spoken = (
-            "The 1990s are your number one decade at 26.5 percent of all plays, led by Massive Attack and Portishead. "
-            "Together with 70s French Chanson and 2000s turntablism, that defines your core sonic signature."
+            "Your catalog has no release years, so I cannot split it by decade. "
+            "I would only be guessing."
         )
         followups = [
-            "How does my 1970s Chanson Française catalog compare to my 2020s discoveries?",
-            "What do I listen to when barometric pressure drops below 1005 hPa?",
-            "Which weather theme triggers my highest energy tracks?",
+            "Which weather theme do I listen to most?",
+            "What hour of the day do I listen most?",
+            "How many scrobbles are in my almanac?",
         ]
         tracks = _pick_tracks(["massive attack", "portishead", "tricky", "brassens"], slice(1, 5))
 
     else:
         section = "weather_affinity"
-        badge = "Petrichor #1 Affinity (24%) • Solar Zenith 124 BPM"
-        answer = (
-            "Across 160,717 analyzed scrobbles, Petrichor & Rain Front is your dominant weather affinity "
-            "at 24.0% (38,572 plays, averaging 96 BPM), closely followed by Blue Hour Drift at 20.5%. "
-            "When high-pressure Solar Zenith conditions arrive (11.0% share), your energy and tempo surge to a peak "
-            "average of 124 BPM led by Stromae, -M-, and Khruangbin."
-        )
-        spoken = (
-            "Petrichor and Rain is your top weather vibe with over 38,000 plays, while Solar Zenith triggers "
-            "your highest energy tracks averaging 124 beats per minute."
-        )
+        if affinity:
+            top = affinity[0]
+            badge = f"{top.theme_name} • {top.percentage}%"
+            runner = affinity[1] if len(affinity) > 1 else None
+            second = (
+                f", ahead of {runner.theme_name} at {runner.percentage}%"
+                if runner is not None
+                else ""
+            )
+            artist = (
+                f" Its most-played artist in your catalog is {top.top_artist}."
+                if top.top_artist
+                else ""
+            )
+            answer = (
+                f"Across {_corpus_size()}, {top.theme_name} is your leading "
+                f"weather affinity at {top.percentage}% "
+                f"({top.scrobble_count:,} plays){second}.{artist}"
+            )
+            spoken = (
+                f"{top.theme_name} is your top weather affinity at "
+                f"{top.percentage} percent, on {top.scrobble_count:,} plays."
+            )
+        else:
+            badge = "No weather affinity"
+            answer = (
+                "I have no weather breakdown for you yet — nothing in the corpus "
+                "summary records plays against a weather theme."
+            )
+            spoken = "Your almanac has no weather affinity data yet."
         followups = [
-            "What do I listen to when barometric pressure drops below 1005 hPa?",
-            "Compare my late-night vs morning BPM and solar chronology",
-            "Break down my 1990s Bristol Trip-Hop & Dub Techno DNA",
+            "What hour of the day do I listen most?",
+            "Which artist leads my rain-front listening?",
+            "How many scrobbles are in my almanac?",
         ]
         tracks = _pick_tracks(["stromae", "-m-", "khruangbin", "brassens"], slice(0, 4))
 
@@ -703,23 +893,43 @@ class DataVizEngine:
     """Core engine serving BaroGroove Data Visualization telemetry and Gemini Live 2.5 QnA."""
 
     def get_dashboard(self, user_id: str = "jpaquay") -> DataVizDashboardResponse:
-        """Aggregates scrobble catalog and historical weather telemetry for `GET /api/dataviz/dashboard`."""
+        """Aggregates the scrobble corpus for `GET /api/dataviz/dashboard`.
+
+        Every KPI is read off the corpus or left null. It used to substitute
+        `160717` scrobbles and `102.4` BPM when the analytics were missing, and
+        state "petrichor" and "chanson-francaise & trip-hop" unconditionally —
+        the first two as measurements, the last two as findings. The corpus
+        summary in fact reports 104.6 BPM and a different leading theme, so the
+        substitutes were not even a stale copy of the truth.
+        """
         scrobble_res = search_scrobbles(user_id=user_id, limit=100)
         scrobbles = scrobble_res.scrobbles
         analytics = scrobble_res.analytics
 
+        affinity = _build_weather_affinity(analytics)
+        genres = list(getattr(analytics, "top_genres", None) or [])
+        top_genre = None
+        if genres and isinstance(genres[0], dict):
+            top_genre = str(genres[0].get("tag") or "").strip() or None
+
+        total = int(getattr(analytics, "total_scrobbles", 0) or 0)
+        bpm = float(getattr(analytics, "avg_bpm", 0.0) or 0.0)
+
         summary = SummaryStats(
-            total_scrobbles_analyzed=int(analytics.total_scrobbles or 160717),
-            avg_bpm=round(float(analytics.avg_bpm or 102.4), 1),
-            dominant_weather_theme="petrichor",
-            dominant_genre="chanson-francaise & trip-hop",
-            pressure_sensitivity_index=0.84,
+            total_scrobbles_analyzed=total if total > 0 else None,
+            avg_bpm=round(bpm, 1) if bpm > 0 else None,
+            # The leading row of the real breakdown, not a favourite.
+            dominant_weather_theme=affinity[0].theme_id if affinity else None,
+            dominant_genre=top_genre,
+            # No pressure reading is recorded against a play, so there is
+            # nothing to correlate. See the field description.
+            pressure_sensitivity_index=None,
         )
 
         return DataVizDashboardResponse(
             summary_stats=summary,
             pressure_vs_bpm=_build_pressure_vs_bpm_points(scrobbles),
-            weather_affinity_breakdown=_build_weather_affinity(),
+            weather_affinity_breakdown=affinity,
             hourly_solar_heatmap=_build_hourly_solar_heatmap(),
             decade_sonic_dna=_build_decade_sonic_dna(),
         )

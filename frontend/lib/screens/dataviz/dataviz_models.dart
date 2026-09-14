@@ -8,31 +8,45 @@
 // Self-contained Data Viz Telemetry & QnA JSON Models
 // ============================================================================
 
+/// What a Data Viz figure shows when the number behind it is not known.
+///
+/// `UX_IA_SPEC.md` §2 rule 4: empty states are honest and never show a
+/// placeholder number. Same em-dash the Almanac KPI strip uses, so a reader can
+/// tell a missing figure from a real one at a glance anywhere in the app.
+const String kDvNoValue = '—';
+
 class SummaryStatsModel {
   const SummaryStatsModel({
-    required this.totalScrobblesAnalyzed,
-    required this.avgBpm,
-    required this.dominantWeatherTheme,
-    required this.dominantGenre,
-    required this.pressureSensitivityIndex,
+    this.totalScrobblesAnalyzed,
+    this.avgBpm,
+    this.dominantWeatherTheme,
+    this.dominantGenre,
+    this.pressureSensitivityIndex,
   });
 
+  /// Absent fields stay absent.
+  ///
+  /// These used to default to `160717` scrobbles, `102.4` BPM, `'petrichor'`,
+  /// `'chanson-francaise & trip-hop'` and a `0.84` "pressure sensitivity
+  /// index" — so a response that omitted a field, or a backend that had not
+  /// measured it, produced a KPI ribbon of confident numbers nobody counted.
   factory SummaryStatsModel.fromJson(Map<String, dynamic> json) {
     return SummaryStatsModel(
-      totalScrobblesAnalyzed: (json['total_scrobbles_analyzed'] as num?)?.toInt() ?? 160717,
-      avgBpm: (json['avg_bpm'] as num?)?.toDouble() ?? 102.4,
-      dominantWeatherTheme: (json['dominant_weather_theme'] as String?) ?? 'petrichor',
-      dominantGenre: (json['dominant_genre'] as String?) ?? 'chanson-francaise & trip-hop',
-      pressureSensitivityIndex:
-          (json['pressure_sensitivity_index'] as num?)?.toDouble() ?? 0.84,
+      totalScrobblesAnalyzed: (json['total_scrobbles_analyzed'] as num?)?.toInt(),
+      avgBpm: (json['avg_bpm'] as num?)?.toDouble(),
+      dominantWeatherTheme: (json['dominant_weather_theme'] as String?),
+      dominantGenre: (json['dominant_genre'] as String?),
+      pressureSensitivityIndex: (json['pressure_sensitivity_index'] as num?)?.toDouble(),
     );
   }
 
-  final int totalScrobblesAnalyzed;
-  final double avgBpm;
-  final String dominantWeatherTheme;
-  final String dominantGenre;
-  final double pressureSensitivityIndex;
+  static const SummaryStatsModel empty = SummaryStatsModel();
+
+  final int? totalScrobblesAnalyzed;
+  final double? avgBpm;
+  final String? dominantWeatherTheme;
+  final String? dominantGenre;
+  final double? pressureSensitivityIndex;
 }
 
 class PressureVsBpmModel {
@@ -45,14 +59,20 @@ class PressureVsBpmModel {
     required this.themeId,
   });
 
+  /// Structural zeroes only.
+  ///
+  /// A row the backend sent is a row it measured, so a missing field here is a
+  /// malformed payload, not an unknown value — and `0` reads as broken rather
+  /// than as a reading. The previous defaults (`1013.0` hPa, `100` BPM,
+  /// `'Teardrop'` by `'Massive Attack'`) each read as a real observation.
   factory PressureVsBpmModel.fromJson(Map<String, dynamic> json) {
     return PressureVsBpmModel(
-      pressureHpa: (json['pressure_hpa'] as num?)?.toDouble() ?? 1013.0,
-      bpm: (json['bpm'] as num?)?.toInt() ?? 100,
-      energy: (json['energy'] as num?)?.toDouble() ?? 0.5,
-      trackTitle: (json['track_title'] as String?) ?? 'Teardrop',
-      artist: (json['artist'] as String?) ?? 'Massive Attack',
-      themeId: (json['theme_id'] as String?) ?? 'petrichor',
+      pressureHpa: (json['pressure_hpa'] as num?)?.toDouble() ?? 0.0,
+      bpm: (json['bpm'] as num?)?.toInt() ?? 0,
+      energy: (json['energy'] as num?)?.toDouble() ?? 0.0,
+      trackTitle: (json['track_title'] as String?) ?? '',
+      artist: (json['artist'] as String?) ?? '',
+      themeId: (json['theme_id'] as String?) ?? '',
     );
   }
 
@@ -70,18 +90,21 @@ class WeatherAffinityModel {
     required this.themeName,
     required this.scrobbleCount,
     required this.percentage,
-    required this.avgBpm,
-    required this.topArtist,
+    this.avgBpm,
+    this.topArtist,
   });
 
+  /// `avg_bpm` and `top_artist` are nullable on the wire: the backend joins
+  /// them in from the track catalog and leaves them null for a theme it holds
+  /// no tracks for. They are rendered as [kDvNoValue], not as a guess.
   factory WeatherAffinityModel.fromJson(Map<String, dynamic> json) {
     return WeatherAffinityModel(
-      themeId: (json['theme_id'] as String?) ?? 'petrichor',
-      themeName: (json['theme_name'] as String?) ?? 'Petrichor & Rain Front',
-      scrobbleCount: (json['scrobble_count'] as num?)?.toInt() ?? 38572,
-      percentage: (json['percentage'] as num?)?.toDouble() ?? 24.0,
-      avgBpm: (json['avg_bpm'] as num?)?.toInt() ?? 96,
-      topArtist: (json['top_artist'] as String?) ?? 'Georges Brassens',
+      themeId: (json['theme_id'] as String?) ?? '',
+      themeName: (json['theme_name'] as String?) ?? '',
+      scrobbleCount: (json['scrobble_count'] as num?)?.toInt() ?? 0,
+      percentage: (json['percentage'] as num?)?.toDouble() ?? 0.0,
+      avgBpm: (json['avg_bpm'] as num?)?.toInt(),
+      topArtist: (json['top_artist'] as String?),
     );
   }
 
@@ -89,8 +112,8 @@ class WeatherAffinityModel {
   final String themeName;
   final int scrobbleCount;
   final double percentage;
-  final int avgBpm;
-  final String topArtist;
+  final int? avgBpm;
+  final String? topArtist;
 }
 
 class HourlySolarModel {
@@ -98,25 +121,32 @@ class HourlySolarModel {
     required this.hour,
     required this.label,
     required this.activityScore,
-    required this.avgBpm,
-    required this.dominantMood,
+    required this.scrobbleCount,
+    this.avgBpm,
+    this.dominantMood,
   });
 
+  /// `avg_bpm` and `dominant_mood` are always null: the corpus histogram counts
+  /// plays per hour and does not carry which tracks they were, so there is no
+  /// tempo to average and no mood to name. They used to default to `96` BPM and
+  /// `'Nocturnal Dub'`.
   factory HourlySolarModel.fromJson(Map<String, dynamic> json) {
     return HourlySolarModel(
       hour: (json['hour'] as num?)?.toInt() ?? 0,
-      label: (json['label'] as String?) ?? '00:00',
-      activityScore: (json['activity_score'] as num?)?.toDouble() ?? 0.5,
-      avgBpm: (json['avg_bpm'] as num?)?.toInt() ?? 96,
-      dominantMood: (json['dominant_mood'] as String?) ?? 'Nocturnal Dub',
+      label: (json['label'] as String?) ?? '',
+      activityScore: (json['activity_score'] as num?)?.toDouble() ?? 0.0,
+      scrobbleCount: (json['scrobble_count'] as num?)?.toInt() ?? 0,
+      avgBpm: (json['avg_bpm'] as num?)?.toInt(),
+      dominantMood: (json['dominant_mood'] as String?),
     );
   }
 
   final int hour;
   final String label;
   final double activityScore;
-  final int avgBpm;
-  final String dominantMood;
+  final int scrobbleCount;
+  final int? avgBpm;
+  final String? dominantMood;
 }
 
 class DecadeSonicDnaModel {
@@ -128,12 +158,15 @@ class DecadeSonicDnaModel {
     required this.vibeSummary,
   });
 
+  /// Structural zeroes, for the reason given on [PressureVsBpmModel.fromJson].
+  /// These used to default to the `'1990s'` decade at `20.0%` and `30000`
+  /// tracks.
   factory DecadeSonicDnaModel.fromJson(Map<String, dynamic> json) {
     final List<dynamic> rawArtists = (json['signature_artists'] as List<dynamic>?) ?? const <dynamic>[];
     return DecadeSonicDnaModel(
-      decade: (json['decade'] as String?) ?? '1990s',
-      percentage: (json['percentage'] as num?)?.toDouble() ?? 20.0,
-      trackCount: (json['track_count'] as num?)?.toInt() ?? 30000,
+      decade: (json['decade'] as String?) ?? '',
+      percentage: (json['percentage'] as num?)?.toDouble() ?? 0.0,
+      trackCount: (json['track_count'] as num?)?.toInt() ?? 0,
       signatureArtists: rawArtists.map((dynamic e) => e.toString()).toList(),
       vibeSummary: (json['vibe_summary'] as String?) ?? '',
     );
@@ -190,115 +223,30 @@ class DataVizDashboardModel {
   final List<HourlySolarModel> hourlySolarHeatmap;
   final List<DecadeSonicDnaModel> decadeSonicDna;
 
-  static DataVizDashboardModel fallback() {
-    return const DataVizDashboardModel(
-      summaryStats: SummaryStatsModel(
-        totalScrobblesAnalyzed: 160717,
-        avgBpm: 102.4,
-        dominantWeatherTheme: 'petrichor',
-        dominantGenre: 'chanson-francaise & trip-hop',
-        pressureSensitivityIndex: 0.84,
-      ),
-      pressureVsBpm: <PressureVsBpmModel>[
-        PressureVsBpmModel(pressureHpa: 992.4, bpm: 78, energy: 0.34, trackTitle: 'Teardrop', artist: 'Massive Attack', themeId: 'low_pressure_front'),
-        PressureVsBpmModel(pressureHpa: 994.8, bpm: 82, energy: 0.38, trackTitle: 'Roads', artist: 'Portishead', themeId: 'low_pressure_front'),
-        PressureVsBpmModel(pressureHpa: 997.1, bpm: 85, energy: 0.41, trackTitle: 'Archangel', artist: 'Burial', themeId: 'low_pressure_front'),
-        PressureVsBpmModel(pressureHpa: 999.5, bpm: 88, energy: 0.44, trackTitle: 'Glory Box', artist: 'Portishead', themeId: 'petrichor'),
-        PressureVsBpmModel(pressureHpa: 1001.8, bpm: 91, energy: 0.47, trackTitle: 'Angel', artist: 'Massive Attack', themeId: 'petrichor'),
-        PressureVsBpmModel(pressureHpa: 1003.6, bpm: 94, energy: 0.50, trackTitle: 'La Javanaise', artist: 'Serge Gainsbourg', themeId: 'petrichor'),
-        PressureVsBpmModel(pressureHpa: 1005.9, bpm: 96, energy: 0.52, trackTitle: 'Que Sera', artist: 'Wax Tailor', themeId: 'blue_hour'),
-        PressureVsBpmModel(pressureHpa: 1008.2, bpm: 99, energy: 0.55, trackTitle: 'La femme d\'argent', artist: 'Air', themeId: 'blue_hour'),
-        PressureVsBpmModel(pressureHpa: 1010.5, bpm: 102, energy: 0.57, trackTitle: 'Les copains d\'abord', artist: 'Georges Brassens', themeId: 'blue_hour'),
-        PressureVsBpmModel(pressureHpa: 1012.8, bpm: 105, energy: 0.60, trackTitle: 'I\'ve Got That Tune', artist: 'Chinese Man', themeId: 'midnight_thermal'),
-        PressureVsBpmModel(pressureHpa: 1014.9, bpm: 108, energy: 0.63, trackTitle: 'Kerala', artist: 'Bonobo', themeId: 'midnight_thermal'),
-        PressureVsBpmModel(pressureHpa: 1017.1, bpm: 111, energy: 0.66, trackTitle: 'L\'hymne de nos campagnes', artist: 'Tryo', themeId: 'midnight_thermal'),
-        PressureVsBpmModel(pressureHpa: 1019.4, bpm: 114, energy: 0.70, trackTitle: 'Texas Sun', artist: 'Khruangbin', themeId: 'clear_high'),
-        PressureVsBpmModel(pressureHpa: 1021.6, bpm: 118, energy: 0.73, trackTitle: 'Onde sensuelle', artist: '-M-', themeId: 'clear_high'),
-        PressureVsBpmModel(pressureHpa: 1023.8, bpm: 121, energy: 0.76, trackTitle: 'Papaoutai', artist: 'Stromae', themeId: 'clear_high'),
-        PressureVsBpmModel(pressureHpa: 1025.9, bpm: 124, energy: 0.80, trackTitle: 'Formidable', artist: 'Stromae', themeId: 'solar_zenith'),
-        PressureVsBpmModel(pressureHpa: 1027.7, bpm: 128, energy: 0.84, trackTitle: 'Hallogallo', artist: 'Neu!', themeId: 'solar_zenith'),
-        PressureVsBpmModel(pressureHpa: 1029.5, bpm: 132, energy: 0.88, trackTitle: 'Liquid Sunshine', artist: 'Biga*Ranx', themeId: 'solar_zenith'),
-      ],
-      weatherAffinityBreakdown: <WeatherAffinityModel>[
-        WeatherAffinityModel(themeId: 'petrichor', themeName: 'Petrichor & Rain Front', scrobbleCount: 38572, percentage: 24.0, avgBpm: 96, topArtist: 'Georges Brassens'),
-        WeatherAffinityModel(themeId: 'blue_hour', themeName: 'Blue Hour Drift', scrobbleCount: 32947, percentage: 20.5, avgBpm: 99, topArtist: 'Serge Gainsbourg'),
-        WeatherAffinityModel(themeId: 'low_pressure_front', themeName: 'Low Pressure Storm Front', scrobbleCount: 26518, percentage: 16.5, avgBpm: 87, topArtist: 'Massive Attack'),
-        WeatherAffinityModel(themeId: 'midnight_thermal', themeName: 'Midnight Thermal', scrobbleCount: 24108, percentage: 15.0, avgBpm: 108, topArtist: 'Chinese Man'),
-        WeatherAffinityModel(themeId: 'clear_high', themeName: 'High Pressure Clarity', scrobbleCount: 20893, percentage: 13.0, avgBpm: 116, topArtist: '-M-'),
-        WeatherAffinityModel(themeId: 'solar_zenith', themeName: 'Solar Zenith', scrobbleCount: 17679, percentage: 11.0, avgBpm: 124, topArtist: 'Stromae'),
-      ],
-      hourlySolarHeatmap: <HourlySolarModel>[
-        HourlySolarModel(hour: 0, label: '00:00 • Midnight Thermal', activityScore: 0.62, avgBpm: 92, dominantMood: 'Nocturnal Dub & Deep Trip-Hop'),
-        HourlySolarModel(hour: 1, label: '01:00 • Deep Night', activityScore: 0.48, avgBpm: 88, dominantMood: 'Sub-Bass & Ambient Drone'),
-        HourlySolarModel(hour: 2, label: '02:00 • Astral Stillness', activityScore: 0.31, avgBpm: 84, dominantMood: 'Late-Night Vinyl & Lo-Fi Drift'),
-        HourlySolarModel(hour: 3, label: '03:00 • Pre-Dawn Isobar', activityScore: 0.19, avgBpm: 82, dominantMood: 'Minimal Dub Chords'),
-        HourlySolarModel(hour: 4, label: '04:00 • First Twilight', activityScore: 0.14, avgBpm: 85, dominantMood: 'Quiet Acoustic Reflections'),
-        HourlySolarModel(hour: 5, label: '05:00 • Civil Dawn', activityScore: 0.22, avgBpm: 89, dominantMood: 'Dew-Point Acoustic Folk'),
-        HourlySolarModel(hour: 6, label: '06:00 • Sunrise Horizon', activityScore: 0.38, avgBpm: 94, dominantMood: 'Warm Rhodes & Morning Coffee'),
-        HourlySolarModel(hour: 7, label: '07:00 • Morning Ascent', activityScore: 0.54, avgBpm: 101, dominantMood: 'Chanson Française & Poetic Guitar'),
-        HourlySolarModel(hour: 8, label: '08:00 • Commute Ridge', activityScore: 0.68, avgBpm: 106, dominantMood: 'Upbeat Indie & Motorik Pulse'),
-        HourlySolarModel(hour: 9, label: '09:00 • Forenoon Clarity', activityScore: 0.75, avgBpm: 110, dominantMood: 'Crisp Rhythm & Analog Grooves'),
-        HourlySolarModel(hour: 10, label: '10:00 • High Sun Climb', activityScore: 0.82, avgBpm: 114, dominantMood: 'Funk, Soul & Brass Hooks'),
-        HourlySolarModel(hour: 11, label: '11:00 • Pre-Zenith', activityScore: 0.86, avgBpm: 117, dominantMood: 'High-Energy Grooves & Reggae'),
-        HourlySolarModel(hour: 12, label: '12:00 • Solar Zenith', activityScore: 0.91, avgBpm: 122, dominantMood: 'Peak Solar Energy & Tropicalia'),
-        HourlySolarModel(hour: 13, label: '13:00 • Post-Zenith Warmth', activityScore: 0.84, avgBpm: 119, dominantMood: 'Sun-Drenched Grooves & Bossa'),
-        HourlySolarModel(hour: 14, label: '14:00 • Afternoon Thermal', activityScore: 0.79, avgBpm: 115, dominantMood: 'Steady Groove & Classic Rock'),
-        HourlySolarModel(hour: 15, label: '15:00 • Trade Wind Breeze', activityScore: 0.76, avgBpm: 112, dominantMood: 'Roots Reggae & Dub Basslines'),
-        HourlySolarModel(hour: 16, label: '16:00 • Golden Approach', activityScore: 0.83, avgBpm: 109, dominantMood: 'Warm Analog Synths & Soul'),
-        HourlySolarModel(hour: 17, label: '17:00 • Golden Hour Ridge', activityScore: 0.94, avgBpm: 106, dominantMood: 'Sunset Grooves & Poetic Chanson'),
-        HourlySolarModel(hour: 18, label: '18:00 • Civil Dusk', activityScore: 0.98, avgBpm: 103, dominantMood: 'Twilight Transitions & Downtempo'),
-        HourlySolarModel(hour: 19, label: '19:00 • Blue Hour Drift', activityScore: 1.00, avgBpm: 99, dominantMood: 'Peak Listening • Bristol Trip-Hop'),
-        HourlySolarModel(hour: 20, label: '20:00 • Nautical Twilight', activityScore: 0.92, avgBpm: 97, dominantMood: 'Atmospheric Beats & Spoken Word'),
-        HourlySolarModel(hour: 21, label: '21:00 • Urban Heat Island', activityScore: 0.85, avgBpm: 96, dominantMood: 'Deep Grooves & Midnight Jazz'),
-        HourlySolarModel(hour: 22, label: '22:00 • Late Evening Club', activityScore: 0.78, avgBpm: 95, dominantMood: 'Hypnotic Beats & Dub Techno'),
-        HourlySolarModel(hour: 23, label: '23:00 • Pre-Midnight Drift', activityScore: 0.71, avgBpm: 93, dominantMood: 'Nocturnal Trip-Hop & Vinyl Crackle'),
-      ],
-      decadeSonicDna: <DecadeSonicDnaModel>[
-        DecadeSonicDnaModel(
-          decade: '1970s',
-          percentage: 18.5,
-          trackCount: 29732,
-          signatureArtists: <String>['Georges Brassens', 'Serge Gainsbourg', 'Jacques Brel', 'Simon & Garfunkel'],
-          vibeSummary: 'Analog warmth, poetic Chanson Française storytelling, and timeless acoustic fingerpicking.',
-        ),
-        DecadeSonicDnaModel(
-          decade: '1980s',
-          percentage: 11.0,
-          trackCount: 17679,
-          signatureArtists: <String>['Paolo Conte', 'Claude Nougaro', 'The Cure', 'Talking Heads'],
-          vibeSummary: 'Post-punk basslines, theatrical cabaret jazz swing, and early analog synth textures.',
-        ),
-        DecadeSonicDnaModel(
-          decade: '1990s',
-          percentage: 26.5,
-          trackCount: 42590,
-          signatureArtists: <String>['Massive Attack', 'Portishead', 'Tricky', 'MC Solaar'],
-          vibeSummary: 'The Bristol Trip-Hop golden era: brooding sub-bass, vinyl crackle, and low-pressure melancholia.',
-        ),
-        DecadeSonicDnaModel(
-          decade: '2000s',
-          percentage: 22.0,
-          trackCount: 35358,
-          signatureArtists: <String>['Chinese Man', 'Tryo', 'Wax Tailor', '-M-'],
-          vibeSummary: 'Turntablism, sample-heavy cinematic hip-hop, festive acoustic reggae, and French touch.',
-        ),
-        DecadeSonicDnaModel(
-          decade: '2010s',
-          percentage: 14.0,
-          trackCount: 22500,
-          signatureArtists: <String>['Stromae', 'Bonobo', 'Dub Incorporation', 'L\'Entourloop'],
-          vibeSummary: 'Electronic orchestration, global bass fusion, and high-definition club production.',
-        ),
-        DecadeSonicDnaModel(
-          decade: '2020s',
-          percentage: 8.0,
-          trackCount: 12858,
-          signatureArtists: <String>['Khruangbin', 'Pomme', 'Biga*Ranx', 'Fred again..'],
-          vibeSummary: 'Psychedelic Thai-surf funk, intimate neo-chanson, and vapor-dub atmospheric soundscapes.',
-        ),
-      ],
-    );
-  }
+  bool get hasAnyData =>
+      pressureVsBpm.isNotEmpty ||
+      weatherAffinityBreakdown.isNotEmpty ||
+      hourlySolarHeatmap.isNotEmpty ||
+      decadeSonicDna.isNotEmpty ||
+      summaryStats.totalScrobblesAnalyzed != null;
+
+  /// Nothing measured yet. The screen's state before the first response lands,
+  /// and the state it returns to when a load fails.
+  ///
+  /// This replaces `fallback()`, which was ~90 lines of invented analytics —
+  /// 160,717 scrobbles, 102.4 BPM, an 18-point pressure scatter, a six-row
+  /// weather breakdown ("High Pressure Clarity — 20,893 scrobbles"), 24 hourly
+  /// rows and six decades. It was not dead code: it was this field's
+  /// initialiser, so it is what every user saw before any real data arrived and
+  /// what they kept seeing if the fetch failed. It also carried four theme ids
+  /// that no longer exist, one of them retired with no successor.
+  static const DataVizDashboardModel empty = DataVizDashboardModel(
+    summaryStats: SummaryStatsModel.empty,
+    pressureVsBpm: <PressureVsBpmModel>[],
+    weatherAffinityBreakdown: <WeatherAffinityModel>[],
+    hourlySolarHeatmap: <HourlySolarModel>[],
+    decadeSonicDna: <DecadeSonicDnaModel>[],
+  );
 }
 
 class MatchingScrobbleModel {
@@ -309,12 +257,15 @@ class MatchingScrobbleModel {
     required this.album,
   });
 
+  /// A track the agent cited. Missing fields stay empty rather than becoming
+  /// `Massive Attack — Teardrop (Mezzanine)`, which is a real record and read
+  /// as one: the agent would appear to have cited a track it never returned.
   factory MatchingScrobbleModel.fromJson(Map<String, dynamic> json) {
     return MatchingScrobbleModel(
-      id: (json['id'] as String?) ?? 'scrobble_id',
-      artist: (json['artist'] as String?) ?? 'Massive Attack',
-      track: (json['track'] as String?) ?? (json['title'] as String?) ?? 'Teardrop',
-      album: (json['album'] as String?) ?? 'Mezzanine',
+      id: (json['id'] as String?) ?? '',
+      artist: (json['artist'] as String?) ?? '',
+      track: (json['track'] as String?) ?? (json['title'] as String?) ?? '',
+      album: (json['album'] as String?) ?? '',
     );
   }
 

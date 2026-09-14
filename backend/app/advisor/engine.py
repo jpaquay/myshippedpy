@@ -22,7 +22,12 @@ from pydantic import BaseModel, Field
 
 from backend.app.almanac.scrobbles import ScrobbleEntry, search_scrobbles
 from backend.app.container import get_container
-from backend.app.contracts import Coordinates, ForgeRequest, ForgeResult
+from backend.app.contracts import (
+    Coordinates,
+    ForgeRequest,
+    ForgeResult,
+    resolve_theme_id,
+)
 from backend.app.routes.surfaces import record_recent_playlist
 from backend.app.sky.geocaches import (
     STREET_ART_GEOCACHES,
@@ -164,14 +169,25 @@ class AdvisorSuggestionItem(BaseModel):
 
 
 from backend.app.sonic.corridors import get_corridor
+from backend.app.sonic.themes import THEMES
 
+#: The eight themes the advisor may name, derived from the one registry that
+#: owns them rather than restated here.
+#:
+#: This used to be a hand-written table of six ids from an earlier product-era
+#: naming round -- ``low_pressure_front``, ``clear_high``, ``midnight_thermal``
+#: and ``solar_zenith``. Four of those are retired (``clear_high`` with no
+#: successor at all), and the two canonical ids it did carry were the only ones
+#: of the eight it knew: ``storm_front``, ``nordic_fog``, ``heatwave_cruise``,
+#: ``first_frost``, ``sirocco`` and ``golden_hour`` were all absent, so the
+#: validity check below *rejected* them and fell back to ``blue_hour``.
+#:
+#: That is the exact defect ``contracts.THEME_IDS`` documents: a second list of
+#: theme ids that drifts from the first. Alias *handling* stays (a client may
+#: still send a retired spelling and ``resolve_theme_id`` translates it); what
+#: stops is this module **originating** one.
 _VALID_THEMES: dict[str, str] = {
-    "low_pressure_front": "Storm Front (brooding low-pressure drop, deep bass & sub-heavy tension)",
-    "blue_hour": "Blue Hour Drift (twilight transition, atmospheric ambient & nocturnal dub)",
-    "clear_high": "High Pressure Clarity (crisp ridge, soaring anticyclonic energy & motorik drive)",
-    "petrichor": "Petrichor & Rain (steady rainfall, warm Rhodes, vinyl crackle & lo-fi textures)",
-    "midnight_thermal": "Midnight Thermal (late-night urban heat island, deep club & hypnotic techno)",
-    "solar_zenith": "Solar Zenith (bright high-altitude sun, upbeat groove, funk & tropicalia)",
+    theme.id: f"{theme.name} ({theme.tagline})" for theme in THEMES.values()
 }
 
 _VALID_GENRES: dict[str, str] = {
@@ -326,17 +342,24 @@ def _semantic_fallback_plan(
         chosen_geo = pick_random_geocache()
 
     # 2. Match Theme
-    chosen_theme = current_theme_id or "blue_hour"
+    #
+    # Canonical ids only. This ladder used to emit the retired spellings
+    # ``low_pressure_front`` / ``clear_high`` / ``midnight_thermal`` /
+    # ``solar_zenith``; ``clear_high`` in particular is retired with no
+    # successor, so the keywords that reached it now reach ``first_frost``
+    # ("clear, cold and bright"), which is the theme that description was
+    # actually describing.
+    chosen_theme = resolve_theme_id(current_theme_id) or "blue_hour"
     if any(w in p_lower for w in ["storm", "thunder", "drop", "heavy", "dark", "low pressure"]):
-        chosen_theme = "low_pressure_front"
+        chosen_theme = "storm_front"
     elif any(w in p_lower for w in ["rain", "petrichor", "drizzle", "wet", "lofi", "lo-fi"]):
         chosen_theme = "petrichor"
     elif any(w in p_lower for w in ["clear", "high", "crisp", "focus", "motorik"]):
-        chosen_theme = "clear_high"
+        chosen_theme = "first_frost"
     elif any(w in p_lower for w in ["midnight", "club", "heat", "late night", "techno"]):
-        chosen_theme = "midnight_thermal"
+        chosen_theme = "heatwave_cruise"
     elif any(w in p_lower for w in ["sun", "solar", "bright", "morning", "warm", "bossa"]):
-        chosen_theme = "solar_zenith"
+        chosen_theme = "golden_hour"
     elif any(w in p_lower for w in ["twilight", "blue hour", "dusk", "sunset", "drift"]):
         chosen_theme = "blue_hour"
 
@@ -649,7 +672,15 @@ class AdvisorEngine:
         if selected_geo is None:
             selected_geo = pick_random_geocache()
 
-        theme_id = plan.get("theme_id") or req.current_theme_id or "blue_hour"
+        # A plan (or a stale client) may still name a retired spelling; that is
+        # what the alias table is for. Translate first, then validate, so a
+        # retired id resolves to its successor instead of silently collapsing
+        # everything onto `blue_hour`.
+        theme_id = (
+            resolve_theme_id(plan.get("theme_id"))
+            or resolve_theme_id(req.current_theme_id)
+            or "blue_hour"
+        )
         if theme_id not in _VALID_THEMES:
             theme_id = "blue_hour"
 

@@ -51,6 +51,7 @@ from ..contracts import (
     Rationale,
     SkyVector,
     Theme,
+    resolve_theme_id,
 )
 from .catalog import (
     ARC_ROLES,
@@ -178,16 +179,36 @@ ROLE_LABELS: Final[dict[str, str]] = {
     "body": "Body",
 }
 
+#: The badge a past forge wears in the almanac, keyed by CANONICAL theme id.
+#:
+#: This table was missed by the 2026-09 theme-id reconciliation that fixed
+#: ``palette.THEME_PALETTES`` immediately below it. It carried five retired
+#: design-time names (``high_pressure_blue``, ``gale_warning``,
+#: ``blanket_grey``, ``heat_shimmer``, ``long_dusk``) *instead of* their
+#: canonical successors, not alongside them -- so ``storm_front``,
+#: ``nordic_fog``, ``heatwave_cruise``, ``blue_hour`` and ``sirocco`` had no
+#: badge at all and every live forge in those themes fell through to the
+#: generic "a past forge". A stale table, then, not alias handling.
+#:
+#: Alias handling is what ``_almanac_badge`` does below: a stored entry from
+#: before the rename still finds its badge via ``resolve_theme_id``.
+#: ``high_pressure_blue`` is retired with no successor, so it resolves to
+#: nothing and gets the generic badge -- which is the honest answer.
 ALMANAC_BADGES: Final[dict[str, str]] = {
     "petrichor": "your rain sound",
-    "first_frost": "your first-frost record",
-    "high_pressure_blue": "your clear-sky record",
-    "gale_warning": "your storm record",
     "golden_hour": "your golden-hour record",
-    "blanket_grey": "your overcast record",
-    "heat_shimmer": "your heatwave record",
-    "long_dusk": "your long-dusk record",
+    "nordic_fog": "your overcast record",
+    "storm_front": "your storm record",
+    "heatwave_cruise": "your heatwave record",
+    "blue_hour": "your long-dusk record",
+    "first_frost": "your first-frost record",
+    "sirocco": "your sirocco record",
 }
+
+
+def _almanac_badge(theme_id: str) -> str:
+    """Badge for ``theme_id``, translating a retired spelling on the way in."""
+    return ALMANAC_BADGES.get(resolve_theme_id(theme_id) or "", "a past forge")
 
 
 def _clamp(value: float, low: float, high: float) -> float:
@@ -940,13 +961,16 @@ def build_almanac_surface(
 
     items: list[dict[str, Any]] = []
     for entry in entries:
-        palette = THEME_PALETTES.get(entry.theme_id, {})
+        # A stored entry may carry a retired spelling; translate before the
+        # lookups so history renders with its theme's tint and badge.
+        canonical_theme = resolve_theme_id(entry.theme_id) or entry.theme_id
+        palette = THEME_PALETTES.get(canonical_theme, {})
         items.append(
             {
                 "playlistId": entry.id,
                 "title": entry.title,
                 "subtitle": entry.subtitle,
-                "badge": ALMANAC_BADGES.get(entry.theme_id, "a past forge"),
+                "badge": _almanac_badge(entry.theme_id),
                 "createdAt": _iso(entry.created_at),
                 "createdLabel": _human_date(entry.created_at),
                 "themeId": entry.theme_id,

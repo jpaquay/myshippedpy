@@ -22,7 +22,18 @@ def test_dataviz_router_registered_in_optional_routers() -> None:
 
 
 def test_get_dataviz_dashboard_endpoint() -> None:
-    """Verify GET /api/dataviz/dashboard returns structured telemetry matching all specifications."""
+    """Every figure the dashboard reports is read off the corpus, or is null.
+
+    This test used to pin the fabricated shape rather than the data: exactly 18
+    pressure points, exactly 6 affinity rows, exactly 6 decades 1970s..2020s,
+    and an asserted low-pressure/high-pressure BPM correlation. All of it came
+    from hand-written tables in `dataviz/engine.py`, so the test passed by
+    checking that the constants were still the constants.
+    """
+    from backend.app.almanac.scrobbles import get_15year_analytics
+
+    analytics = get_15year_analytics()
+
     app = create_app()
     client = TestClient(app)
 
@@ -30,63 +41,86 @@ def test_get_dataviz_dashboard_endpoint() -> None:
     assert resp.status_code == 200
     data = resp.json()
 
-    # Validate summary_stats
+    # --- summary_stats: the corpus's own numbers, not a stand-in ------------
     stats = data["summary_stats"]
-    assert stats["total_scrobbles_analyzed"] > 0
-    assert isinstance(stats["avg_bpm"], float)
-    assert isinstance(stats["dominant_weather_theme"], str)
-    assert isinstance(stats["dominant_genre"], str)
-    assert 0.0 <= stats["pressure_sensitivity_index"] <= 1.0
+    assert stats["total_scrobbles_analyzed"] == analytics.total_scrobbles
+    assert stats["avg_bpm"] == round(analytics.avg_bpm, 1)
+    # 102.4 was the hardcoded stand-in. The corpus says something else, which
+    # is exactly how we know it was never a stale copy of the truth.
+    assert stats["avg_bpm"] != 102.4
 
-    # Validate pressure_vs_bpm (18 items)
-    pressure_pts = data["pressure_vs_bpm"]
-    assert len(pressure_pts) == 18
-    for pt in pressure_pts:
-        assert "pressure_hpa" in pt and isinstance(pt["pressure_hpa"], float)
-        assert "bpm" in pt and isinstance(pt["bpm"], int)
-        assert "energy" in pt and isinstance(pt["energy"], float)
-        assert "track_title" in pt and isinstance(pt["track_title"], str)
-        assert "artist" in pt and isinstance(pt["artist"], str)
-        assert "theme_id" in pt and isinstance(pt["theme_id"], str)
+    # No pressure reading exists per play, so there is nothing to correlate.
+    # This was a hardcoded 0.84 presented as a measured coefficient.
+    assert stats["pressure_sensitivity_index"] is None
 
-    # Verify low pressure correlates with lower BPM than high pressure ridge
-    low_pressure_bpms = [p["bpm"] for p in pressure_pts if p["pressure_hpa"] < 1005.0]
-    high_pressure_bpms = [p["bpm"] for p in pressure_pts if p["pressure_hpa"] > 1020.0]
-    assert sum(low_pressure_bpms) / len(low_pressure_bpms) < sum(high_pressure_bpms) / len(high_pressure_bpms)
-
-    # Validate weather_affinity_breakdown (6 items)
+    # --- weather_affinity: passed through from the summary, row for row ----
     affinity = data["weather_affinity_breakdown"]
-    assert len(affinity) == 6
-    for item in affinity:
-        assert "theme_id" in item
-        assert "theme_name" in item
-        assert "scrobble_count" in item and isinstance(item["scrobble_count"], int)
-        assert "percentage" in item and isinstance(item["percentage"], float)
-        assert "avg_bpm" in item and isinstance(item["avg_bpm"], int)
-        assert "top_artist" in item and isinstance(item["top_artist"], str)
+    assert len(affinity) == len(analytics.weather_affinity)
+    by_id = {row["theme_id"]: row for row in affinity}
+    for source in analytics.weather_affinity:
+        row = by_id[source["theme_id"]]
+        assert row["scrobble_count"] == source["plays"]
+        assert row["percentage"] == round(source["percentage"], 1)
+        # Joined in from the catalog, and null rather than guessed.
+        assert row["avg_bpm"] is None or isinstance(row["avg_bpm"], int)
+        assert row["top_artist"] is None or isinstance(row["top_artist"], str)
 
-    # Validate hourly_solar_heatmap (24 hours: 0..23)
+    # The leading row of the real breakdown, not a stated favourite.
+    assert stats["dominant_weather_theme"] == affinity[0]["theme_id"]
+
+    # None of the six invented rows survive. `clear_high` is retired with no
+    # successor at all and must never be originated.
+    invented = {"clear_high", "midnight_thermal", "solar_zenith"}
+    assert invented.isdisjoint(by_id)
+
+    # --- hourly_solar: the real UTC histogram ------------------------------
     hourly = data["hourly_solar_heatmap"]
-    assert len(hourly) == 24
-    hours = [h["hour"] for h in hourly]
-    assert hours == list(range(24))
+    assert [h["hour"] for h in hourly] == list(range(24))
+    busiest = max(hourly, key=lambda h: h["scrobble_count"])
+    assert busiest["activity_score"] == 1.0
     for h in hourly:
-        assert "label" in h
         assert 0.0 <= h["activity_score"] <= 1.0
-        assert isinstance(h["avg_bpm"], int)
-        assert isinstance(h["dominant_mood"], str)
+        # The histogram counts plays; it does not say what they were.
+        assert h["avg_bpm"] is None
+        assert h["dominant_mood"] is None
 
-    # Validate decade_sonic_dna (6 decades: 1970s..2020s)
-    decades = data["decade_sonic_dna"]
-    assert len(decades) == 6
-    decade_labels = [d["decade"] for d in decades]
-    assert decade_labels == ["1970s", "1980s", "1990s", "2000s", "2010s", "2020s"]
-    for d in decades:
-        assert isinstance(d["percentage"], float)
-        assert isinstance(d["track_count"], int)
-        assert isinstance(d["signature_artists"], list)
-        assert len(d["signature_artists"]) >= 2
-        assert isinstance(d["vibe_summary"], str)
+    # --- the two charts with no data source at all -------------------------
+    # No pressure is recorded against a play, and no release year against a
+    # track. Empty, and the renderer names what is missing.
+    assert data["pressure_vs_bpm"] == []
+    assert data["decade_sonic_dna"] == []
+
+
+def test_dataviz_engine_originates_no_invented_figures() -> None:
+    """Source guard: the literals that were fabricated do not come back.
+
+    Same mechanism as `frontend/test/honest_empty_states_test.dart`, on the
+    layer that owns the numbers. Comments are stripped first, because the fix
+    for each of these is a comment naming the literal it removed.
+    """
+    import pathlib
+    import re
+
+    src = pathlib.Path("backend/app/dataviz/engine.py").read_text()
+    code = "\n".join(
+        line for line in src.splitlines() if not line.lstrip().startswith("#")
+    )
+    # Drop docstrings too, for the same reason.
+    code = re.sub(r'""".*?"""', "", code, flags=re.S)
+
+    for literal in (
+        "160717",  # the stand-in scrobble total
+        "102.4",  # the drifted average tempo
+        "0.84",  # the "pressure sensitivity index"
+        "38572",  # invented Petrichor plays
+        "20893",  # invented "High Pressure Clarity" plays
+        "42590",  # invented 1990s track count
+        "clear_high",  # retired with no successor
+        "midnight_thermal",
+        "solar_zenith",
+        "low_pressure_front",
+    ):
+        assert literal not in code, f"{literal!r} is back in dataviz/engine.py"
 
 
 def test_post_dataviz_qna_pressure_question() -> None:
@@ -107,8 +141,17 @@ def test_post_dataviz_qna_pressure_question() -> None:
     assert data["highlight_section"] == "pressure_vs_bpm"
     assert len(data["answer_text"]) > 20
     assert len(data["spoken_summary"]) > 15
-    assert "1005" in data["key_metric_badge"] or "BPM" in data["key_metric_badge"]
     assert len(data["suggested_followups"]) == 3
+
+    # The answer refuses rather than invents. It used to reply "your tempo
+    # decelerates by 18.4% to an average of 86 BPM ... Pressure Sensitivity
+    # Index of 0.84" — none of which was measured anywhere, on the path that
+    # runs offline and under test.
+    assert "not recorded" in data["answer_text"].lower() or "no barometric" in data["answer_text"].lower()
+    for invented in ("86 BPM", "18.4%", "0.84", "1005 hPa"):
+        assert invented not in data["answer_text"]
+        assert invented not in data["spoken_summary"]
+        assert invented not in data["key_metric_badge"]
     assert 1 <= len(data["matching_scrobbles"]) <= 4
     for sc in data["matching_scrobbles"]:
         assert "id" in sc
@@ -146,7 +189,12 @@ def test_post_dataviz_qna_solar_and_decade_questions() -> None:
     assert resp_decade.status_code == 200
     data_decade = resp_decade.json()
     assert data_decade["highlight_section"] == "decade_dna"
-    assert "1990s" in data_decade["key_metric_badge"]
+    # It used to answer "the 1990s, 26.5% of your catalog, 42,590 scrobbles".
+    # No release year is recorded for any track, so that share was invented.
+    assert "release year" in data_decade["answer_text"].lower()
+    for invented in ("26.5%", "42,590", "42590"):
+        assert invented not in data_decade["answer_text"]
+        assert invented not in data_decade["key_metric_badge"]
 
 
 def test_post_dataviz_qna_vertex_ai_mocked_path() -> None:

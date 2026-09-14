@@ -606,27 +606,38 @@ class _ForgeHeader extends StatelessWidget {
                           ),
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: colors.primary.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            Icon(Icons.schedule, size: 13, color: colors.primary),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Local: ${activeGeocache!.localTime} • ${activeGeocache!.dayPeriod.toUpperCase()}',
-                              style: text.labelSmall?.copyWith(
-                                color: colors.primary,
-                                fontWeight: FontWeight.w700,
+                      // No clock, no chip. `local_time` and `day_period` used
+                      // to be parsed with `?? '14:00 (UTC+1)'` and
+                      // `?? 'afternoon'`, so a landmark the backend sent no
+                      // clock for still wore a confident local time.
+                      if (activeGeocache!.localTime.isNotEmpty ||
+                          activeGeocache!.dayPeriod.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: colors.primary.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Icon(Icons.schedule, size: 13, color: colors.primary),
+                              const SizedBox(width: 4),
+                              Text(
+                                <String>[
+                                  if (activeGeocache!.localTime.isNotEmpty)
+                                    'Local: ${activeGeocache!.localTime}',
+                                  if (activeGeocache!.dayPeriod.isNotEmpty)
+                                    activeGeocache!.dayPeriod.toUpperCase(),
+                                ].join(' • '),
+                                style: text.labelSmall?.copyWith(
+                                  color: colors.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -731,16 +742,20 @@ class _ForgeHeader extends StatelessWidget {
                                         active ? FontWeight.w700 : FontWeight.w500,
                                   ),
                                 ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  gc.localTime.split(' ').first,
-                                  style: text.labelSmall?.copyWith(
-                                    color: active
-                                        ? colors.onPrimary.withValues(alpha: 0.8)
-                                        : colors.onSurfaceVariant,
-                                    fontSize: 10,
+                                // Omitted rather than guessed when the record
+                                // carries no local time.
+                                if (gc.localTime.isNotEmpty) ...<Widget>[
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    gc.localTime.split(' ').first,
+                                    style: text.labelSmall?.copyWith(
+                                      color: active
+                                          ? colors.onPrimary.withValues(alpha: 0.8)
+                                          : colors.onSurfaceVariant,
+                                      fontSize: 10,
+                                    ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                           ),

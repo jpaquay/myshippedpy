@@ -203,9 +203,9 @@ class StreetArtGeoCache {
     required this.city,
     required this.country,
     required this.label,
-    required this.lat,
-    required this.lon,
-    required this.tzOffsetHours,
+    this.lat,
+    this.lon,
+    this.tzOffsetHours,
     required this.localTime,
     required this.dayPeriod,
     required this.artistHighlight,
@@ -218,9 +218,18 @@ class StreetArtGeoCache {
   final String city;
   final String country;
   final String label;
-  final double lat;
-  final double lon;
-  final double tzOffsetHours;
+
+  /// Null when the record carries no coordinates.
+  ///
+  /// These used to default to `50.8503, 4.3517` — Brussels — for any landmark
+  /// anywhere. A record that arrived without coordinates was therefore plotted
+  /// in Belgium, and the forge fetched Belgian weather for it, with nothing on
+  /// screen to say the position was a guess. The same went for
+  /// `tz_offset_hours: 1.0`, `local_time: '14:00 (UTC+1)'` and
+  /// `day_period: 'afternoon'`: three readings off one invented clock.
+  final double? lat;
+  final double? lon;
+  final double? tzOffsetHours;
   final String localTime;
   final String dayPeriod;
   final String artistHighlight;
@@ -229,17 +238,19 @@ class StreetArtGeoCache {
 
   factory StreetArtGeoCache.fromJson(JsonMap json) => StreetArtGeoCache(
         id: asStringOrNull(json['id']) ?? '',
+        // A label, not a measurement: naming an unnamed record "Street Art
+        // Landmark" describes it correctly and invents nothing.
         name: asStringOrNull(json['name']) ?? 'Street Art Landmark',
         city: asStringOrNull(json['city']) ?? '',
         country: asStringOrNull(json['country']) ?? '',
         label: asStringOrNull(json['label']) ??
             asStringOrNull(json['name']) ??
             '',
-        lat: asDoubleOrNull(json['lat']) ?? 50.8503,
-        lon: asDoubleOrNull(json['lon']) ?? 4.3517,
-        tzOffsetHours: asDoubleOrNull(json['tz_offset_hours']) ?? 1.0,
-        localTime: asStringOrNull(json['local_time']) ?? '14:00 (UTC+1)',
-        dayPeriod: asStringOrNull(json['day_period']) ?? 'afternoon',
+        lat: asDoubleOrNull(json['lat']),
+        lon: asDoubleOrNull(json['lon']),
+        tzOffsetHours: asDoubleOrNull(json['tz_offset_hours']),
+        localTime: asStringOrNull(json['local_time']) ?? '',
+        dayPeriod: asStringOrNull(json['day_period']) ?? '',
         artistHighlight: asStringOrNull(json['artist_highlight']) ?? '',
         description: asStringOrNull(json['description']) ?? '',
         vibeTags: asStringList(json['vibe_tags']),
@@ -833,9 +844,11 @@ class ScrobbleEntry {
         artist: asStringOrNull(json['artist']) ?? 'Unknown Artist',
         album: asStringOrNull(json['album']),
         tags: asStringList(json['tags']),
-        weatherTheme: asStringOrNull(json['weather_theme']) ?? 'petrichor',
-        bpmEstimate: (asDoubleOrNull(json['bpm_estimate']) ?? 112).round(),
-        energyEstimate: asDoubleOrNull(json['energy_estimate']) ?? 0.6,
+        weatherTheme: asStringOrNull(json['weather_theme']) ?? '',
+        // `0` means "not estimated". These stood in `112` BPM and `0.6`
+        // energy, which render on a track row as that track's own tempo.
+        bpmEstimate: (asDoubleOrNull(json['bpm_estimate']) ?? 0).round(),
+        energyEstimate: asDoubleOrNull(json['energy_estimate']) ?? 0.0,
         playCount: (asDoubleOrNull(json['play_count']) ?? 1).round(),
         lastPlayedAt: asStringOrNull(json['last_played_at']) ?? '',
       );
@@ -884,8 +897,12 @@ class ScrobbleAnalytics {
     return ScrobbleAnalytics(
       totalScrobbles: (asDoubleOrNull(json['total_scrobbles']) ?? 0).round(),
       uniqueTracks: (asDoubleOrNull(json['unique_tracks']) ?? 0).round(),
-      avgBpm: asDoubleOrNull(json['avg_bpm']) ?? 112.0,
-      avgEnergy: asDoubleOrNull(json['avg_energy']) ?? 0.60,
+      // `0` is this file's spelling of "not measured", the same one
+      // `total_scrobbles` above already uses and the Almanac KPI strip already
+      // renders as an em-dash. These used to stand in `112.0` BPM and `0.60`
+      // energy, which sat next to those em-dashes reading like readings.
+      avgBpm: asDoubleOrNull(json['avg_bpm']) ?? 0.0,
+      avgEnergy: asDoubleOrNull(json['avg_energy']) ?? 0.0,
       topArtists: <JsonMap>[
         for (final Object? item in asJsonList(json['top_artists']) ?? const <Object?>[])
           if (asJsonMap(item) case final JsonMap m) m,
@@ -1020,9 +1037,10 @@ class PlaylistTrackMatch {
         firstPlayedYear: asDoubleOrNull(json['first_played_year'])?.round(),
         lastPlayedYear: asDoubleOrNull(json['last_played_year'])?.round(),
         peakYear: asDoubleOrNull(json['peak_year'])?.round(),
-        weatherTheme: asStringOrNull(json['weather_theme']) ?? 'warm_front_haze',
-        bpmEstimate: (asDoubleOrNull(json['bpm_estimate']) ?? 102).round(),
-        energyEstimate: asDoubleOrNull(json['energy_estimate']) ?? 0.54,
+        weatherTheme: asStringOrNull(json['weather_theme']) ?? '',
+        // `0` means "not estimated"; these stood in `102` BPM and `0.54`.
+        bpmEstimate: (asDoubleOrNull(json['bpm_estimate']) ?? 0).round(),
+        energyEstimate: asDoubleOrNull(json['energy_estimate']) ?? 0.0,
         trackKey: asStringOrNull(json['track_key']) ?? '',
       );
 }
@@ -1103,10 +1121,14 @@ class PlaylistCohortResponse {
       cohortOverlapPct: asDoubleOrNull(json['cohort_overlap_pct']) ?? 0.0,
       totalHistoricalPlays: (asDoubleOrNull(json['total_historical_plays']) ?? 0).round(),
       totalArtistCohortPlays: (asDoubleOrNull(json['total_artist_cohort_plays']) ?? 0).round(),
-      peakNostalgiaYear: asStringOrNull(json['peak_nostalgia_year']) ?? '2015',
-      dominantWeatherTheme: asStringOrNull(json['dominant_weather_theme']) ?? 'warm_front_haze',
-      avgBpm: asDoubleOrNull(json['avg_bpm']) ?? 102.0,
-      avgEnergy: asDoubleOrNull(json['avg_energy']) ?? 0.54,
+      // A cohort result reports what the match found. `2015` as a peak
+      // nostalgia year and `warm_front_haze` as a dominant theme are findings,
+      // and standing them in means the card states a conclusion the query
+      // never reached. Empty and `0` are this file's spelling of "not found".
+      peakNostalgiaYear: asStringOrNull(json['peak_nostalgia_year']) ?? '',
+      dominantWeatherTheme: asStringOrNull(json['dominant_weather_theme']) ?? '',
+      avgBpm: asDoubleOrNull(json['avg_bpm']) ?? 0.0,
+      avgEnergy: asDoubleOrNull(json['avg_energy']) ?? 0.0,
       cohortPieSlices: <CohortPieSlice>[
         for (final Object? item in asJsonList(json['cohort_pie_slices']) ?? const <Object?>[])
           if (asJsonMap(item) case final JsonMap m) CohortPieSlice.fromJson(m),

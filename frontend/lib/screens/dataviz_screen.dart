@@ -69,12 +69,23 @@ class _DataVizScreenState extends ConsumerState<DataVizScreen> {
   final TextEditingController _questionController = TextEditingController();
   final FocusNode _questionFocus = FocusNode();
 
-  DataVizDashboardModel _dashboard = DataVizDashboardModel.fallback();
+  /// Nothing until the backend answers.
+  ///
+  /// This used to be seeded with `DataVizDashboardModel.fallback()` — ~90 lines
+  /// of invented analytics. Because it was the *initialiser*, every user saw
+  /// 160,717 scrobbles, 102.4 BPM and "High Pressure Clarity — 20,893
+  /// scrobbles" before any real data loaded, and kept seeing them if the load
+  /// failed. §2 rule 4: an empty state says what is missing; it does not stand
+  /// in a number.
+  DataVizDashboardModel _dashboard = DataVizDashboardModel.empty;
 
-  /// True once the live dashboard fetch has failed and we are showing the
-  /// bundled sample instead. Surfaced, never hidden: a dashboard that silently
-  /// swaps real numbers for canned ones is a lie (§2 rule 4).
-  bool _dashboardIsSample = false;
+  /// True while the first dashboard fetch is in flight, so the cards can show
+  /// a shaped loading state rather than an empty one (§2 rule 3).
+  bool _dashboardLoading = true;
+
+  /// True once the dashboard fetch has failed. The cards stay empty and this
+  /// drives the retry notice; there is no canned dashboard to fall back to.
+  bool _dashboardFailed = false;
 
   bool _isDictating = false;
 
@@ -153,6 +164,12 @@ class _DataVizScreenState extends ConsumerState<DataVizScreen> {
   }
 
   Future<void> _fetchDashboard() async {
+    if (mounted) {
+      setState(() {
+        _dashboardLoading = true;
+        _dashboardFailed = false;
+      });
+    }
     try {
       final Uri uri = BgConfig.resolve('/api/dataviz/dashboard');
       final Map<String, String> headers = await authHeaders();
@@ -166,14 +183,24 @@ class _DataVizScreenState extends ConsumerState<DataVizScreen> {
             jsonDecode(resp.body) as Map<String, dynamic>;
         setState(() {
           _dashboard = DataVizDashboardModel.fromJson(body);
-          _dashboardIsSample = false;
+          _dashboardLoading = false;
+          _dashboardFailed = false;
         });
         return;
       }
     } catch (_) {
-      // fall through to the sample notice below
+      // fall through to the failure notice below
     }
-    if (mounted) setState(() => _dashboardIsSample = true);
+    // A failed load leaves the dashboard empty. It used to leave the canned
+    // one on screen behind a "sample data" note, which asked the reader to
+    // remember that every number in front of them was fictional.
+    if (mounted) {
+      setState(() {
+        _dashboard = DataVizDashboardModel.empty;
+        _dashboardLoading = false;
+        _dashboardFailed = true;
+      });
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -266,13 +293,13 @@ class _DataVizScreenState extends ConsumerState<DataVizScreen> {
                         const SizedBox(height: BgSpace.md),
                         DataVizEmptyHint(
                           isDegraded: !_conversation.startersLoaded ||
-                              _dashboardIsSample,
+                              _dashboardFailed,
                         ),
                       ],
                       const SizedBox(height: BgSpace.xl),
                       ..._conversationCards(isExpanded: isExpanded),
-                      if (_dashboardIsSample) ...<Widget>[
-                        _SampleDataNotice(onRetry: _fetchDashboard),
+                      if (_dashboardFailed) ...<Widget>[
+                        _DashboardUnavailableNotice(onRetry: _fetchDashboard),
                         const SizedBox(height: BgSpace.lg),
                       ],
                       DataVizDashboard(
@@ -280,6 +307,7 @@ class _DataVizScreenState extends ConsumerState<DataVizScreen> {
                         isExpanded: isExpanded,
                         highlightSection: _highlight,
                         pinned: _pinnedCards(isExpanded: isExpanded),
+                        isLoading: _dashboardLoading,
                       ),
                     ],
                   ),
@@ -339,10 +367,14 @@ class _DataVizScreenState extends ConsumerState<DataVizScreen> {
   }
 }
 
-/// Rung 0, never collapsed: the dashboard below is the bundled sample, not
-/// this user's data.
-class _SampleDataNotice extends StatelessWidget {
-  const _SampleDataNotice({required this.onRetry});
+/// Rung 0, never collapsed: the dashboard did not load, so it is empty.
+///
+/// This used to read "Showing the bundled sample dashboard ... illustrative
+/// figures, not your scrobbles" above a full set of invented charts. A warning
+/// label does not make a fabricated number honest — it just asks the reader to
+/// keep remembering. The cards are empty now and this says why.
+class _DashboardUnavailableNotice extends StatelessWidget {
+  const _DashboardUnavailableNotice({required this.onRetry});
 
   final VoidCallback onRetry;
 
@@ -352,7 +384,7 @@ class _SampleDataNotice extends StatelessWidget {
     final ColorScheme colors = theme.colorScheme;
 
     return Container(
-      key: const ValueKey<String>('dataviz-sample-notice'),
+      key: const ValueKey<String>('dataviz-unavailable-notice'),
       padding: const EdgeInsets.all(BgSpace.md),
       decoration: BoxDecoration(
         borderRadius: BgSpace.brSm,
@@ -368,14 +400,14 @@ class _SampleDataNotice extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  'Showing the bundled sample dashboard.',
+                  'Your dashboard did not load.',
                   style: theme.textTheme.bodyMedium,
                 ),
                 const SizedBox(height: BgSpace.xs),
                 Text(
-                  'The analytics backend did not answer, so the four cards '
-                  'below are illustrative figures, not your scrobbles. '
-                  'Questions you ask are still sent to the agent.',
+                  'The analytics backend did not answer, so the cards below '
+                  'are empty rather than filled in. Questions you ask are '
+                  'still sent to the agent.',
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: colors.onSurfaceVariant),
                 ),

@@ -381,6 +381,12 @@ class ForgeSelectionNotifier extends StateNotifier<ForgeSelection> {
         geocacheId: geocacheId,
         clearGeocache: geocacheId == null,
       );
+  /// Select a landmark.
+  ///
+  /// `gc.lat`/`gc.lon` are nullable: a record can arrive without coordinates,
+  /// and they used to be parsed as Brussels when it did. `copyWith` treats a
+  /// null as "leave alone", so a landmark with no position selects its name and
+  /// id and does not silently move the forge somewhere it was never told about.
   void setGeocache(StreetArtGeoCache gc) => state = state.copyWith(
         lat: gc.lat,
         lon: gc.lon,
