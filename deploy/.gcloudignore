@@ -1,0 +1,12 @@
+.git
+.gitignore
+node_modules/
+.venv/
+venv/
+venv_adk/
+.terraform/
+target/
+__pycache__/
+*.pyc
+.env
+.env.*
