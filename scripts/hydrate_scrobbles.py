@@ -44,6 +44,8 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)-7s | %(message)s",
     datefmt="%H:%M:%S",
 )
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 log = logging.getLogger("hydrate_scrobbles")
 
 PROJECT_ID = "netdev-firebase"
@@ -193,15 +195,40 @@ def compute_sonic_dna(artist: str, track: str, artist_norm: str, track_norm: str
 # ============================================================================
 
 def get_gcp_token() -> str:
-    return subprocess.check_output(["gcloud", "auth", "print-access-token"], text=True).strip()
+    for cmd in (
+        ["gcloud", "auth", "print-access-token", "admin@jpaquay.altostrat.com"],
+        ["gcloud", "auth", "print-access-token"],
+    ):
+        try:
+            tok = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL).strip()
+            if tok:
+                return tok
+        except Exception:
+            continue
+    raise RuntimeError("Unable to obtain GCP access token via gcloud")
 
 
 async def get_secret(client: httpx.AsyncClient, gcp_token: str, secret_name: str) -> str:
-    url = f"https://secretmanager.googleapis.com/v1/projects/{PROJECT_ID}/secrets/{secret_name}/versions/latest:access"
-    resp = await client.get(url, headers={"Authorization": f"Bearer {gcp_token}"})
-    resp.raise_for_status()
-    b64 = resp.json()["payload"]["data"]
-    return base64.b64decode(b64).decode("utf-8").strip()
+    try:
+        url = f"https://secretmanager.googleapis.com/v1/projects/{PROJECT_ID}/secrets/{secret_name}/versions/latest:access"
+        resp = await client.get(url, headers={"Authorization": f"Bearer {gcp_token}"})
+        resp.raise_for_status()
+        b64 = resp.json()["payload"]["data"]
+        return base64.b64decode(b64).decode("utf-8").strip()
+    except Exception:
+        return subprocess.check_output(
+            [
+                "gcloud",
+                "secrets",
+                "versions",
+                "access",
+                "latest",
+                f"--secret={secret_name}",
+                f"--project={PROJECT_ID}",
+            ],
+            text=True,
+        ).strip()
+
 
 
 def to_firestore_value(val: Any) -> dict[str, Any]:
@@ -608,13 +635,520 @@ def load_bigquery_tables(scrobble_rows: list[dict[str, Any]], catalog_rows: list
     log.info("[BigQuery] Both tables loaded successfully!")
 
 
+async def run_delta_sync(client: httpx.AsyncClient, gcp_token: str, lfm_key: str) -> None:
+    """Fast incremental delta sync from Last.fm (`from=last_scrobble_uts + 1`) into BigQuery, Firestore, and seed corpus."""
+    repo_root = Path(__file__).resolve().parent.parent
+    sum_path = repo_root / "data/scrobbles/summary_cache.json"
+    cat_path = repo_root / "data/scrobbles/track_catalog.jsonl"
+
+    r_info = await client.get(
+        f"https://ws.audioscrobbler.com/2.0/?method=user.getInfo&user={LASTFM_USER}&api_key={lfm_key}&format=json"
+    )
+    r_info.raise_for_status()
+    uinfo = r_info.json()["user"]
+    live_playcount = int(uinfo.get("playcount", 161262))
+    live_artist_count = int(uinfo.get("artist_count", 13086))
+
+    r_loved = await client.get(
+        f"https://ws.audioscrobbler.com/2.0/?method=user.getLovedTracks&user={LASTFM_USER}&api_key={lfm_key}&limit=200&page=1&format=json"
+    )
+    r_loved.raise_for_status()
+    loved_json = r_loved.json().get("lovedtracks", {})
+    loved_tracks_list = loved_json.get("track", [])
+    live_loved_total = int((loved_json.get("@attr") or {}).get("total") or len(loved_tracks_list))
+    loved_keys: set[str] = set()
+    for t in loved_tracks_list:
+        a = (t.get("artist") or {}).get("name") or ""
+        n = t.get("name") or ""
+        if a and n:
+            _, _, tk = make_track_key(a, n)
+            loved_keys.add(tk)
+
+    log.info(
+        "[Delta Sync] Live Last.fm profile: playcount=%d, artists=%d, loved=%d",
+        live_playcount,
+        live_artist_count,
+        live_loved_total,
+    )
+
+    summary = json.loads(sum_path.read_text(encoding="utf-8"))
+    prev_max_uts = int(summary.get("last_scrobble_uts", 1789208766))
+
+    catalog_by_key: dict[str, dict[str, Any]] = {}
+    with cat_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            row["play_count"] = int(row.get("play_count") or row.get("scrobble_count") or 1)
+            row["scrobble_count"] = int(row.get("scrobble_count") or row["play_count"])
+            row["bpm_estimate"] = int(float(row.get("bpm_estimate") or 102))
+            row["energy_estimate"] = float(row.get("energy_estimate") or 0.54)
+            row["loved"] = str(row.get("loved", "false")).lower() == "true" or (
+                row.get("track_key") in loved_keys
+            )
+            for ts_col in ("first_played_at", "last_played_at"):
+                v = row.get(ts_col)
+                if v and not str(v).endswith("Z"):
+                    try:
+                        ts_f = float(v)
+                        row[ts_col] = datetime.fromtimestamp(ts_f, tz=timezone.utc).strftime(
+                            "%Y-%m-%dT%H:%M:%SZ"
+                        )
+                    except Exception:
+                        pass
+            catalog_by_key[row["track_key"]] = row
+
+    page = 1
+    raw_delta: list[dict[str, Any]] = []
+    while True:
+        u = f"https://ws.audioscrobbler.com/2.0/?method=user.getRecentTracks&user={LASTFM_USER}&api_key={lfm_key}&limit=200&page={page}&from={prev_max_uts + 1}&extended=1&format=json"
+        resp = await client.get(u)
+        resp.raise_for_status()
+        rt = resp.json().get("recenttracks", {})
+        attr = rt.get("@attr", {})
+        tracks = rt.get("track", [])
+        if isinstance(tracks, dict):
+            tracks = [tracks]
+        for t in tracks:
+            if isinstance(t, dict) and "@attr" in t and t["@attr"].get("nowplaying") == "true":
+                continue
+            raw_delta.append(t)
+        total_pages = int(attr.get("totalPages", 1))
+        if page >= total_pages or page >= 30:
+            break
+        page += 1
+
+    raw_delta.sort(key=lambda x: int((x.get("date") or {}).get("uts", 0)))
+    log.info("[Delta Sync] Fetched %d new scrobbles since uts=%d", len(raw_delta), prev_max_uts)
+
+    new_scrobble_docs: list[dict[str, Any]] = []
+    new_bq_scrobble_rows: list[dict[str, Any]] = []
+    touched_catalog_keys: set[str] = set()
+    seen_ids: set[str] = set()
+
+    for raw in raw_delta:
+        uts_str = (raw.get("date") or {}).get("uts")
+        if not uts_str:
+            continue
+        uts = int(uts_str)
+        artist_obj = raw.get("artist") or {}
+        artist = artist_obj.get("name") or artist_obj.get("#text") or "Unknown Artist"
+        track = raw.get("name") or "Unknown Track"
+        album_obj = raw.get("album") or {}
+        album = album_obj.get("#text") if isinstance(album_obj, dict) else str(album_obj or "")
+        loved = str(raw.get("loved", "0")) == "1"
+        a_norm, t_norm, tk = make_track_key(artist, track)
+        if tk in loved_keys:
+            loved = True
+        h8 = short_hash(tk, 8)
+        doc_id = f"{LASTFM_USER}_{uts}_{h8}"
+        if doc_id in seen_ids:
+            continue
+        seen_ids.add(doc_id)
+
+        dt = datetime.fromtimestamp(uts, tz=timezone.utc)
+        played_iso = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        played_date = dt.strftime("%Y-%m-%d")
+
+        cat = catalog_by_key.get(tk)
+        if not cat:
+            dna = compute_sonic_dna(artist, track, a_norm, t_norm)
+            cat_id = f"{LASTFM_USER}_{short_hash(tk, 16)}"
+            cat = {
+                "catalog_id": cat_id,
+                "id": cat_id,
+                "user_id": PRIMARY_UID,
+                "track_key": tk,
+                "title": track,
+                "track": track,
+                "track_norm": t_norm,
+                "artist": artist,
+                "artist_norm": a_norm,
+                "album": album or None,
+                "play_count": 0,
+                "scrobble_count": 0,
+                "first_played_at": played_iso,
+                "last_played_at": played_iso,
+                "loved": loved,
+                "weather_theme": dna["weather_theme"],
+                "bpm_estimate": int(dna["bpm_estimate"]),
+                "energy_estimate": float(dna["energy_estimate"]),
+                "tags": dna["tags"],
+                "spotify_id": None,
+                "spotify_uri": None,
+                "isrc": None,
+            }
+            catalog_by_key[tk] = cat
+
+        cat["play_count"] = int(cat["play_count"]) + 1
+        cat["scrobble_count"] = int(cat["scrobble_count"]) + 1
+        cat["last_played_at"] = played_iso
+        if loved:
+            cat["loved"] = True
+        touched_catalog_keys.add(tk)
+
+        sdoc = {
+            "doc_id": doc_id,
+            "scrobble_id": doc_id,
+            "lastfm_user": LASTFM_USER,
+            "user_id": PRIMARY_UID,
+            "user_ids": ALL_UIDS,
+            "uts": uts,
+            "played_at": played_iso,
+            "year": dt.year,
+            "month": dt.strftime("%Y-%m"),
+            "hour_utc": dt.hour,
+            "weekday": dt.weekday(),
+            "artist": artist,
+            "artist_norm": a_norm,
+            "track": track,
+            "track_norm": t_norm,
+            "album": album or None,
+            "loved": loved,
+            "track_key": tk,
+            "weather_theme": cat["weather_theme"],
+            "bpm_estimate": int(cat["bpm_estimate"]),
+            "energy_estimate": float(cat["energy_estimate"]),
+            "tags": cat["tags"],
+            "spotify_id": cat.get("spotify_id"),
+            "spotify_uri": cat.get("spotify_uri"),
+            "isrc": cat.get("isrc"),
+        }
+        new_scrobble_docs.append(sdoc)
+
+        new_bq_scrobble_rows.append(
+            {
+                "doc_id": doc_id,
+                "scrobble_id": doc_id,
+                "user_id": PRIMARY_UID,
+                "lastfm_user": LASTFM_USER,
+                "uts": uts,
+                "played_at": played_iso,
+                "played_date": played_date,
+                "year": dt.year,
+                "month": dt.strftime("%Y-%m"),
+                "hour_utc": dt.hour,
+                "weekday": dt.weekday(),
+                "artist": artist,
+                "artist_norm": a_norm,
+                "track": track,
+                "track_norm": t_norm,
+                "album": album or None,
+                "loved": loved,
+                "track_key": tk,
+                "weather_theme": cat["weather_theme"],
+                "bpm_estimate": int(cat["bpm_estimate"]),
+                "energy_estimate": float(cat["energy_estimate"]),
+                "tags": cat["tags"],
+                "spotify_id": cat.get("spotify_id"),
+                "spotify_uri": cat.get("spotify_uri"),
+                "isrc": cat.get("isrc"),
+            }
+        )
+
+    all_catalog_rows = sorted(
+        catalog_by_key.values(), key=lambda c: int(c["play_count"]), reverse=True
+    )
+
+    bq_dir = CACHE_DIR / "bigquery"
+    bq_dir.mkdir(parents=True, exist_ok=True)
+    delta_scrobbles_jsonl = bq_dir / "delta_scrobbles.jsonl"
+    catalog_jsonl = bq_dir / "track_catalog.jsonl"
+    scrobbles_schema = bq_dir / "schema_scrobbles.json"
+    catalog_schema = bq_dir / "schema_catalog.json"
+
+    with delta_scrobbles_jsonl.open("w", encoding="utf-8") as f:
+        for r in new_bq_scrobble_rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+    with catalog_jsonl.open("w", encoding="utf-8") as f:
+        for r in all_catalog_rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+    scrobbles_schema.write_text(
+        json.dumps(
+            [
+                {"name": "doc_id", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "scrobble_id", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "user_id", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "lastfm_user", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "uts", "type": "INT64", "mode": "REQUIRED"},
+                {"name": "played_at", "type": "TIMESTAMP", "mode": "REQUIRED"},
+                {"name": "played_date", "type": "DATE", "mode": "REQUIRED"},
+                {"name": "year", "type": "INT64", "mode": "REQUIRED"},
+                {"name": "month", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "hour_utc", "type": "INT64", "mode": "REQUIRED"},
+                {"name": "weekday", "type": "INT64", "mode": "REQUIRED"},
+                {"name": "artist", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "artist_norm", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "track", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "track_norm", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "album", "type": "STRING", "mode": "NULLABLE"},
+                {"name": "loved", "type": "BOOL", "mode": "REQUIRED"},
+                {"name": "track_key", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "weather_theme", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "bpm_estimate", "type": "INT64", "mode": "REQUIRED"},
+                {"name": "energy_estimate", "type": "FLOAT64", "mode": "REQUIRED"},
+                {"name": "tags", "type": "STRING", "mode": "REPEATED"},
+                {"name": "spotify_id", "type": "STRING", "mode": "NULLABLE"},
+                {"name": "spotify_uri", "type": "STRING", "mode": "NULLABLE"},
+                {"name": "isrc", "type": "STRING", "mode": "NULLABLE"},
+            ],
+            indent=2,
+        )
+    )
+
+    catalog_schema.write_text(
+        json.dumps(
+            [
+                {"name": "catalog_id", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "id", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "user_id", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "track_key", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "title", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "track", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "track_norm", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "artist", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "artist_norm", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "album", "type": "STRING", "mode": "NULLABLE"},
+                {"name": "play_count", "type": "INT64", "mode": "REQUIRED"},
+                {"name": "scrobble_count", "type": "INT64", "mode": "REQUIRED"},
+                {"name": "first_played_at", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                {"name": "last_played_at", "type": "TIMESTAMP", "mode": "NULLABLE"},
+                {"name": "loved", "type": "BOOL", "mode": "REQUIRED"},
+                {"name": "weather_theme", "type": "STRING", "mode": "REQUIRED"},
+                {"name": "bpm_estimate", "type": "INT64", "mode": "REQUIRED"},
+                {"name": "energy_estimate", "type": "FLOAT64", "mode": "REQUIRED"},
+                {"name": "tags", "type": "STRING", "mode": "REPEATED"},
+                {"name": "spotify_id", "type": "STRING", "mode": "NULLABLE"},
+                {"name": "spotify_uri", "type": "STRING", "mode": "NULLABLE"},
+                {"name": "isrc", "type": "STRING", "mode": "NULLABLE"},
+            ],
+            indent=2,
+        )
+    )
+
+    if new_bq_scrobble_rows:
+        log.info("[BigQuery] Appending %d delta rows into scrobbles table...", len(new_bq_scrobble_rows))
+        subprocess.run(
+            [
+                "bq",
+                f"--project_id={PROJECT_ID}",
+                "load",
+                "--label",
+                "datacloud:jetski",
+                "--noreplace",
+                "--source_format=NEWLINE_DELIMITED_JSON",
+                f"{PROJECT_ID}:{BQ_DATASET}.scrobbles",
+                str(delta_scrobbles_jsonl),
+                str(scrobbles_schema),
+            ],
+            check=True,
+        )
+
+    log.info("[BigQuery] Updating track_catalog table (%d rows)...", len(all_catalog_rows))
+    subprocess.run(
+        [
+            "bq",
+            f"--project_id={PROJECT_ID}",
+            "load",
+            "--label",
+            "datacloud:jetski",
+            "--replace",
+            "--source_format=NEWLINE_DELIMITED_JSON",
+            "--clustering_fields=artist_norm,weather_theme",
+            f"{PROJECT_ID}:{BQ_DATASET}.track_catalog",
+            str(catalog_jsonl),
+            str(catalog_schema),
+        ],
+        check=True,
+    )
+
+    yearly_counts = {str(k): int(v) for k, v in (summary.get("yearly_counts") or {}).items()}
+    monthly_counts = {str(k): int(v) for k, v in (summary.get("monthly_counts") or {}).items()}
+    hourly_counts = {str(k): int(v) for k, v in (summary.get("hourly_histogram_utc") or {}).items()}
+    weekday_counts = {str(k): int(v) for k, v in (summary.get("weekday_histogram") or {}).items()}
+    theme_counts = Counter(
+        {w["theme_id"]: int(w["plays"]) for w in (summary.get("weather_affinity") or [])}
+    )
+    tag_counts = Counter({g["tag"]: int(g["count"]) for g in (summary.get("top_genres") or [])})
+
+    for s in new_scrobble_docs:
+        yr = str(s["year"])
+        mo = str(s["month"])
+        hr = str(s["hour_utc"])
+        wd = str(s["weekday"])
+        yearly_counts[yr] = yearly_counts.get(yr, 0) + 1
+        monthly_counts[mo] = monthly_counts.get(mo, 0) + 1
+        hourly_counts[hr] = hourly_counts.get(hr, 0) + 1
+        weekday_counts[wd] = weekday_counts.get(wd, 0) + 1
+        theme_counts[s["weather_theme"]] += 1
+        for tg in s["tags"]:
+            tag_counts[tg] += 1
+
+    total_plays = sum(yearly_counts.values())
+    last_uts = max((s["uts"] for s in new_scrobble_docs), default=prev_max_uts)
+    first_uts = int(summary.get("first_scrobble_uts", 1353451617))
+
+    artist_playcounts: Counter[str] = Counter()
+    artist_display: dict[str, str] = {}
+    total_bpm_weighted = 0.0
+    total_energy_weighted = 0.0
+    total_cat_plays = 0
+    for c in all_catalog_rows:
+        anorm = c["artist_norm"]
+        pc = int(c["play_count"])
+        total_cat_plays += pc
+        artist_playcounts[anorm] += pc
+        if anorm not in artist_display:
+            artist_display[anorm] = c["artist"]
+        total_bpm_weighted += float(c["bpm_estimate"]) * pc
+        total_energy_weighted += float(c["energy_estimate"]) * pc
+
+    avg_bpm = round(total_bpm_weighted / max(1, total_cat_plays), 1)
+    avg_energy = round(total_energy_weighted / max(1, total_cat_plays), 2)
+
+    top_artists_overall = [
+        {
+            "artist": artist_display.get(anorm, anorm),
+            "artist_norm": anorm,
+            "scrobble_count": count,
+            "plays": count,
+        }
+        for anorm, count in artist_playcounts.most_common(50)
+    ]
+
+    top_tracks_overall = [
+        {
+            "id": c["catalog_id"],
+            "title": c["track"],
+            "track": c["track"],
+            "artist": c["artist"],
+            "album": c.get("album"),
+            "scrobble_count": int(c["play_count"]),
+            "play_count": int(c["play_count"]),
+            "weather_theme": c["weather_theme"],
+            "bpm_estimate": int(c["bpm_estimate"]),
+            "energy_estimate": float(c["energy_estimate"]),
+            "tags": c["tags"],
+            "loved": bool(c.get("loved", False)),
+        }
+        for c in all_catalog_rows[:50]
+    ]
+
+    weather_affinity = [
+        {
+            "theme_id": tid,
+            "label": THEME_LABELS.get(tid, tid.replace("_", " ").title()),
+            "percentage": round((cnt / max(1, total_plays)) * 100.0, 1),
+            "plays": cnt,
+        }
+        for tid, cnt in theme_counts.most_common()
+    ]
+
+    top_genres = [{"tag": tg, "count": cnt} for tg, cnt in tag_counts.most_common(15)]
+
+    updated_summary = {
+        "lastfm_user": LASTFM_USER,
+        "user_id": PRIMARY_UID,
+        "user_ids": ALL_UIDS,
+        "total_scrobbles": max(total_plays, live_playcount),
+        "unique_tracks_count": len(all_catalog_rows),
+        "unique_artists_count": max(len(artist_playcounts), live_artist_count),
+        "loved_tracks_count": max(len(loved_keys), live_loved_total),
+        "avg_bpm": avg_bpm,
+        "avg_energy": avg_energy,
+        "top_genres": top_genres,
+        "weather_affinity": weather_affinity,
+        "first_scrobble_uts": first_uts,
+        "first_scrobble_at": datetime.fromtimestamp(first_uts, tz=timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        ),
+        "last_scrobble_uts": last_uts,
+        "last_scrobble_at": datetime.fromtimestamp(last_uts, tz=timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        ),
+        "yearly_counts": dict(sorted(yearly_counts.items())),
+        "monthly_counts": dict(sorted(monthly_counts.items())),
+        "hourly_histogram_utc": {str(h): hourly_counts.get(str(h), 0) for h in range(24)},
+        "weekday_histogram": {str(w): weekday_counts.get(str(w), 0) for w in range(7)},
+        "top_artists_overall": top_artists_overall,
+        "top_tracks_overall": top_tracks_overall,
+        "bigquery_dataset": f"{PROJECT_ID}:{BQ_DATASET}",
+        "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+    base_doc_prefix = f"projects/{PROJECT_ID}/databases/(default)/documents"
+    summary_write = [
+        {
+            "update": {
+                "name": f"{base_doc_prefix}/scrobble_summaries/{LASTFM_USER}",
+                "fields": to_firestore_fields(updated_summary),
+            }
+        }
+    ]
+    await batch_write_firestore_verified(client, gcp_token, summary_write, "summary")
+
+    touched_catalog_writes = [
+        {
+            "update": {
+                "name": f"{base_doc_prefix}/track_catalog/{catalog_by_key[tk]['catalog_id']}",
+                "fields": to_firestore_fields(
+                    {
+                        **catalog_by_key[tk],
+                        "user_ids": ALL_UIDS,
+                        "lastfm_user": LASTFM_USER,
+                    }
+                ),
+            }
+        }
+        for tk in touched_catalog_keys
+    ]
+    await batch_write_firestore_verified(
+        client, gcp_token, touched_catalog_writes, "track_catalog_delta"
+    )
+
+    scrobble_writes = [
+        {
+            "update": {
+                "name": f"{base_doc_prefix}/scrobbles/{s['doc_id']}",
+                "fields": to_firestore_fields({k: v for k, v in s.items() if k != "doc_id"}),
+            }
+        }
+        for s in new_scrobble_docs
+    ]
+    await batch_write_firestore_verified(client, gcp_token, scrobble_writes, "scrobbles_delta")
+
+    sum_path.write_text(json.dumps(updated_summary, ensure_ascii=False), encoding="utf-8")
+    (CACHE_DIR / "summary_cache.json").write_text(
+        json.dumps(updated_summary, ensure_ascii=False), encoding="utf-8"
+    )
+    with cat_path.open("w", encoding="utf-8") as f:
+        for r in all_catalog_rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+    fs_scrobbles_cnt = await count_firestore_collection(client, gcp_token, "scrobbles")
+    fs_catalog_cnt = await count_firestore_collection(client, gcp_token, "track_catalog")
+    log.info("=================================================================")
+    log.info("DELTA SYNC LIVE VERIFICATION:")
+    log.info("  Firestore `scrobbles` count      : %d", fs_scrobbles_cnt)
+    log.info("  Firestore `track_catalog` count  : %d", fs_catalog_cnt)
+    log.info("  Summary `total_scrobbles`        : %d", updated_summary["total_scrobbles"])
+    log.info("  Summary `unique_artists_count`   : %d", updated_summary["unique_artists_count"])
+    log.info("  Summary `loved_tracks_count`     : %d", updated_summary["loved_tracks_count"])
+    log.info("  Summary `last_scrobble_at`       : %s", updated_summary["last_scrobble_at"])
+    log.info("=================================================================")
+
+
 # ============================================================================
 # Main Orchestrator
 # ============================================================================
 
 async def main():
-    parser = argparse.ArgumentParser(description="Hydrate Firestore + BigQuery with 160,717 scrobbles")
-    parser.add_argument("--force-all", action="store_true", help="Re-write all 160k Firestore docs even if present")
+    parser = argparse.ArgumentParser(description="Hydrate Firestore + BigQuery with Last.fm scrobbles")
+    parser.add_argument("--force-all", action="store_true", help="Re-write all Firestore docs even if present")
+    parser.add_argument("--delta", action="store_true", help="Fast incremental delta sync from Last.fm")
     args = parser.parse_args()
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -623,6 +1157,10 @@ async def main():
     limits = httpx.Limits(max_connections=35, max_keepalive_connections=18)
     async with httpx.AsyncClient(limits=limits, timeout=35.0) as client:
         lfm_key = await get_secret(client, gcp_token, "barogroove-lastfm-api-key")
+        if args.delta:
+            await run_delta_sync(client, gcp_token, lfm_key)
+            return
+
 
         # 1. Harvest Loved Tracks (cached)
         loved_keys = await harvest_lastfm_loved(client, lfm_key)

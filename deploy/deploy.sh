@@ -70,6 +70,8 @@ readonly -a REQUIRED_APIS=(
 # deploy/service-account.md -- read it before adding to this list.
 readonly -a SA_ROLES=(
   "roles/datastore.user"                  # read/write Firestore
+  "roles/bigquery.jobUser"                # execute BigQuery OLAP & Data QnA jobs
+  "roles/bigquery.dataEditor"             # stream incremental Last.fm delta scrobbles to BigQuery
   "roles/secretmanager.secretAccessor"    # read secret VALUES
   "roles/secretmanager.secretVersionManager" # write new secret versions from pairing UI
   "roles/firebaseauth.viewer"             # verify ID tokens

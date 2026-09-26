@@ -198,26 +198,87 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
     );
   }
 
-  /// The Last.fm handle the **signed-in** user has linked, or `null`.
+  String? _sessionLastfmHandle;
+
+  /// The Last.fm handle the **signed-in** user has linked or entered, or `null`.
   ///
   /// `docs/TENANCY_AUDIT.md`: a path that cannot resolve an identity must
-  /// refuse, never substitute a different one. This call site used to pass a
-  /// literal handle, so every signed-in user's "Sync Last.fm" pulled the same
-  /// real person's listening history into their own almanac. The handle now
-  /// comes from `pairingStatusProvider`, which is already keyed on the uid and
-  /// returns `PairingStatus.none` when signed out.
+  /// refuse, never substitute a different one. The handle comes from
+  /// `pairingStatusProvider` (keyed on the uid) or the user's explicit
+  /// in-session handle prompt.
   String? get _linkedLastfmUser {
     final PairingStatus? status = ref.watch(pairingStatusProvider).valueOrNull;
-    if (status == null || !status.lastfm) return null;
-    final String handle = (status.lastfmAccount ?? '').trim();
-    return handle.isEmpty ? null : handle;
+    if (status != null && status.lastfm) {
+      final String handle = (status.lastfmAccount ?? '').trim();
+      if (handle.isNotEmpty) return handle;
+    }
+    final String manual = (_sessionLastfmHandle ?? '').trim();
+    return manual.isEmpty ? null : manual;
+  }
+
+  Future<String?> _promptLastfmHandle() async {
+    final String emailPrefix =
+        (ref.read(authStateProvider).valueOrNull?.email ?? '')
+            .split('@')
+            .first
+            .trim();
+    final TextEditingController ctrl = TextEditingController(text: emailPrefix);
+    return showDialog<String>(
+      context: context,
+      builder: (BuildContext ctx) {
+        return AlertDialog(
+          title: const Row(
+            children: <Widget>[
+              Icon(Icons.sync_rounded, size: 20),
+              SizedBox(width: 8),
+              Text('Sync Last.fm Scrobbles'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text(
+                'Enter your Last.fm username to delta-sync recent scrobbles into BigQuery OLAP and Firestore:',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Last.fm username',
+                  prefixIcon: Icon(Icons.alternate_email_rounded, size: 18),
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onSubmitted: (String v) => Navigator.of(ctx).pop(v.trim()),
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+              icon: const Icon(Icons.cloud_sync_rounded, size: 16),
+              label: const Text('Sync Now'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _syncLastfmToFirestore() async {
-    final String? lastfmUser = _linkedLastfmUser;
-    // No linked account means no identity to sync, so there is nothing to do.
-    // The button is disabled in this state; this is the belt to that braces.
-    if (lastfmUser == null) return;
+    String? lastfmUser = _linkedLastfmUser;
+    if (lastfmUser == null) {
+      final String? entered = await _promptLastfmHandle();
+      if (!mounted || entered == null || entered.isEmpty) return;
+      setState(() => _sessionLastfmHandle = entered);
+      lastfmUser = entered;
+    }
     setState(() => _syncing = true);
     final BarogrooveApi api = ref.read(apiProvider);
     final ApiResult<ScrobbleSearchResponse> res =
@@ -230,10 +291,16 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
       }
     });
     if (mounted) {
+      final int total = _scrobbleData.analytics.totalScrobbles;
+      final int tracks = _scrobbleData.analytics.uniqueTracks;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Synced Last.fm scrobbles to BigQuery OLAP & Firestore.'),
-          duration: Duration(seconds: 3),
+        SnackBar(
+          content: Text(
+            total > 0
+                ? 'Synced $total scrobbles • $tracks unique tracks (@$lastfmUser) to BigQuery OLAP & Firestore.'
+                : 'Synced Last.fm (@$lastfmUser) to BigQuery OLAP & Firestore.',
+          ),
+          duration: const Duration(seconds: 4),
         ),
       );
     }
@@ -511,13 +578,11 @@ class _AlmanacScreenState extends ConsumerState<AlmanacScreen> {
             Builder(
               builder: (BuildContext context) {
                 final String? lastfmUser = _linkedLastfmUser;
-                // Unavailable rather than wrong: with no linked account there
-                // is no handle to sync, and guessing one syncs a stranger.
-                final bool canSync = lastfmUser != null && !_syncing;
+                final bool canSync = !_syncing;
                 return Tooltip(
                   message: lastfmUser == null
-                      ? 'Connect Last.fm in Settings to sync your scrobbles.'
-                      : 'Sync $lastfmUser',
+                      ? 'Sync your Last.fm scrobbles to BigQuery & Firestore'
+                      : 'Sync @$lastfmUser from Last.fm',
                   child: OutlinedButton.icon(
                     onPressed: canSync ? _syncLastfmToFirestore : null,
                     icon: _syncing

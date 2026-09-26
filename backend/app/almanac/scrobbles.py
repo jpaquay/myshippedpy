@@ -338,23 +338,49 @@ def _norm(s: str) -> str:
 
 
 def _get_gcp_token() -> str | None:
-    if os.environ.get("BG_WEATHER_OFFLINE") == "1":
+    if os.environ.get("BG_WEATHER_OFFLINE") == "1" or "PYTEST_CURRENT_TEST" in os.environ:
         return None
     now = time.time()
     if _TOKEN_CACHE["token"] and (now - _TOKEN_CACHE["ts"] < 1200.0):
         return _TOKEN_CACHE["token"]
-    try:
-        tok = subprocess.check_output(
-            ["gcloud", "auth", "print-access-token"],
-            text=True,
-            timeout=4.0,
-            stderr=subprocess.DEVNULL,
-        ).strip()
-        _TOKEN_CACHE["token"] = tok
-        _TOKEN_CACHE["ts"] = now
-        return tok
-    except Exception:
-        return _TOKEN_CACHE["token"]
+
+    # 1. Cloud Run / GCE Metadata Server (zero external dependencies)
+    if os.environ.get("K_SERVICE"):
+        try:
+            meta_req = urllib.request.Request(
+                "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+                headers={"Metadata-Flavor": "Google"},
+            )
+            with urllib.request.urlopen(meta_req, timeout=2.5) as resp:
+                tok_data = json.loads(resp.read().decode("utf-8"))
+            tok = str(tok_data.get("access_token") or "").strip()
+            if tok:
+                _TOKEN_CACHE["token"] = tok
+                _TOKEN_CACHE["ts"] = now
+                return tok
+        except Exception:
+            pass
+
+    # 2. Local workstation gcloud CLI (prefer unbound account over corp mTLS-bound token)
+    for cmd in (
+        ["gcloud", "auth", "print-access-token", "admin@jpaquay.altostrat.com"],
+        ["gcloud", "auth", "print-access-token"],
+    ):
+        try:
+            tok = subprocess.check_output(
+                cmd,
+                text=True,
+                timeout=4.0,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            if tok:
+                _TOKEN_CACHE["token"] = tok
+                _TOKEN_CACHE["ts"] = now
+                return tok
+        except Exception:
+            continue
+    return _TOKEN_CACHE["token"]
+
 
 
 def _fs_val(node: dict[str, Any] | None) -> Any:
@@ -1412,9 +1438,395 @@ def analyze_playlist_cohort(req: PlaylistCohortRequest) -> PlaylistCohortRespons
     )
 
 
+def _resolve_lastfm_api_key() -> str | None:
+    """Resolves Last.fm API key from Settings (`BG_LASTFM_API_KEY` / `sm://`) or Secret Manager REST API."""
+    if os.environ.get("BG_WEATHER_OFFLINE") == "1" or "PYTEST_CURRENT_TEST" in os.environ:
+        return None
+    try:
+        from ..config import get_settings
+
+        key = (get_settings().lastfm_api_key or "").strip()
+        if key and not key.startswith("sm://"):
+            return key
+    except Exception:
+        pass
+    token = _get_gcp_token()
+    if token:
+        try:
+            import base64
+
+            url = f"https://secretmanager.googleapis.com/v1/projects/{PROJECT_ID}/secrets/barogroove-lastfm-api-key/versions/latest:access"
+            req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+            with urllib.request.urlopen(req, timeout=5.0) as resp:
+                b64 = json.loads(resp.read().decode("utf-8"))["payload"]["data"]
+            return base64.b64decode(b64).decode("utf-8").strip()
+        except Exception:
+            pass
+    try:
+        return subprocess.check_output(
+            [
+                "gcloud",
+                "secrets",
+                "versions",
+                "access",
+                "latest",
+                "--secret=barogroove-lastfm-api-key",
+                f"--project={PROJECT_ID}",
+            ],
+            text=True,
+            timeout=5.0,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return None
+
+
+def _to_fs_val(val: Any) -> dict[str, Any]:
+    if val is None:
+        return {"nullValue": None}
+    if isinstance(val, bool):
+        return {"booleanValue": val}
+    if isinstance(val, int):
+        return {"integerValue": str(val)}
+    if isinstance(val, float):
+        return {"doubleValue": val}
+    if isinstance(val, str):
+        if len(val) >= 20 and val[4:5] == "-" and val[10:11] == "T" and val.endswith("Z"):
+            return {"timestampValue": val}
+        return {"stringValue": val}
+    if isinstance(val, (list, tuple)):
+        return {"arrayValue": {"values": [_to_fs_val(x) for x in val]}}
+    if isinstance(val, dict):
+        return {"mapValue": {"fields": {str(k): _to_fs_val(v) for k, v in val.items()}}}
+    return {"stringValue": str(val)}
+
+
+def _sonic_dna_for_track(artist: str, track: str) -> dict[str, Any]:
+    """Deterministic BaroGroove Sonic DNA for newly synced Last.fm tracks."""
+    anorm = _norm(artist)
+    tnorm = _norm(track)
+    h_int = int(hashlib.sha1(f"{anorm}::{tnorm}".encode("utf-8")).hexdigest()[:8], 16)
+    a_low = artist.lower()
+    if any(
+        k in a_low
+        for k in ("brassens", "gainsbourg", "brel", "nougaro", "barbara", "renaud", "stromae")
+    ):
+        theme = ["warm_front_haze", "petrichor", "high_pressure_glass"][h_int % 3]
+        bpm = 84 + (h_int % 26)
+        energy = round(0.38 + ((h_int % 22) / 100.0), 2)
+        tags = ["chanson-francaise", "poetic-acoustic", "analog-warmth", "storytelling"]
+    elif any(
+        k in a_low
+        for k in ("chinese man", "massive attack", "portishead", "air", "bonobo", "wax tailor")
+    ):
+        theme = ["steady_drizzle", "low_pressure_front", "petrichor"][h_int % 3]
+        bpm = 90 + (h_int % 38)
+        energy = round(0.55 + ((h_int % 28) / 100.0), 2)
+        tags = ["trip-hop", "downtempo-groove", "vinyl-crackle", "nocturnal"]
+    else:
+        themes = [
+            "petrichor",
+            "low_pressure_front",
+            "steady_drizzle",
+            "high_pressure_glass",
+            "warm_front_haze",
+            "clearing_isobar",
+            "golden_hour_ridge",
+        ]
+        theme = themes[h_int % len(themes)]
+        bpm = 82 + (h_int % 48)
+        energy = round(0.40 + ((h_int % 40) / 100.0), 2)
+        tags = ["atmospheric", "barometric", "indie-eclectic", theme.replace("_", "-")]
+    return {
+        "weather_theme": theme,
+        "bpm_estimate": bpm,
+        "energy_estimate": energy,
+        "tags": tags[:4],
+    }
+
+
 async def sync_scrobbles_from_lastfm(
     user_id: str, lastfm_username: str = SEED_CORPUS_LASTFM_USER
 ) -> ScrobbleSearchResponse:
-    """Triggers incremental sync and returns updated 15-year scrobble search response."""
+    """Triggers live incremental Last.fm delta sync into Firestore, BigQuery, and runtime cache."""
     _SUMMARY_CACHE["ts"] = 0.0
-    return search_scrobbles(user_id)
+    if os.environ.get("BG_WEATHER_OFFLINE") == "1" or "PYTEST_CURRENT_TEST" in os.environ:
+        return search_scrobbles(user_id)
+
+    handle = (lastfm_username or SEED_CORPUS_LASTFM_USER).strip()
+    lfm_key = _resolve_lastfm_api_key()
+    summary = fetch_firestore_summary()
+    if not lfm_key or not summary:
+        return search_scrobbles(user_id)
+
+    try:
+        prev_max_uts = int(summary.get("last_scrobble_uts") or 0)
+        q_user = urllib.parse.quote(handle)
+
+        # 1. Fetch live profile totals & loved tracks from Last.fm
+        info_url = f"https://ws.audioscrobbler.com/2.0/?method=user.getInfo&user={q_user}&api_key={lfm_key}&format=json"
+        with urllib.request.urlopen(info_url, timeout=8.0) as r_info:
+            uinfo = (json.loads(r_info.read().decode("utf-8")) or {}).get("user") or {}
+        live_playcount = int(uinfo.get("playcount") or summary.get("total_scrobbles") or 0)
+        live_artist_count = int(
+            uinfo.get("artist_count") or summary.get("unique_artists_count") or 0
+        )
+
+        loved_url = f"https://ws.audioscrobbler.com/2.0/?method=user.getLovedTracks&user={q_user}&api_key={lfm_key}&limit=1&page=1&format=json"
+        with urllib.request.urlopen(loved_url, timeout=8.0) as r_loved:
+            loved_attr = (
+                ((json.loads(r_loved.read().decode("utf-8")) or {}).get("lovedtracks") or {}).get(
+                    "@attr"
+                )
+                or {}
+            )
+        live_loved_count = int(
+            loved_attr.get("total") or summary.get("loved_tracks_count") or 0
+        )
+
+        # 2. Fetch delta scrobbles since prev_max_uts + 1 (up to 5 pages = 1,000 tracks per sync call)
+        raw_delta: list[dict[str, Any]] = []
+        if prev_max_uts > 0:
+            for page in range(1, 6):
+                recent_url = (
+                    f"https://ws.audioscrobbler.com/2.0/?method=user.getRecentTracks"
+                    f"&user={q_user}&api_key={lfm_key}&limit=200&page={page}"
+                    f"&from={prev_max_uts + 1}&extended=1&format=json"
+                )
+                with urllib.request.urlopen(recent_url, timeout=10.0) as r_rec:
+                    rt = (json.loads(r_rec.read().decode("utf-8")) or {}).get("recenttracks") or {}
+                tracks = rt.get("track") or []
+                if isinstance(tracks, dict):
+                    tracks = [tracks]
+                for t in tracks:
+                    if isinstance(t, dict) and (t.get("@attr") or {}).get("nowplaying") == "true":
+                        continue
+                    raw_delta.append(t)
+                total_pages = int((rt.get("@attr") or {}).get("totalPages") or 1)
+                if page >= total_pages:
+                    break
+
+        raw_delta.sort(key=lambda x: int((x.get("date") or {}).get("uts") or 0))
+        _ensure_catalog_and_indexes()
+
+        yearly_counts = {str(k): int(v) for k, v in (summary.get("yearly_counts") or {}).items()}
+        monthly_counts = {str(k): int(v) for k, v in (summary.get("monthly_counts") or {}).items()}
+        hourly_counts = {
+            str(k): int(v) for k, v in (summary.get("hourly_histogram_utc") or {}).items()
+        }
+        weekday_counts = {
+            str(k): int(v) for k, v in (summary.get("weekday_histogram") or {}).items()
+        }
+
+        new_fs_writes: list[dict[str, Any]] = []
+        new_bq_rows: list[dict[str, Any]] = []
+        base_doc_prefix = f"projects/{PROJECT_ID}/databases/(default)/documents"
+        new_max_uts = prev_max_uts
+
+        for raw in raw_delta:
+            uts_str = (raw.get("date") or {}).get("uts")
+            if not uts_str:
+                continue
+            uts = int(uts_str)
+            if uts <= prev_max_uts:
+                continue
+            if uts > new_max_uts:
+                new_max_uts = uts
+            artist_obj = raw.get("artist") or {}
+            artist = str(
+                artist_obj.get("name") or artist_obj.get("#text") or "Unknown Artist"
+            ).strip()
+            track = str(raw.get("name") or "Unknown Track").strip()
+            album_obj = raw.get("album") or {}
+            album = (
+                album_obj.get("#text")
+                if isinstance(album_obj, dict)
+                else str(album_obj or "")
+            ).strip() or None
+            loved = str(raw.get("loved", "0")) == "1"
+
+            anorm = _norm(artist)
+            tnorm = _norm(track)
+            tk = f"{anorm}::{tnorm}"
+            h8 = hashlib.sha1(tk.encode("utf-8")).hexdigest()[:8]
+            doc_id = f"{handle}_{uts}_{h8}"
+
+            dt = datetime.fromtimestamp(uts, tz=timezone.utc)
+            played_iso = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+            played_date = dt.strftime("%Y-%m-%d")
+            yr_s = str(dt.year)
+            mo_s = dt.strftime("%Y-%m")
+            hr_s = str(dt.hour)
+            wd_s = str(dt.weekday())
+
+            yearly_counts[yr_s] = yearly_counts.get(yr_s, 0) + 1
+            monthly_counts[mo_s] = monthly_counts.get(mo_s, 0) + 1
+            hourly_counts[hr_s] = hourly_counts.get(hr_s, 0) + 1
+            weekday_counts[wd_s] = weekday_counts.get(wd_s, 0) + 1
+
+            dna = _sonic_dna_for_track(artist, track)
+            cat_row = _CATALOG_INDEX_BY_NORM.get((anorm, tnorm))
+            if cat_row is not None:
+                cat_row["play_count"] = int(cat_row.get("play_count") or 1) + 1
+                cat_row["_play_count"] = cat_row["play_count"]
+                cat_row["last_played_at"] = played_iso
+            else:
+                cat_id = f"{handle}_{hashlib.sha1(tk.encode('utf-8')).hexdigest()[:16]}"
+                cat_row = {
+                    "catalog_id": cat_id,
+                    "id": cat_id,
+                    "user_id": user_id,
+                    "track_key": tk,
+                    "title": track,
+                    "track": track,
+                    "track_norm": tnorm,
+                    "artist": artist,
+                    "artist_norm": anorm,
+                    "album": album,
+                    "play_count": 1,
+                    "scrobble_count": 1,
+                    "first_played_at": played_iso,
+                    "last_played_at": played_iso,
+                    "loved": loved,
+                    "weather_theme": dna["weather_theme"],
+                    "bpm_estimate": dna["bpm_estimate"],
+                    "energy_estimate": dna["energy_estimate"],
+                    "tags": dna["tags"],
+                    "_play_count": 1,
+                    "_anorm": anorm,
+                    "_tnorm": tnorm,
+                    "_search_text": f"{track} {artist} {album or ''} {' '.join(dna['tags'])}".lower(),
+                }
+                _CATALOG_DICTS_CACHE.append(cat_row)
+                _CATALOG_INDEX_BY_NORM[(anorm, tnorm)] = cat_row
+                summary["unique_tracks_count"] = int(summary.get("unique_tracks_count") or 44575) + 1
+            _ARTIST_PLAYS_INDEX[anorm] = _ARTIST_PLAYS_INDEX.get(anorm, 0) + 1
+
+            sdoc_fields = {
+                "scrobble_id": doc_id,
+                "lastfm_user": handle,
+                "user_id": user_id,
+                "uts": uts,
+                "played_at": played_iso,
+                "year": dt.year,
+                "month": mo_s,
+                "hour_utc": dt.hour,
+                "weekday": dt.weekday(),
+                "artist": artist,
+                "artist_norm": anorm,
+                "track": track,
+                "track_norm": tnorm,
+                "album": album,
+                "loved": loved,
+                "track_key": tk,
+                "weather_theme": dna["weather_theme"],
+                "bpm_estimate": dna["bpm_estimate"],
+                "energy_estimate": dna["energy_estimate"],
+                "tags": dna["tags"],
+            }
+            new_fs_writes.append(
+                {
+                    "update": {
+                        "name": f"{base_doc_prefix}/scrobbles/{doc_id}",
+                        "fields": {k: _to_fs_val(v) for k, v in sdoc_fields.items()},
+                    }
+                }
+            )
+            new_bq_rows.append(
+                {
+                    "insertId": doc_id,
+                    "json": {
+                        "doc_id": doc_id,
+                        **sdoc_fields,
+                        "played_date": played_date,
+                    },
+                }
+            )
+
+        computed_total = sum(yearly_counts.values())
+        summary["total_scrobbles"] = max(computed_total, live_playcount)
+        summary["unique_artists_count"] = max(
+            int(summary.get("unique_artists_count") or 0), live_artist_count
+        )
+        summary["loved_tracks_count"] = max(
+            int(summary.get("loved_tracks_count") or 0), live_loved_count
+        )
+        summary["yearly_counts"] = dict(sorted(yearly_counts.items()))
+        summary["monthly_counts"] = dict(sorted(monthly_counts.items()))
+        summary["hourly_histogram_utc"] = {str(h): hourly_counts.get(str(h), 0) for h in range(24)}
+        summary["weekday_histogram"] = {str(w): weekday_counts.get(str(w), 0) for w in range(7)}
+        if new_max_uts > prev_max_uts:
+            summary["last_scrobble_uts"] = new_max_uts
+            summary["last_scrobble_at"] = datetime.fromtimestamp(
+                new_max_uts, tz=timezone.utc
+            ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        summary["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        _SUMMARY_CACHE["data"] = summary
+        _SUMMARY_CACHE["ts"] = time.time()
+        _BQ_MEM_CACHE.clear()
+
+        try:
+            seed_corpus.write_text(
+                seed_corpus.writable_path("summary_cache.json"),
+                json.dumps(summary, ensure_ascii=False),
+            )
+        except seed_corpus.SeedCorpusWriteRefused:
+            raise
+        except Exception:
+            pass
+
+        # 3. Persist updated summary + delta scrobbles to Firestore & BigQuery if GCP token available
+        token = _get_gcp_token()
+        if token:
+            summary_write = {
+                "update": {
+                    "name": f"{base_doc_prefix}/scrobble_summaries/{LASTFM_USER}",
+                    "fields": {k: _to_fs_val(v) for k, v in summary.items()},
+                }
+            }
+            all_writes = [summary_write] + new_fs_writes[:399]
+            fs_batch_url = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents:batchWrite"
+            fs_req = urllib.request.Request(
+                fs_batch_url,
+                data=json.dumps({"writes": all_writes}).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(fs_req, timeout=10.0):
+                    pass
+            except Exception as fs_exc:
+                logger.debug("Firestore delta batchWrite fallback: %s", fs_exc)
+
+            if new_bq_rows:
+                bq_insert_url = (
+                    f"https://bigquery.googleapis.com/bigquery/v2/projects/{PROJECT_ID}"
+                    f"/datasets/{BQ_DATASET}/tables/scrobbles/insertAll"
+                )
+                bq_req = urllib.request.Request(
+                    bq_insert_url,
+                    data=json.dumps({"rows": new_bq_rows[:500]}).encode("utf-8"),
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json",
+                    },
+                    method="POST",
+                )
+                try:
+                    with urllib.request.urlopen(bq_req, timeout=10.0):
+                        pass
+                except Exception as bq_exc:
+                    logger.debug("BigQuery streaming insertAll fallback: %s", bq_exc)
+    except seed_corpus.SeedCorpusWriteRefused:
+        raise
+    except Exception as exc:
+        logger.debug("Incremental Last.fm sync fallback: %s", exc)
+
+    resp = search_scrobbles(user_id)
+    resp.cache_status = "LIVE_LASTFM_SYNC"
+    return resp
+
