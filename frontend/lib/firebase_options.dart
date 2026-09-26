@@ -60,7 +60,10 @@ class DefaultFirebaseOptions {
   // WEB — served from bg.netdev.be via Firebase Hosting
   // -------------------------------------------------------------------------
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'REPLACE_ME_WEB_API_KEY',
+    apiKey: String.fromEnvironment(
+      'BG_FIREBASE_WEB_API_KEY',
+      defaultValue: 'REPLACE_ME_WEB_API_KEY',
+    ),
     appId: '1:565491848800:web:2b07f52bde4bf69ce29505', // 1:000000000000:web:0000000000000000
     messagingSenderId: '565491848800',
     projectId: 'netdev-firebase',

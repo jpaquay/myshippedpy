@@ -649,35 +649,42 @@ deploy_hosting() {
 
   ok "found web build at ${web_build}"
   if [[ "${DRY_RUN}" != "true" ]]; then
-    local bust_tag
+    local bust_tag web_api_key
     bust_tag="$(date -u +%Y%m%d%H%M%S)"
+    web_api_key="${BG_FIREBASE_WEB_API_KEY:-}"
+    if [[ -z "${web_api_key}" ]]; then
+      web_api_key="$(gcloud secrets versions access latest --secret=barogroove-firebase-web-api-key --project="${PROJECT_ID}" 2>/dev/null || true)"
+    fi
     info "injecting Firebase Web SDK config and cache-busting tag (?v=${bust_tag}) into web build"
-    firebase apps:sdkconfig web --project "${PROJECT_ID}" 2>/dev/null | BUST_TAG="${bust_tag}" python3 -c '
+    firebase apps:sdkconfig web --json --project "${PROJECT_ID}" 2>/dev/null | BUST_TAG="${bust_tag}" WEB_API_KEY="${web_api_key}" python3 -c '
 import json, os, re, sys, pathlib
 bust = os.environ.get("BUST_TAG", "1")
+sm_api_key = os.environ.get("WEB_API_KEY", "").strip()
 try:
-    cfg = json.load(sys.stdin)
+    raw = json.load(sys.stdin)
+    cfg = (raw.get("result") or {}).get("sdkConfig") or raw
 except Exception:
     cfg = {}
+api_key = sm_api_key or cfg.get("apiKey", "")
 replacements = {
-    "REPLACE_ME_WEB_API_KEY": cfg.get("apiKey", ""),
-    "REPLACE_ME_WEB_APP_ID": cfg.get("appId", ""),
-    "REPLACE_ME_SENDER_ID": cfg.get("messagingSenderId", ""),
-    "REPLACE_ME_PROJECT_ID.firebaseapp.com": cfg.get("authDomain", ""),
-    "REPLACE_ME_PROJECT_ID.appspot.com": cfg.get("storageBucket", ""),
-    "REPLACE_ME_PROJECT_ID": cfg.get("projectId", ""),
+    "REPLACE_ME_WEB_API_KEY": api_key,
+    "REPLACE_ME_WEB_APP_ID": cfg.get("appId", "1:565491848800:web:2b07f52bde4bf69ce29505"),
+    "REPLACE_ME_SENDER_ID": cfg.get("messagingSenderId", "565491848800"),
+    "REPLACE_ME_PROJECT_ID.firebaseapp.com": cfg.get("authDomain", "netdev-firebase.firebaseapp.com"),
+    "REPLACE_ME_PROJECT_ID.appspot.com": cfg.get("storageBucket", "netdev-firebase.firebasestorage.app"),
+    "REPLACE_ME_PROJECT_ID": cfg.get("projectId", "netdev-firebase"),
 }
 for rel in ("frontend/build/web/main.dart.js", "frontend/build/web/index.html"):
     p = pathlib.Path(rel)
     if p.is_file():
         text = p.read_text(encoding="utf-8")
+        if rel.endswith("main.dart.js"):
+            text = re.sub(r"s=B\.c\.[a-zA-Z0-9_]+\([^?]+\?2:4", "s=4", text)
+            text = text.replace("\"http://localhost:8000\"", "window.location.origin")
         if replacements["REPLACE_ME_WEB_API_KEY"]:
             for k, v in replacements.items():
                 if v:
                     text = text.replace(k, v)
-        if rel.endswith("main.dart.js"):
-            text = re.sub(r"s=B\.c\.aH\([^?]+\?2:4", "s=4", text)
-            text = text.replace("\"http://localhost:8000\"", "window.location.origin")
         if rel.endswith("index.html"):
             text = re.sub(r"src=\"boot\.js(?:\?v=[^\"]*)?\"", f"src=\"boot.js?v={bust}\"", text)
             text = re.sub(r"src=\"flutter_bootstrap\.js(?:\?v=[^\"]*)?\"", f"src=\"flutter_bootstrap.js?v={bust}\"", text)
@@ -689,6 +696,7 @@ if fb.is_file():
     t = re.sub(r"\"mainJsPath\":\"main\.dart\.js(?:\?v=[^\"]*)?\"", f"\"mainJsPath\":\"main.dart.js?v={bust}\"", t)
     fb.write_text(t, encoding="utf-8")
 ' || true
+    unset web_api_key
   fi
   ln -sfn ../frontend "${REPO_ROOT}/firebase_cfg/frontend"
   run firebase deploy \
@@ -753,8 +761,11 @@ main() {
 
   if [[ "${BUILD_WEB}" == "true" ]]; then
     step "Parallel Flutter Web Build (background)"
+    local build_api_key=""
+    build_api_key="$(gcloud secrets versions access latest --secret=barogroove-firebase-web-api-key --project="${PROJECT_ID}" 2>/dev/null || true)"
     info "spawning 'flutter build web --release --no-wasm-dry-run --pwa-strategy=none' in background..."
-    (cd "${REPO_ROOT}/frontend" && /usr/local/google/home/jpaquay/flutter/bin/flutter build web --release --no-wasm-dry-run --pwa-strategy=none >/tmp/barogroove_flutter_build.log 2>&1) &
+    (cd "${REPO_ROOT}/frontend" && /usr/local/google/home/jpaquay/flutter/bin/flutter build web --release --no-wasm-dry-run --pwa-strategy=none --dart-define="BG_FIREBASE_WEB_API_KEY=${build_api_key}" >/tmp/barogroove_flutter_build.log 2>&1) &
+    unset build_api_key
     FLUTTER_BUILD_PID="$!"
     info "Flutter build running concurrently (PID ${FLUTTER_BUILD_PID})"
   fi
